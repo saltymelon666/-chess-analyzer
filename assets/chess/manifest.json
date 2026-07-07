@@ -1,0 +1,265 @@
+{
+  "board_size_px": 2048,
+  "square_size_px": 215,
+  "board_margin_px": 164,
+  "empty_board": "physical_chess_board_empty.png",
+  "full_board": "physical_chess_board_full.png",
+  "pieces": [
+    {
+      "name": "black_rook_a8",
+      "color": "black",
+      "kind": "rook",
+      "square": "a8",
+      "transparent_png": "pieces_transparent/black_rook_a8.png",
+      "square_crop_png": "square_crops/black_rook_a8_square.png"
+    },
+    {
+      "name": "white_rook_a1",
+      "color": "white",
+      "kind": "rook",
+      "square": "a1",
+      "transparent_png": "pieces_transparent/white_rook_a1.png",
+      "square_crop_png": "square_crops/white_rook_a1_square.png"
+    },
+    {
+      "name": "black_knight_b8",
+      "color": "black",
+      "kind": "knight",
+      "square": "b8",
+      "transparent_png": "pieces_transparent/black_knight_b8.png",
+      "square_crop_png": "square_crops/black_knight_b8_square.png"
+    },
+    {
+      "name": "white_knight_b1",
+      "color": "white",
+      "kind": "knight",
+      "square": "b1",
+      "transparent_png": "pieces_transparent/white_knight_b1.png",
+      "square_crop_png": "square_crops/white_knight_b1_square.png"
+    },
+    {
+      "name": "black_bishop_c8",
+      "color": "black",
+      "kind": "bishop",
+      "square": "c8",
+      "transparent_png": "pieces_transparent/black_bishop_c8.png",
+      "square_crop_png": "square_crops/black_bishop_c8_square.png"
+    },
+    {
+      "name": "white_bishop_c1",
+      "color": "white",
+      "kind": "bishop",
+      "square": "c1",
+      "transparent_png": "pieces_transparent/white_bishop_c1.png",
+      "square_crop_png": "square_crops/white_bishop_c1_square.png"
+    },
+    {
+      "name": "black_queen_d8",
+      "color": "black",
+      "kind": "queen",
+      "square": "d8",
+      "transparent_png": "pieces_transparent/black_queen_d8.png",
+      "square_crop_png": "square_crops/black_queen_d8_square.png"
+    },
+    {
+      "name": "white_queen_d1",
+      "color": "white",
+      "kind": "queen",
+      "square": "d1",
+      "transparent_png": "pieces_transparent/white_queen_d1.png",
+      "square_crop_png": "square_crops/white_queen_d1_square.png"
+    },
+    {
+      "name": "black_king_e8",
+      "color": "black",
+      "kind": "king",
+      "square": "e8",
+      "transparent_png": "pieces_transparent/black_king_e8.png",
+      "square_crop_png": "square_crops/black_king_e8_square.png"
+    },
+    {
+      "name": "white_king_e1",
+      "color": "white",
+      "kind": "king",
+      "square": "e1",
+      "transparent_png": "pieces_transparent/white_king_e1.png",
+      "square_crop_png": "square_crops/white_king_e1_square.png"
+    },
+    {
+      "name": "black_bishop_f8",
+      "color": "black",
+      "kind": "bishop",
+      "square": "f8",
+      "transparent_png": "pieces_transparent/black_bishop_f8.png",
+      "square_crop_png": "square_crops/black_bishop_f8_square.png"
+    },
+    {
+      "name": "white_bishop_f1",
+      "color": "white",
+      "kind": "bishop",
+      "square": "f1",
+      "transparent_png": "pieces_transparent/white_bishop_f1.png",
+      "square_crop_png": "square_crops/white_bishop_f1_square.png"
+    },
+    {
+      "name": "black_knight_g8",
+      "color": "black",
+      "kind": "knight",
+      "square": "g8",
+      "transparent_png": "pieces_transparent/black_knight_g8.png",
+      "square_crop_png": "square_crops/black_knight_g8_square.png"
+    },
+    {
+      "name": "white_knight_g1",
+      "color": "white",
+      "kind": "knight",
+      "square": "g1",
+      "transparent_png": "pieces_transparent/white_knight_g1.png",
+      "square_crop_png": "square_crops/white_knight_g1_square.png"
+    },
+    {
+      "name": "black_rook_h8",
+      "color": "black",
+      "kind": "rook",
+      "square": "h8",
+      "transparent_png": "pieces_transparent/black_rook_h8.png",
+      "square_crop_png": "square_crops/black_rook_h8_square.png"
+    },
+    {
+      "name": "white_rook_h1",
+      "color": "white",
+      "kind": "rook",
+      "square": "h1",
+      "transparent_png": "pieces_transparent/white_rook_h1.png",
+      "square_crop_png": "square_crops/white_rook_h1_square.png"
+    },
+    {
+      "name": "black_pawn_a7",
+      "color": "black",
+      "kind": "pawn",
+      "square": "a7",
+      "transparent_png": "pieces_transparent/black_pawn_a7.png",
+      "square_crop_png": "square_crops/black_pawn_a7_square.png"
+    },
+    {
+      "name": "white_pawn_a2",
+      "color": "white",
+      "kind": "pawn",
+      "square": "a2",
+      "transparent_png": "pieces_transparent/white_pawn_a2.png",
+      "square_crop_png": "square_crops/white_pawn_a2_square.png"
+    },
+    {
+      "name": "black_pawn_b7",
+      "color": "black",
+      "kind": "pawn",
+      "square": "b7",
+      "transparent_png": "pieces_transparent/black_pawn_b7.png",
+      "square_crop_png": "square_crops/black_pawn_b7_square.png"
+    },
+    {
+      "name": "white_pawn_b2",
+      "color": "white",
+      "kind": "pawn",
+      "square": "b2",
+      "transparent_png": "pieces_transparent/white_pawn_b2.png",
+      "square_crop_png": "square_crops/white_pawn_b2_square.png"
+    },
+    {
+      "name": "black_pawn_c7",
+      "color": "black",
+      "kind": "pawn",
+      "square": "c7",
+      "transparent_png": "pieces_transparent/black_pawn_c7.png",
+      "square_crop_png": "square_crops/black_pawn_c7_square.png"
+    },
+    {
+      "name": "white_pawn_c2",
+      "color": "white",
+      "kind": "pawn",
+      "square": "c2",
+      "transparent_png": "pieces_transparent/white_pawn_c2.png",
+      "square_crop_png": "square_crops/white_pawn_c2_square.png"
+    },
+    {
+      "name": "black_pawn_d7",
+      "color": "black",
+      "kind": "pawn",
+      "square": "d7",
+      "transparent_png": "pieces_transparent/black_pawn_d7.png",
+      "square_crop_png": "square_crops/black_pawn_d7_square.png"
+    },
+    {
+      "name": "white_pawn_d2",
+      "color": "white",
+      "kind": "pawn",
+      "square": "d2",
+      "transparent_png": "pieces_transparent/white_pawn_d2.png",
+      "square_crop_png": "square_crops/white_pawn_d2_square.png"
+    },
+    {
+      "name": "black_pawn_e7",
+      "color": "black",
+      "kind": "pawn",
+      "square": "e7",
+      "transparent_png": "pieces_transparent/black_pawn_e7.png",
+      "square_crop_png": "square_crops/black_pawn_e7_square.png"
+    },
+    {
+      "name": "white_pawn_e2",
+      "color": "white",
+      "kind": "pawn",
+      "square": "e2",
+      "transparent_png": "pieces_transparent/white_pawn_e2.png",
+      "square_crop_png": "square_crops/white_pawn_e2_square.png"
+    },
+    {
+      "name": "black_pawn_f7",
+      "color": "black",
+      "kind": "pawn",
+      "square": "f7",
+      "transparent_png": "pieces_transparent/black_pawn_f7.png",
+      "square_crop_png": "square_crops/black_pawn_f7_square.png"
+    },
+    {
+      "name": "white_pawn_f2",
+      "color": "white",
+      "kind": "pawn",
+      "square": "f2",
+      "transparent_png": "pieces_transparent/white_pawn_f2.png",
+      "square_crop_png": "square_crops/white_pawn_f2_square.png"
+    },
+    {
+      "name": "black_pawn_g7",
+      "color": "black",
+      "kind": "pawn",
+      "square": "g7",
+      "transparent_png": "pieces_transparent/black_pawn_g7.png",
+      "square_crop_png": "square_crops/black_pawn_g7_square.png"
+    },
+    {
+      "name": "white_pawn_g2",
+      "color": "white",
+      "kind": "pawn",
+      "square": "g2",
+      "transparent_png": "pieces_transparent/white_pawn_g2.png",
+      "square_crop_png": "square_crops/white_pawn_g2_square.png"
+    },
+    {
+      "name": "black_pawn_h7",
+      "color": "black",
+      "kind": "pawn",
+      "square": "h7",
+      "transparent_png": "pieces_transparent/black_pawn_h7.png",
+      "square_crop_png": "square_crops/black_pawn_h7_square.png"
+    },
+    {
+      "name": "white_pawn_h2",
+      "color": "white",
+      "kind": "pawn",
+      "square": "h2",
+      "transparent_png": "pieces_transparent/white_pawn_h2.png",
+      "square_crop_png": "square_crops/white_pawn_h2_square.png"
+    }
+  ]
+}
