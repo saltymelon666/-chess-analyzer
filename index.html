@@ -270,9 +270,12 @@ function initEngine() {
     const script = document.createElement("script");
     script.src = ENGINE_PATH;
     script.onload = () => {
-      Stockfish().then(sf => {
+      // Stockfish.js 18: Stockfish() 返回模块对象 {ready, processCommand, listener, ...}
+      // 必须通过 .ready Promise 等待初始化完成
+      const sf = Stockfish();
+      sf.ready.then(() => {
         engine = sf;
-        // 新版 Stockfish.js 使用 listener 回调接收输出
+        // 设置输出监听器
         sf.listener = (msg) => {
           engineOutput += msg + "\n";
           if (msg === "readyok") {
