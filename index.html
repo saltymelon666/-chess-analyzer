@@ -223,8 +223,8 @@
   </section>
 </main>
 
-<!-- chess.js v0.13.4 -->
-<script src="https://cdn.jsdelivr.net/npm/chess.js@0.13.4/chess.min.js"></script>
+<!-- chess.js v0.10.2 (本地版，已添加全局 Chess 变量) -->
+<script src="chess.js"></script>
 
 <script>
 // ========== 状态管理 ==========
@@ -418,7 +418,7 @@ let pgnMoves = []; // {san: "e4", fen: "..."}
 function parsePgn(raw) {
   const clean = raw.trim();
   const tempGame = new Chess();
-  tempGame.loadPgn(clean, { sloppy: true });
+  tempGame.load_pgn(clean, { sloppy: true });
   pgnHeaders = tempGame.header();
 
   // 收集所有走法
@@ -438,7 +438,7 @@ function parsePgn(raw) {
 
   // 最终 game 状态设为终局
   game = new Chess();
-  game.loadPgn(clean, { sloppy: true });
+  game.load_pgn(clean, { sloppy: true });
 
   return history;
 }
