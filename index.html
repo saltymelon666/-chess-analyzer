@@ -223,8 +223,8 @@
   </section>
 </main>
 
-<!-- chess.js 本地库（避免 CDN 失效） -->
-<script src="chess.min.js"></script>
+<!-- chess.js v0.13.4 -->
+<script src="https://cdn.jsdelivr.net/npm/chess.js@0.13.4/chess.min.js"></script>
 
 <script>
 // ========== 状态管理 ==========
@@ -412,23 +412,34 @@ function uciToSan(uci) {
 }
 
 // ========== PGN 导入 ==========
+// 存储每步的 SAN 和 FEN
+let pgnMoves = []; // {san: "e4", fen: "..."}
+
 function parsePgn(raw) {
   const clean = raw.trim();
-  game = new Chess();
-  game.loadPgn(clean, { sloppy: true });
-  pgnHeaders = game.header();
-  moves = [];
-  game.reset();
-  moves.push(game.fen());
-  const history = game.history({ verbose: true });
-  // 重新加载，步进记录每步 fen
-  game.reset();
+  const tempGame = new Chess();
+  tempGame.loadPgn(clean, { sloppy: true });
+  pgnHeaders = tempGame.header();
+
+  // 收集所有走法
+  const history = tempGame.history({ verbose: true });
+
+  // 重置，逐步记录 fen
+  const replay = new Chess();
+  pgnMoves = [];
+  moves = [replay.fen()]; // 初始局面
   for (const m of history) {
-    game.move(m.san);
-    moves.push(game.fen());
+    replay.move(m.san);
+    pgnMoves.push({ san: m.san, fen: replay.fen() });
+    moves.push(replay.fen());
   }
   totalSteps = history.length;
   currentStep = totalSteps;
+
+  // 最终 game 状态设为终局
+  game = new Chess();
+  game.loadPgn(clean, { sloppy: true });
+
   return history;
 }
 
@@ -442,13 +453,6 @@ function importPgn() {
   } catch (e) {
     showError("无法解析 PGN：" + e.message);
     return;
-  }
-
-  // 显示到最后一步
-  currentStep = totalSteps;
-  game.reset();
-  if (totalSteps > 0) {
-    game.loadPgn(raw, { sloppy: true });
   }
 
   document.getElementById("pgnStep").max = totalSteps;
@@ -470,16 +474,16 @@ function updateStepLabels() {
   const label = currentStep === 0 ? "初始局面" : currentStep >= totalSteps ? "终局" : `第 ${currentStep} 个半回合后`;
   document.getElementById("stepLabel").textContent = label;
   document.getElementById("summaryStep").textContent = label;
-  document.getElementById("moveLabel").textContent = currentStep === 0 ? "开局前" : (game.history()[currentStep - 1] || "");
+  const sanLabel = currentStep === 0 ? "开局前" : (pgnMoves[currentStep - 1] ? pgnMoves[currentStep - 1].san : "");
+  document.getElementById("moveLabel").textContent = sanLabel;
 }
 
 function renderMovePreview() {
   const box = document.getElementById("movePreview");
-  const history = game.history();
-  box.innerHTML = history.map((san, i) => {
+  box.innerHTML = pgnMoves.map((m, i) => {
     const moveNum = i + 1;
-    const active = currentStep === moveNum || (currentStep >= totalSteps && i === history.length - 1);
-    return `<button class="move-chip ${active ? 'active' : ''}" onclick="jumpStep(${moveNum})">${san}</button>`;
+    const active = currentStep === moveNum;
+    return `<button class="move-chip ${active ? 'active' : ''}" onclick="jumpStep(${moveNum})">${m.san}</button>`;
   }).join("");
 }
 
@@ -488,6 +492,7 @@ function onSliderInput() {
   rebuildGameAtStep(currentStep);
   updateStepLabels();
   renderBoard();
+  renderMovePreview();
   if (document.getElementById("autoAnalyze").checked) analyze();
 }
 
@@ -497,19 +502,20 @@ function jumpStep(step) {
   rebuildGameAtStep(currentStep);
   updateStepLabels();
   renderBoard();
+  renderMovePreview();
   document.getElementById("resultSection").classList.remove("active");
   if (document.getElementById("autoAnalyze").checked) analyze();
 }
 
 function rebuildGameAtStep(step) {
-  game.reset();
-  const history = game.history();
-  const targetMoves = moves.slice(1, step + 1);
-  // 从原始 fen 重建
-  game.reset();
-  const allMoves = game.history({ verbose: true });
-  for (let i = 0; i < Math.min(step, allMoves.length); i++) {
-    game.move(allMoves[i].san);
+  if (step === 0) {
+    game = new Chess();
+    return;
+  }
+  game = new Chess();
+  const movesToReplay = pgnMoves.slice(0, step);
+  for (const m of movesToReplay) {
+    game.move(m.san);
   }
 }
 
@@ -517,6 +523,7 @@ function clearAll() {
   document.getElementById("sourceInput").value = "";
   game = new Chess();
   moves = [game.fen()];
+  pgnMoves = [];
   currentStep = 0;
   totalSteps = 0;
   pgnHeaders = {};
@@ -526,6 +533,7 @@ function clearAll() {
   document.getElementById("whiteName").textContent = "White";
   document.getElementById("blackName").textContent = "Black";
   document.getElementById("gameMeta").textContent = "初始局面";
+  document.getElementById("movePreview").innerHTML = "";
   renderBoard();
   clearError();
 }
