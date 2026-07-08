@@ -270,15 +270,27 @@ function initEngine() {
     const script = document.createElement("script");
     script.src = ENGINE_PATH;
     script.onload = () => {
-      // Stockfish.js 18: Stockfish() 返回模块对象 {ready, processCommand, listener, ...}
-      // 必须通过 .ready Promise 等待初始化完成
-      const sf = Stockfish();
-      sf.ready.then(() => {
+      console.log("[SF] script loaded, calling Stockfish()...");
+      // Stockfish.js 18 在浏览器中: Stockfish 是 t() 的返回值 (Promise)
+      // t() 中调用 Pe() 启动 WASM 初始化，最后返回 e.ready Promise
+      const sfPromise = Stockfish();
+      console.log("[SF] Stockfish type:", typeof sfPromise, "has .then:", typeof sfPromise?.then);
+      
+      // 设置超时检测
+      const timeoutId = setTimeout(() => {
+        console.error("[SF] TIMEOUT: 引擎初始化超过30秒，可能 wasm 加载失败");
+        reject(new Error("引擎初始化超时"));
+      }, 30000);
+      
+      sfPromise.then(sf => {
+        clearTimeout(timeoutId);
+        console.log("[SF] engine ready!");
         engine = sf;
         // 设置输出监听器
         sf.listener = (msg) => {
           engineOutput += msg + "\n";
           if (msg === "readyok") {
+            console.log("[SF] got readyok");
             engineReady = true;
             document.getElementById("analyzeBtn").disabled = false;
             document.getElementById("loading").style.display = "none";
@@ -308,9 +320,16 @@ function initEngine() {
         sf.processCommand("setoption name MultiPV value 3");
         sf.processCommand("isready");
         engineResolve = resolve;
-      }).catch(reject);
+      }).catch(e => {
+        clearTimeout(timeoutId);
+        console.error("[SF] init failed:", e);
+        reject(e);
+      });
     };
-    script.onerror = () => reject(new Error("Stockfish 引擎加载失败"));
+    script.onerror = () => {
+      console.error("[SF] script load failed");
+      reject(new Error("Stockfish 引擎加载失败"));
+    };
     document.head.appendChild(script);
   });
 }
