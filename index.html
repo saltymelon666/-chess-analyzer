@@ -259,8 +259,11 @@ let engineQueue = [];
 let engineResolve = null;
 let analyzing = false;
 
-// ========== Stockfish WASM 引擎 ==========
+// ========== Stockfish JS 引擎 ==========
 const ENGINE_PATH = "stockfish.js";
+
+let engineOutput = ""; // 累积引擎输出
+let engineResolveCallback = null;
 
 function initEngine() {
   return new Promise((resolve, reject) => {
@@ -269,53 +272,52 @@ function initEngine() {
     script.onload = () => {
       Stockfish().then(sf => {
         engine = sf;
-        sf.addMessageListener(onEngineMessage);
-        sf.postMessage("uci");
-        sf.postMessage("setoption name Threads value 2");
-        sf.postMessage("setoption name Hash value 64");
-        sf.postMessage("setoption name MultiPV value 3");
-        sf.postMessage("isready");
+        // 新版 Stockfish.js 使用 listener 回调接收输出
+        sf.listener = (msg) => {
+          engineOutput += msg + "\n";
+          if (msg === "readyok") {
+            engineReady = true;
+            document.getElementById("analyzeBtn").disabled = false;
+            document.getElementById("loading").style.display = "none";
+            if (engineResolve) { engineResolve(); engineResolve = null; }
+            if (engineQueue.length > 0) {
+              const next = engineQueue.shift();
+              sendToEngine(next.fen, next.resolve);
+            }
+          }
+          if (msg.startsWith("bestmove")) {
+            if (engineResolveCallback) {
+              const out = engineOutput;
+              engineOutput = "";
+              engineResolveCallback(out);
+              engineResolveCallback = null;
+            }
+            analyzing = false;
+            if (engineQueue.length > 0) {
+              const next = engineQueue.shift();
+              sendToEngine(next.fen, next.resolve);
+            }
+          }
+        };
+        // 新版 API: processCommand 发送命令
+        sf.processCommand("uci");
+        sf.processCommand("setoption name Hash value 64");
+        sf.processCommand("setoption name MultiPV value 3");
+        sf.processCommand("isready");
         engineResolve = resolve;
       }).catch(reject);
     };
-    script.onerror = () => reject(new Error("Stockfish WASM 加载失败，请检查网络连接"));
+    script.onerror = () => reject(new Error("Stockfish 引擎加载失败"));
     document.head.appendChild(script);
   });
 }
 
-function onEngineMessage(msg) {
-  if (msg === "readyok") {
-    engineReady = true;
-    document.getElementById("analyzeBtn").disabled = false;
-    document.getElementById("loading").style.display = "none";
-    if (engineResolve) { engineResolve(); engineResolve = null; }
-    // 处理队列中的请求
-    if (engineQueue.length > 0) {
-      const next = engineQueue.shift();
-      sendToEngine(next.fen, next.resolve);
-    }
-  }
-  if (msg.startsWith("bestmove") && engineQueue.length > 0) {
-    // 前面那个分析已完成，处理下一个
-    const next = engineQueue.shift();
-    if (next) sendToEngine(next.fen, next.resolve);
-    else analyzing = false;
-  }
-}
-
 function sendToEngine(fen, resolve) {
-  const lines = [];
-  const onMsg = (msg) => {
-    lines.push(msg);
-    if (msg.startsWith("bestmove")) {
-      engine.removeMessageListener(onMsg);
-      resolve(lines.join("\n"));
-    }
-  };
-  engine.addMessageListener(onMsg);
-  engine.postMessage("ucinewgame");
-  engine.postMessage(`position fen ${fen}`);
-  engine.postMessage("go depth 16");
+  engineOutput = "";
+  engineResolveCallback = resolve;
+  engine.processCommand("ucinewgame");
+  engine.processCommand(`position fen ${fen}`);
+  engine.processCommand("go depth 16");
 }
 
 function analyzeWithEngine(fen) {
