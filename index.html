@@ -266,81 +266,71 @@ let analyzing = false;
 let engineOutput = ""; // 累积引擎输出
 let engineResolveCallback = null;
 
-function initEngine() {
-  return new Promise((resolve, reject) => {
-    // stockfish.js 已通过 <script src="stockfish.js"> 在 head 中同步加载
-    console.log("[SF] Stockfish type:", typeof Stockfish);
+async function initEngine() {
+  // stockfish.js 已通过 <script src="stockfish.js"> 在 head 中同步加载
+  console.log("[SF] Stockfish type:", typeof Stockfish);
 
-    if (typeof Stockfish === "undefined") {
-      reject(new Error("Stockfish 未加载，请检查 stockfish.js 文件"));
-      return;
-    }
+  if (typeof Stockfish === "undefined") {
+    throw new Error("Stockfish 未加载，请检查 stockfish.js 文件");
+  }
 
-    let sfPromise;
+  let sf;
 
-    if (typeof Stockfish === "function") {
-      // stockfish.js 导出一个工厂函数，需要调用并传入 locateFile
-      sfPromise = Stockfish({
-        locateFile: (path) => {
-          if (path.endsWith(".wasm")) return "stockfish.wasm";
-          return path;
-        }
-      });
-    } else if (Stockfish && typeof Stockfish.then === "function") {
-      // 已经是 Promise
-      sfPromise = Stockfish;
-    } else {
-      // 已经是 engine 实例
-      sfPromise = Promise.resolve(Stockfish);
-    }
-
-    const timeoutId = setTimeout(() => {
-      console.error("[SF] TIMEOUT: 引擎初始化超过30秒");
-      reject(new Error("引擎初始化超时"));
-    }, 30000);
-    
-    sfPromise.then(sf => {
-      clearTimeout(timeoutId);
-      console.log("[SF] engine ready!");
-      engine = sf;
-      sf.listener = (msg) => {
-        engineOutput += msg + "\n";
-        if (msg === "readyok") {
-          console.log("[SF] got readyok");
-          engineReady = true;
-          document.getElementById("analyzeBtn").disabled = false;
-          document.getElementById("loading").style.display = "none";
-          if (engineResolve) { engineResolve(); engineResolve = null; }
-          if (engineQueue.length > 0) {
-            const next = engineQueue.shift();
-            sendToEngine(next.fen, next.resolve);
-          }
-        }
-        if (msg.startsWith("bestmove")) {
-          if (engineResolveCallback) {
-            const out = engineOutput;
-            engineOutput = "";
-            engineResolveCallback(out);
-            engineResolveCallback = null;
-          }
-          analyzing = false;
-          if (engineQueue.length > 0) {
-            const next = engineQueue.shift();
-            sendToEngine(next.fen, next.resolve);
-          }
-        }
-      };
-      sf.processCommand("uci");
-      sf.processCommand("setoption name Hash value 64");
-      sf.processCommand("setoption name MultiPV value 3");
-      sf.processCommand("isready");
-      engineResolve = resolve;
-    }).catch(e => {
-      clearTimeout(timeoutId);
-      console.error("[SF] init failed:", e);
-      reject(e);
+  if (typeof Stockfish === "function") {
+    // stockfish.js 18 导出一个工厂函数，返回 Module 对象，必须等待 sf.ready
+    sf = Stockfish({
+      locateFile: (path) => {
+        if (path.endsWith(".wasm")) return "stockfish.wasm";
+        return path;
+      }
     });
-  });
+  } else if (Stockfish && typeof Stockfish.then === "function") {
+    // 已经是 Promise/thenable，resolve 后得到 Module 实例
+    sf = await Stockfish;
+  } else {
+    sf = Stockfish;
+  }
+
+  // 等待 Module 真正初始化完成（stockfish.js 18 通过 sf.ready 暴露）
+  if (sf.ready) {
+    await sf.ready;
+  } else if (sf.then) {
+    await sf;
+  }
+
+  console.log("[SF] engine ready!");
+  engine = sf;
+  sf.listener = (msg) => {
+    engineOutput += msg + "\n";
+    if (msg === "readyok") {
+      console.log("[SF] got readyok");
+      engineReady = true;
+      document.getElementById("analyzeBtn").disabled = false;
+      document.getElementById("loading").style.display = "none";
+      if (engineResolve) { engineResolve(); engineResolve = null; }
+      if (engineQueue.length > 0) {
+        const next = engineQueue.shift();
+        sendToEngine(next.fen, next.resolve);
+      }
+    }
+    if (msg.startsWith("bestmove")) {
+      if (engineResolveCallback) {
+        const out = engineOutput;
+        engineOutput = "";
+        engineResolveCallback(out);
+        engineResolveCallback = null;
+      }
+      analyzing = false;
+      if (engineQueue.length > 0) {
+        const next = engineQueue.shift();
+        sendToEngine(next.fen, next.resolve);
+      }
+    }
+  };
+  sf.processCommand("uci");
+  sf.processCommand("setoption name Hash value 64");
+  sf.processCommand("setoption name MultiPV value 3");
+  sf.processCommand("isready");
 }
 
 function sendToEngine(fen, resolve) {
