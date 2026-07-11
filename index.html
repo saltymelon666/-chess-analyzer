@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AI 国际象棋分析助手</title>
-  <meta name="description" content="粘贴 PGN，在浏览器里直接用 Stockfish 16 分析局面。完全免费，无需服务器。">
+  <meta name="description" content="粘贴 PGN，在浏览器里直接用 Stockfish 18 分析局面。DeepSeek AI 文字分析，完全免费，无需服务器。">
   <meta name="theme-color" content="#111827">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><text y='56' font-size='56'>♟</text></svg>">
@@ -145,7 +145,7 @@
   <div class="topbar">
     <div>
       <h1>AI 国际象棋分析助手</h1>
-      <p class="subtitle">粘贴 PGN，浏览器内直接用 Stockfish 分析 · 完全免费 · 无需服务器</p>
+      <p class="subtitle">粘贴 PGN，浏览器内直接用 Stockfish 18 + DeepSeek AI 分析 · 完全免费 · 无需服务器</p>
     </div>
     <div class="pill">本地引擎 · 离线可用</div>
   </div>
@@ -200,7 +200,16 @@
         </label>
       </div>
 
-      <div class="loading" id="loading" style="display:none;">Stockfish 引擎加载中，请稍等...</div>
+      <details style="margin-top:6px;">
+        <summary style="color:var(--muted);font-size:12px;cursor:pointer;">DeepSeek API 设置</summary>
+        <div style="display:flex;gap:8px;margin-top:6px;">
+          <input type="password" id="dsApiKey" placeholder="输入 DeepSeek API Key" style="flex:1;">
+          <button class="ghost-btn" onclick="saveApiKey()" style="white-space:nowrap;">保存</button>
+        </div>
+        <div class="small" style="margin-top:4px;">在 <a href="https://platform.deepseek.com/api_keys" target="_blank" style="color:var(--accent);">platform.deepseek.com</a> 获取免费 API Key</div>
+      </details>
+
+      <div class="loading" id="loading" style="display:none;">Stockfish 18 引擎加载中，请稍等...</div>
       <div class="error" id="errorBox"></div>
 
       <div class="results" id="resultSection">
@@ -214,6 +223,12 @@
         <div>
           <h2 style="font-size:18px;margin:8px 0 0;">最佳着法</h2>
           <div id="movesList"></div>
+        </div>
+        <!-- DeepSeek AI 文字分析 -->
+        <div id="aiAnalysis" style="display:none;background:rgba(79,143,130,0.1);border:1px solid rgba(79,143,130,0.3);border-radius:8px;padding:14px;margin-top:12px;">
+          <h3 style="font-size:15px;margin:0 0 8px;color:var(--accent-2);">AI 局面分析</h3>
+          <div id="aiAnalysisText" style="color:#dbe2ea;font-size:14px;line-height:1.7;"></div>
+          <div id="aiAnalysisLoading" style="display:none;color:var(--muted);">DeepSeek 正在生成分析...</div>
         </div>
         <details>
           <summary>原始分析数据</summary>
@@ -653,6 +668,115 @@ function showResult(engineData) {
     </div>`;
   }).join("");
   document.getElementById("rawJson").textContent = JSON.stringify(engineData, null, 2);
+
+  // 调用 DeepSeek API 生成文字分析
+  callDeepSeek(engineData, game.fen());
+}
+
+// ========== DeepSeek API ==========
+let dsApiKey = localStorage.getItem("ds_api_key") || "";
+
+function loadSavedApiKey() {
+  if (dsApiKey) {
+    document.getElementById("dsApiKey").value = dsApiKey;
+    document.getElementById("dsApiKey").style.borderColor = "var(--accent-2)";
+  }
+}
+
+function saveApiKey() {
+  dsApiKey = document.getElementById("dsApiKey").value.trim();
+  if (dsApiKey) {
+    localStorage.setItem("ds_api_key", dsApiKey);
+    document.getElementById("dsApiKey").style.borderColor = "var(--accent-2)";
+  } else {
+    localStorage.removeItem("ds_api_key");
+    document.getElementById("dsApiKey").style.borderColor = "";
+  }
+}
+
+async function callDeepSeek(engineData, fen) {
+  if (!dsApiKey) {
+    document.getElementById("aiAnalysis").style.display = "none";
+    return;
+  }
+
+  const aiBox = document.getElementById("aiAnalysis");
+  const aiText = document.getElementById("aiAnalysisText");
+  const aiLoading = document.getElementById("aiAnalysisLoading");
+
+  aiBox.style.display = "block";
+  aiText.textContent = "";
+  aiLoading.style.display = "block";
+
+  // 构建给 DeepSeek 的 prompt
+  const best = engineData.top_moves[0];
+  let evalStr = "";
+  if (best) {
+    if (best.mate_in != null) {
+      evalStr = `将杀在${Math.abs(best.mate_in)}步（${best.mate_in > 0 ? '白方' : '黑方'}胜）`;
+    } else if (best.centipawn != null) {
+      evalStr = `评估值 ${(best.centipawn / 100).toFixed(1)}（正数白优，负数黑优）`;
+    }
+  }
+
+  const movesInfo = (engineData.top_moves || []).map((m, i) => {
+    let score = m.mate_in != null ? `${m.mate_in > 0 ? '白' : '黑'}M${Math.abs(m.mate_in)}` : (m.centipawn != null ? (m.centipawn / 100).toFixed(1) : '-');
+    let pv = (m.pv || []).slice(0, 5).join(' ');
+    return `#${i + 1}: ${m.san} (${score}) 后续: ${pv || '-'}`;
+  }).join('\n');
+
+  const prompt = `你是一个国际象棋分析助手。请用简洁的中文分析以下局面：
+
+局面FEN: ${fen}
+引擎评估: ${evalStr}
+搜索深度: ${engineData.depth} 层
+最佳着法及后续变化:
+${movesInfo}
+
+请用 2-4 句话分析：
+1. 当前局面的整体评价（谁优谁劣，为什么）
+2. 最佳着法的意图（这步棋想达到什么目的）
+3. 对棋手的简要建议
+
+用中文回复，直接给分析文字，不要加前缀或标题。`;
+
+  try {
+    const response = await fetch("https://api.deepseek.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + dsApiKey
+      },
+      body: JSON.stringify({
+        model: "deepseek-chat",
+        messages: [
+          { role: "system", content: "你是一位国际象棋大师兼教练，擅长用通俗易懂的中文分析棋局。" },
+          { role: "user", content: prompt }
+        ],
+        max_tokens: 500,
+        temperature: 0.7
+      })
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`API 错误 (${response.status}): ${err}`);
+    }
+
+    const data = await response.json();
+    const analysis = data.choices?.[0]?.message?.content || "";
+
+    if (analysis) {
+      aiText.textContent = analysis;
+    } else {
+      aiText.textContent = "未能生成分析文字。";
+    }
+  } catch (e) {
+    console.error("[DS] Error:", e);
+    aiText.textContent = "DeepSeek 分析失败：" + e.message;
+  } finally {
+    aiLoading.style.display = "none";
+  }
 }
 
 // ========== 棋盘渲染 ==========
@@ -714,6 +838,7 @@ function showError(msg) {
 // ========== 初始化 ==========
 document.addEventListener("DOMContentLoaded", () => {
   renderBoard();
+  loadSavedApiKey();
   document.getElementById("loading").style.display = "block";
   document.getElementById("analyzeBtn").disabled = true;
 
