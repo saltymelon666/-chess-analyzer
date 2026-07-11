@@ -613,6 +613,7 @@ function showResult(engineData) {
   const best = topMoves[0];
 
   // 中文文字描述（不重复显示数字）
+  let evalText = engineData.evaluation || "-";
   let evalDetail = "";
   const cp = best ? best.centipawn : null;
   const mateIn = best ? best.mate_in : null;
