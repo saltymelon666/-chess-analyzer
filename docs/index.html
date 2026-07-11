@@ -268,21 +268,37 @@ let engineResolveCallback = null;
 
 function initEngine() {
   return new Promise((resolve, reject) => {
-    // stockfish.js 已通过 <script src> 在 head 中同步加载
-    // window.Stockfish 已由 stockfish.js 末尾的修改设置为 t() 的返回值 (Promise)
+    // stockfish.js 已通过 <script src="stockfish.js"> 在 head 中同步加载
     console.log("[SF] Stockfish type:", typeof Stockfish);
-    
+
     if (typeof Stockfish === "undefined") {
       reject(new Error("Stockfish 未加载，请检查 stockfish.js 文件"));
       return;
     }
-    
-    const sfPromise = Stockfish; // Stockfish 就是 Promise
+
+    let sfPromise;
+
+    if (typeof Stockfish === "function") {
+      // stockfish.js 导出一个工厂函数，需要调用并传入 locateFile
+      sfPromise = Stockfish({
+        locateFile: (path) => {
+          if (path.endsWith(".wasm")) return "stockfish.wasm";
+          return path;
+        }
+      });
+    } else if (Stockfish && typeof Stockfish.then === "function") {
+      // 已经是 Promise
+      sfPromise = Stockfish;
+    } else {
+      // 已经是 engine 实例
+      sfPromise = Promise.resolve(Stockfish);
+    }
+
     const timeoutId = setTimeout(() => {
       console.error("[SF] TIMEOUT: 引擎初始化超过30秒");
       reject(new Error("引擎初始化超时"));
     }, 30000);
-    
+
     sfPromise.then(sf => {
       clearTimeout(timeoutId);
       console.log("[SF] engine ready!");
