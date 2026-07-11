@@ -352,7 +352,7 @@ function analyzeWithEngine(fen) {
   });
 }
 
-function parseEngineOutput(output) {
+function parseEngineOutput(output, startFen) {
   const lines = output.split("\n");
   const result = { top_moves: [], depth: 0, nodes: 0, time_ms: 0 };
   let currentDepth = 0;
@@ -375,25 +375,25 @@ function parseEngineOutput(output) {
       const mpv = multipvMatch ? parseInt(multipvMatch[1]) : 1;
 
       if (pvMatch && scoreMatch) {
-        const pvMoves = pvMatch[1].trim().split(/\s+/);
-        const san = pvMoves.length > 0 ? uciToSan(pvMoves[0]) : "";
+        const pvUcis = pvMatch[1].trim().split(/\s+/);
+        const sanSeq = uciSequenceToSan(pvUcis, startFen);
         const mateIn = scoreMatch[1] === "mate" ? parseInt(scoreMatch[2]) : null;
         const centipawn = scoreMatch[1] === "cp" ? parseInt(scoreMatch[2]) : null;
 
         pvMap[mpv] = {
-          move: pvMoves[0] || "",
-          san: san,
+          move: pvUcis[0] || "",
+          san: sanSeq[0] || uciToSan(pvUcis[0] || "", startFen),
           centipawn: centipawn,
           mate_in: mateIn,
           score: centipawn != null ? centipawn / 100 : null,
-          pv: pvMoves.slice(1).map(uciToSan),
+          pv: sanSeq.slice(1),
           depth: currentDepth
         };
       }
     }
   }
 
-  // 排序 multipv
+  // 排序 multipv：mate 优先，然后按 cp 从高到低
   result.top_moves = Object.values(pvMap).sort((a, b) => {
     if (a.mate_in != null && b.mate_in != null) {
       const aVal = a.mate_in > 0 ? 9999 - a.mate_in : -9999 + a.mate_in;
@@ -405,7 +405,7 @@ function parseEngineOutput(output) {
     return (b.centipawn || 0) - (a.centipawn || 0);
   });
 
-  // 评估文本
+  // 评估文本（严格按 Stockfish cp 值）
   if (result.top_moves.length > 0) {
     const best = result.top_moves[0];
     if (best.mate_in != null) {
@@ -419,11 +419,31 @@ function parseEngineOutput(output) {
   return result;
 }
 
-function uciToSan(uci) {
+// 把一段 UCI 序列（从 startFen 开始）全部转成 SAN
+function uciSequenceToSan(ucis, startFen) {
+  if (!ucis || ucis.length === 0) return [];
+  const sanMoves = [];
+  let tempFen = startFen;
+  for (const uci of ucis) {
+    if (!uci || uci.length < 4) break;
+    try {
+      const tempGame = new Chess(tempFen);
+      const move = tempGame.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] || undefined });
+      if (!move) break;
+      sanMoves.push(move.san);
+      tempFen = tempGame.fen();
+    } catch {
+      break;
+    }
+  }
+  return sanMoves;
+}
+
+function uciToSan(uci, fen) {
   if (!uci || uci.length < 4) return uci;
   try {
-    const tempGame = new Chess(game.fen());
-    const move = tempGame.move({ from: uci.slice(0,2), to: uci.slice(2,4), promotion: uci[4] || undefined });
+    const tempGame = new Chess(fen || game.fen());
+    const move = tempGame.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] || undefined });
     return move ? move.san : uci;
   } catch {
     return uci;
@@ -575,7 +595,7 @@ async function analyze() {
   try {
     const fen = game.fen();
     const output = await analyzeWithEngine(fen);
-    const parsed = parseEngineOutput(output);
+    const parsed = parseEngineOutput(output, fen);
     showResult(parsed);
   } catch (e) {
     showError("分析出错：" + e.message);
@@ -592,24 +612,21 @@ function showResult(engineData) {
   const topMoves = engineData.top_moves || [];
   const best = topMoves[0];
 
-  // 评估文字
-  let evalText = engineData.evaluation || "-";
+  // 中文文字描述（不重复显示数字）
   let evalDetail = "";
-
-  // 使用 centipawn 而非 score 来判断，因为 score 可能未正确设置
   const cp = best ? best.centipawn : null;
   const mateIn = best ? best.mate_in : null;
 
   if (mateIn != null) {
     const side = mateIn > 0 ? "白方" : "黑方";
-    evalDetail = `${side} ${Math.abs(mateIn)} 步将杀`;
+    evalDetail = `${side}${Math.abs(mateIn)}步将杀`;
   } else if (cp != null) {
     const s = cp / 100;
     const absS = Math.abs(s);
     if (absS > 3.0) evalDetail = s > 0 ? "白方大优" : "黑方大优";
     else if (absS > 1.5) evalDetail = s > 0 ? "白方优势" : "黑方优势";
     else if (absS > 0.7) evalDetail = s > 0 ? "白方稍优" : "黑方稍优";
-    else if (absS > 0.3) evalDetail = s > 0 ? "白方微弱优势" : "黑方微弱优势";
+    else if (absS > 0.3) evalDetail = s > 0 ? "白方略优" : "黑方略优";
     else evalDetail = "局面均势";
   }
 
