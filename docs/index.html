@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#111827">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><text y='56' font-size='56'>♟</text></svg>">
-  <script src="stockfish.js"></script>
+
   <style>
     :root {
       --bg: #111827;
@@ -261,84 +261,80 @@ let engineResolve = null;
 let analyzing = false;
 
 
-// ========== Stockfish JS 引擎 ==========
+// ========== Stockfish Worker 引擎 ==========
 
 let engineOutput = ""; // 累积引擎输出
 let engineResolveCallback = null;
 
-async function initEngine() {
-  // stockfish.js 已通过 <script src="stockfish.js"> 在 head 中同步加载
-  console.log("[SF] Stockfish type:", typeof Stockfish);
+function initEngine() {
+  return new Promise((resolve, reject) => {
+    console.log("[SF] Starting Stockfish worker...");
 
-  if (typeof Stockfish === "undefined") {
-    throw new Error("Stockfish 未加载，请检查 stockfish.js 文件");
-  }
-
-  let sf;
-
-  if (typeof Stockfish === "function") {
-    // stockfish.js 18 导出一个工厂函数，返回 Module 对象，必须等待 sf.ready
-    sf = Stockfish({
-      locateFile: (path) => {
-        if (path.endsWith(".wasm")) return "stockfish.wasm";
-        return path;
-      }
-    });
-  } else if (Stockfish && typeof Stockfish.then === "function") {
-    // 已经是 Promise/thenable，resolve 后得到 Module 实例
-    sf = await Stockfish;
-  } else {
-    sf = Stockfish;
-  }
-
-  // 等待 Module 真正初始化完成（stockfish.js 18 通过 sf.ready 暴露）
-  if (sf.ready) {
-    await sf.ready;
-  } else if (sf.then) {
-    await sf;
-  }
-
-  console.log("[SF] engine ready!");
-  engine = sf;
-  sf.listener = (msg) => {
-    engineOutput += msg + "\n";
-    if (msg === "readyok") {
-      console.log("[SF] got readyok");
-      engineReady = true;
-      document.getElementById("analyzeBtn").disabled = false;
-      document.getElementById("loading").style.display = "none";
-      if (engineResolve) { engineResolve(); engineResolve = null; }
-      if (engineQueue.length > 0) {
-        const next = engineQueue.shift();
-        sendToEngine(next.fen, next.resolve);
-      }
+    // stockfish.js 可以直接作为 Web Worker 使用
+    // Worker 环境中会自动设置 listener: postMessage
+    let worker;
+    try {
+      worker = new Worker("stockfish.js");
+    } catch (e) {
+      reject(new Error("无法创建 Worker: " + e.message));
+      return;
     }
-    if (msg.startsWith("bestmove")) {
-      if (engineResolveCallback) {
-        const out = engineOutput;
-        engineOutput = "";
-        engineResolveCallback(out);
-        engineResolveCallback = null;
+
+    const timeoutId = setTimeout(() => {
+      console.error("[SF] TIMEOUT");
+      reject(new Error("引擎初始化超时"));
+    }, 30000);
+
+    worker.onmessage = (e) => {
+      const msg = (typeof e.data === "string") ? e.data : "";
+      if (!msg) return;
+
+      engineOutput += msg + "\n";
+
+      if (msg === "readyok") {
+        clearTimeout(timeoutId);
+        console.log("[SF] got readyok");
+        engineReady = true;
+        document.getElementById("analyzeBtn").disabled = false;
+        document.getElementById("loading").style.display = "none";
+        resolve();
       }
-      analyzing = false;
-      if (engineQueue.length > 0) {
-        const next = engineQueue.shift();
-        sendToEngine(next.fen, next.resolve);
+
+      if (msg.startsWith("bestmove")) {
+        if (engineResolveCallback) {
+          const out = engineOutput;
+          engineOutput = "";
+          engineResolveCallback(out);
+          engineResolveCallback = null;
+        }
+        analyzing = false;
+        if (engineQueue.length > 0) {
+          const next = engineQueue.shift();
+          sendToEngine(next.fen, next.resolve);
+        }
       }
-    }
-  };
-  sf.processCommand("uci");
-  sf.processCommand("setoption name Hash value 64");
-  sf.processCommand("setoption name MultiPV value 3");
-  sf.processCommand("isready");
+    };
+
+    worker.onerror = (e) => {
+      clearTimeout(timeoutId);
+      console.error("[SF] Worker error:", e);
+      reject(new Error("Worker 错误: " + (e.message || "未知错误")));
+    };
+
+    engine = worker;
+    worker.postMessage("uci");
+    worker.postMessage("setoption name Hash value 64");
+    worker.postMessage("setoption name MultiPV value 3");
+    worker.postMessage("isready");
+  });
 }
 
 function sendToEngine(fen, resolve) {
   engineOutput = "";
   engineResolveCallback = resolve;
-  engine.processCommand("ucinewgame");
-  engine.processCommand(`position fen ${fen}`);
-  engine.processCommand("go depth 16");
+  engine.postMessage("ucinewgame");
+  engine.postMessage("position fen " + fen);
+  engine.postMessage("go depth 16");
 }
 
 function analyzeWithEngine(fen) {
