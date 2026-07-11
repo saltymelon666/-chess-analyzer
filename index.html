@@ -592,27 +592,39 @@ function showResult(engineData) {
   const topMoves = engineData.top_moves || [];
   const best = topMoves[0];
 
+  // 评估文字
   let evalText = engineData.evaluation || "-";
   let evalDetail = "";
-  if (best) {
-    if (best.mate_in != null) {
-      evalDetail = `将杀在 ${Math.abs(best.mate_in)} 步`;
-    } else if (best.score != null) {
-      const s = best.score;
-      if (Math.abs(s) > 1.5) evalDetail = `优势 ${s > 0 ? '+' : ''}${s.toFixed(1)}`;
-      else if (Math.abs(s) > 0.5) evalDetail = `略优 ${s > 0 ? '+' : ''}${s.toFixed(1)}`;
-      else evalDetail = `均势 ${s >= 0 ? '+' : ''}${s.toFixed(1)}`;
-    }
+
+  // 使用 centipawn 而非 score 来判断，因为 score 可能未正确设置
+  const cp = best ? best.centipawn : null;
+  const mateIn = best ? best.mate_in : null;
+
+  if (mateIn != null) {
+    const side = mateIn > 0 ? "白方" : "黑方";
+    evalDetail = `${side} ${Math.abs(mateIn)} 步将杀`;
+  } else if (cp != null) {
+    const s = cp / 100;
+    const absS = Math.abs(s);
+    if (absS > 3.0) evalDetail = s > 0 ? "白方大优" : "黑方大优";
+    else if (absS > 1.5) evalDetail = s > 0 ? "白方优势" : "黑方优势";
+    else if (absS > 0.7) evalDetail = s > 0 ? "白方稍优" : "黑方稍优";
+    else if (absS > 0.3) evalDetail = s > 0 ? "白方微弱优势" : "黑方微弱优势";
+    else evalDetail = "局面均势";
   }
+
   document.getElementById("evalValue").textContent = evalText;
   document.getElementById("evalMeta").textContent = evalDetail;
   document.getElementById("movesList").innerHTML = topMoves.map((m, i) => {
     let scoreStr = "";
     if (m.mate_in != null) {
-      scoreStr = m.mate_in > 0 ? `白方 M${m.mate_in}` : `黑方 M${Math.abs(m.mate_in)}`;
+      const side = m.mate_in > 0 ? "白" : "黑";
+      scoreStr = `${side} M${Math.abs(m.mate_in)}`;
+    } else if (m.centipawn != null) {
+      const s = m.centipawn / 100;
+      scoreStr = s > 0 ? `+${s.toFixed(1)}` : `${s.toFixed(1)}`;
     } else {
-      const s = m.score;
-      scoreStr = s != null ? (s > 0 ? `+${s.toFixed(1)}` : `${s.toFixed(1)}`) : "-";
+      scoreStr = "-";
     }
     return `<div class="move-card">
       <div class="move-line">
