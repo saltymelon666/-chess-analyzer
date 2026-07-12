@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: ai-chess-review-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: DEEPSEEK_BASE_URL
+        value: https://api.deepseek.com
+      - key: DEEPSEEK_MODEL
+        value: deepseek-chat
+      - key: STOCKFISH_PATH
+        value: /usr/local/bin/stockfish
+      - key: STOCKFISH_DEPTH
+        value: "14"
+      - key: STOCKFISH_THREADS
+        value: "1"
+      - key: STOCKFISH_HASH
+        value: "64"
+      - key: STOCKFISH_MULTIPV
+        value: "3"
+      - key: STOCKFISH_TIMEOUT_SECONDS
+        value: "45"
+      - key: DEEPSEEK_TIMEOUT_SECONDS
+        value: "30"
+      - key: ALLOWED_ORIGINS
+        value: https://saltymelon666.github.io
+

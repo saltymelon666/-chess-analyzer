@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AI 国际象棋分析助手</title>
-  <meta name="description" content="粘贴 PGN，在浏览器里直接用 Stockfish 18 分析局面。DeepSeek AI 文字分析，完全免费，无需服务器。">
+  <meta name="description" content="粘贴 PGN，由服务端 Stockfish 18 分析局面，并通过 DeepSeek 生成中文解释。">
   <meta name="theme-color" content="#111827">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><text y='56' font-size='56'>♟</text></svg>">
@@ -145,9 +145,9 @@
   <div class="topbar">
     <div>
       <h1>AI 国际象棋分析助手</h1>
-      <p class="subtitle">粘贴 PGN，浏览器内直接用 Stockfish 18 + DeepSeek AI 分析 · 完全免费 · 无需服务器</p>
+      <p class="subtitle">粘贴 PGN，由 Stockfish 18 + DeepSeek AI 生成清晰的中文局面分析</p>
     </div>
-    <div class="pill">本地引擎 · 离线可用</div>
+    <div class="pill">服务端分析 · 密钥不进入浏览器</div>
   </div>
 
   <section class="workspace">
@@ -200,16 +200,9 @@
         </label>
       </div>
 
-      <details style="margin-top:6px;">
-        <summary style="color:var(--muted);font-size:12px;cursor:pointer;">DeepSeek API 设置</summary>
-        <div style="display:flex;gap:8px;margin-top:6px;">
-          <input type="password" id="dsApiKey" placeholder="输入 DeepSeek API Key" style="flex:1;">
-          <button class="ghost-btn" onclick="saveApiKey()" style="white-space:nowrap;">保存</button>
-        </div>
-        <div class="small" style="margin-top:4px;">在 <a href="https://platform.deepseek.com/api_keys" target="_blank" style="color:var(--accent);">platform.deepseek.com</a> 获取免费 API Key</div>
-      </details>
+      <div class="small" id="backendStatus">正在连接分析服务...</div>
 
-      <div class="loading" id="loading" style="display:none;">Stockfish 18 引擎加载中，请稍等...</div>
+      <div class="loading" id="loading" style="display:none;">服务端 Stockfish 18 正在分析，请稍等...</div>
       <div class="error" id="errorBox"></div>
 
       <div class="results" id="resultSection">
@@ -241,6 +234,7 @@
 
 <!-- chess.js v0.10.2 (本地版，已添加全局 Chess 变量) -->
 <script src="chess.js"></script>
+<script src="runtime-config.js"></script>
 
 <script>
 // ========== 状态管理 ==========
@@ -274,6 +268,13 @@ let engineReady = false;
 let engineQueue = [];
 let engineResolve = null;
 let analyzing = false;
+
+const API_BASE_URL = window.CHESS_API_BASE_URL ||
+  (["localhost", "127.0.0.1"].includes(window.location.hostname) ? "http://localhost:8000" : "");
+
+function apiUrl(path) {
+  return `${API_BASE_URL}${path}`;
+}
 
 
 // ========== Stockfish Worker 引擎 ==========
@@ -599,28 +600,34 @@ function loadExample(name) {
 
 // ========== 分析 ==========
 async function analyze() {
-  if (!engineReady) {
-    showError("引擎还在加载中，请稍等...");
-    return;
-  }
   clearError();
   document.getElementById("analyzeBtn").disabled = true;
   document.getElementById("analyzeBtn").textContent = "分析中...";
+  document.getElementById("loading").style.display = "block";
 
   try {
     const fen = game.fen();
-    const output = await analyzeWithEngine(fen);
-    const parsed = parseEngineOutput(output, fen);
-    showResult(parsed);
+    const response = await fetch(apiUrl("/api/review"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fen })
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload.detail || `分析服务错误 (${response.status})`);
+    }
+    showResult(payload);
   } catch (e) {
     showError("分析出错：" + e.message);
   } finally {
+    document.getElementById("loading").style.display = "none";
     document.getElementById("analyzeBtn").disabled = false;
     document.getElementById("analyzeBtn").textContent = "分析当前局面";
   }
 }
 
-function showResult(engineData) {
+function showResult(reviewData) {
+  const engineData = reviewData.engine || {};
   document.getElementById("resultSection").classList.add("active");
   renderBoard();
 
@@ -667,10 +674,12 @@ function showResult(engineData) {
       <div class="move-pv">${(m.pv || []).slice(0, 6).join(" → ") || "-"}</div>
     </div>`;
   }).join("");
-  document.getElementById("rawJson").textContent = JSON.stringify(engineData, null, 2);
+  document.getElementById("rawJson").textContent = JSON.stringify(reviewData, null, 2);
 
-  // 调用 DeepSeek API 生成文字分析
-  callDeepSeek(engineData, game.fen());
+  const aiBox = document.getElementById("aiAnalysis");
+  const aiText = document.getElementById("aiAnalysisText");
+  aiBox.style.display = "block";
+  aiText.textContent = reviewData.explanation || reviewData.warning || "Stockfish 分析已完成，暂无 AI 解释。";
 }
 
 // ========== DeepSeek API ==========
@@ -838,16 +847,23 @@ function showError(msg) {
 // ========== 初始化 ==========
 document.addEventListener("DOMContentLoaded", () => {
   renderBoard();
-  loadSavedApiKey();
-  document.getElementById("loading").style.display = "block";
   document.getElementById("analyzeBtn").disabled = true;
 
-  initEngine().then(() => {
-    console.log("Stockfish WASM ready!");
-  }).catch(err => {
-    showError("引擎加载失败：" + err.message + "。请刷新页面重试。");
-    document.getElementById("loading").style.display = "none";
-  });
+  fetch(apiUrl("/api/health"))
+    .then(async response => {
+      const health = await response.json().catch(() => ({}));
+      if (!response.ok || health.stockfish !== "available") {
+        throw new Error("Stockfish 服务不可用");
+      }
+      document.getElementById("backendStatus").textContent = health.deepseek_configured
+        ? "分析服务已连接 · Stockfish 18 + DeepSeek"
+        : "分析服务已连接 · DeepSeek 尚未配置，仍可使用 Stockfish";
+      document.getElementById("analyzeBtn").disabled = false;
+    })
+    .catch(err => {
+      document.getElementById("backendStatus").textContent = "分析服务未连接";
+      showError("无法连接后端分析服务：" + err.message);
+    });
 
   document.getElementById("sourceInput").addEventListener("paste", () => {
     setTimeout(() => {
