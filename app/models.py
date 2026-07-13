@@ -43,3 +43,54 @@ class HealthResponse(BaseModel):
     stockfish: str
     deepseek_configured: bool
 
+
+class GameReviewRequest(BaseModel):
+    pgn: str = Field(min_length=3, max_length=100_000)
+
+
+class EvaluationSnapshot(BaseModel):
+    evaluation: str
+    centipawn: int | None = None
+    mate_in: int | None = None
+
+
+class MoveReview(BaseModel):
+    index: int
+    move_number: int
+    notation: str
+    side: str
+    san: str
+    uci: str
+    from_square: str
+    to_square: str
+    before_fen: str
+    after_fen: str
+    before: EvaluationSnapshot
+    after: EvaluationSnapshot
+    centipawn_loss: int | None = None
+    best_move_uci: str | None = None
+    best_move_san: str | None = None
+    best_pv: list[str] = Field(default_factory=list)
+    quality_key: str
+    quality_symbol: str
+    quality_label: str
+    mate_involved: bool
+    only_legal_move: bool
+
+
+class GameReviewResponse(BaseModel):
+    analysis_id: str
+    depth: int
+    move_count: int
+    moves: list[MoveReview]
+
+
+class MoveExplanationRequest(BaseModel):
+    analysis_id: str = Field(min_length=8, max_length=80)
+    move_index: int = Field(ge=1)
+
+
+class MoveExplanationResponse(BaseModel):
+    explanation: str | None = None
+    warning: str | None = None
+    cached: bool = False

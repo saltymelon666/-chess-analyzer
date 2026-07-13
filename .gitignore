@@ -5,6 +5,7 @@ __pycache__/
 .pytest_cache/
 .coverage
 htmlcov/
+work/
 
 # Local and generated engine packages
 stockfish.exe
@@ -16,4 +17,3 @@ package/
 .vscode/
 .DS_Store
 Thumbs.db
-

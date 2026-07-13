@@ -37,6 +37,9 @@ class Settings:
     stockfish_hash: int
     stockfish_multipv: int
     stockfish_timeout_seconds: float
+    game_analysis_depth: int
+    game_analysis_timeout_seconds: float
+    game_analysis_max_plies: int
     deepseek_timeout_seconds: float
     allowed_origins: tuple[str, ...]
 
@@ -65,7 +68,9 @@ def load_settings() -> Settings:
         stockfish_hash=max(16, int(_value("STOCKFISH_HASH", defaults, "64"))),
         stockfish_multipv=max(1, int(_value("STOCKFISH_MULTIPV", defaults, "3"))),
         stockfish_timeout_seconds=float(_value("STOCKFISH_TIMEOUT_SECONDS", defaults, "30")),
+        game_analysis_depth=max(6, int(_value("GAME_ANALYSIS_DEPTH", defaults, "10"))),
+        game_analysis_timeout_seconds=float(_value("GAME_ANALYSIS_TIMEOUT_SECONDS", defaults, "240")),
+        game_analysis_max_plies=max(1, int(_value("GAME_ANALYSIS_MAX_PLIES", defaults, "160"))),
         deepseek_timeout_seconds=float(_value("DEEPSEEK_TIMEOUT_SECONDS", defaults, "30")),
         allowed_origins=origins,
     )
-
