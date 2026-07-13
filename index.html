@@ -882,7 +882,9 @@ async function loadMoveExplanation(review) {
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.detail || `解释服务错误 (${response.status})`);
-    const text = payload.explanation || fallbackMoveExplanation(review, payload.warning);
+    const text = payload.details
+      ? formatStructuredExplanation(payload.details)
+      : (payload.explanation || fallbackMoveExplanation(review, payload.warning));
     moveExplanationCache.set(review.index, text);
     if (token === explanationRequestToken) copy.textContent = text;
   } catch (e) {
@@ -891,6 +893,28 @@ async function loadMoveExplanation(review) {
   } finally {
     if (token === explanationRequestToken) loading.style.display = "none";
   }
+}
+
+function formatStructuredExplanation(details) {
+  const sections = [
+    ["总体判断", details.conclusion],
+    ["当前局面", details.currentSituation],
+    ["对手的回应", details.opponentThreat],
+    ["实战想法", details.playedMoveIdea],
+    ["问题在哪里", details.problem],
+    ["更好的走法", details.betterMove]
+  ].filter(([, value]) => value && value.trim());
+  if (details.variationExplanation?.length) {
+    sections.push(["变化过程", details.variationExplanation.map((item, index) => `${index + 1}. ${item}`).join("\n")]);
+  }
+  if (details.childTip) sections.push(["小提示", details.childTip]);
+  return sections.map(([title, value]) => `【${title}】\n${value}`).join("\n\n");
+}
+
+function formatPieceFactName(pieceId) {
+  const [color, piece] = String(pieceId || "").split("_");
+  const names = { pawn: "兵", knight: "马", bishop: "象", rook: "车", queen: "后", king: "王" };
+  return `${color === "white" ? "白" : color === "black" ? "黑" : ""}${names[piece] || "棋子"}`;
 }
 
 function fallbackMoveExplanation(review, warning) {
@@ -913,7 +937,15 @@ function fallbackMoveExplanation(review, warning) {
   const pv = review.principal_variation?.length
     ? `已验证的主要变化是${review.principal_variation.slice(0, 8).join("、")}。`
     : "主要变化不完整，因此不展开未经确认的战术。";
-  return `${intro}${score}${reply}${better}${pv}${note}\n\n${tip}`;
+  const factors = review.complexity_factors || {};
+  const difficulty = `这个局面有${factors.legal_move_count ?? "若干"}个合法走法，评价波动为${factors.evaluation_swing_cp ?? "将杀变化"}，连续强制变化有${factors.forcing_line_plies ?? 0}个半回合，所以需要分步检查。`;
+  const tactics = review.verified_tactics?.length
+    ? `棋规库确认的战术线索是：${review.verified_tactics.map(item => item.description).join("；")}`
+    : "棋规库没有确认钉住、双攻或串击，因此这里不补写隐藏战术。";
+  const steps = review.principal_variation_facts?.slice(0, 4).map((fact, index) =>
+    `${index + 1}. ${fact.san}：${formatPieceFactName(fact.piece)}从${fact.from_square}到${fact.to_square}${fact.capture ? "，完成吃子" : ""}${fact.checkmate ? "，形成将杀" : (fact.check ? "，形成将军" : "")}。`
+  ).join("\n") || "PV后续信息不足，不能补写未经验证的变化。";
+  return `${intro}${difficulty}${score}${reply}${tactics}${better}${pv}${note}\n\n【分步变化】\n${steps}\n\n${tip}`;
 }
 
 async function analyze() {
