@@ -49,7 +49,7 @@ MAX_CACHED_GAMES = 20
 
 app = FastAPI(
     title="AI Chess Review API",
-    version="0.1.0",
+    version="0.2.0",
     description="Server-side Stockfish 18 analysis with optional DeepSeek explanation.",
 )
 app.add_middleware(

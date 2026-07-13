@@ -54,6 +54,30 @@ class EvaluationSnapshot(BaseModel):
     mate_in: int | None = None
 
 
+class MoveFacts(BaseModel):
+    san: str
+    uci: str
+    from_square: str
+    to_square: str
+    piece: str
+    capture: bool
+    captured_piece: str | None = None
+    check: bool
+    checkmate: bool
+    castling: bool
+    promotion: str | None = None
+
+
+class ComplexityFactors(BaseModel):
+    legal_move_count: int
+    candidate_gap_cp: int | None = None
+    only_reasonable_move: bool
+    pv_length: int
+    evaluation_swing_cp: int | None = None
+    forcing_line_plies: int
+    engaged_piece_count: int
+
+
 class MoveReview(BaseModel):
     index: int
     move_number: int
@@ -67,6 +91,9 @@ class MoveReview(BaseModel):
     after_fen: str
     before: EvaluationSnapshot
     after: EvaluationSnapshot
+    played_move: MoveFacts
+    best_move: MoveFacts | None = None
+    opponent_reply: MoveFacts | None = None
     centipawn_loss: int | None = None
     best_move_uci: str | None = None
     best_move_san: str | None = None
@@ -76,6 +103,16 @@ class MoveReview(BaseModel):
     quality_label: str
     mate_involved: bool
     only_legal_move: bool
+    principal_variation: list[str] = Field(default_factory=list)
+    principal_variation_facts: list[MoveFacts] = Field(default_factory=list)
+    opponent_variation: list[str] = Field(default_factory=list)
+    opponent_variation_facts: list[MoveFacts] = Field(default_factory=list)
+    complexity: str
+    complexity_factors: ComplexityFactors
+    verified_facts: list[str] = Field(default_factory=list)
+    allowed_squares: list[str] = Field(default_factory=list)
+    allowed_moves: list[str] = Field(default_factory=list)
+    pieces_before: dict[str, str] = Field(default_factory=dict)
 
 
 class GameReviewResponse(BaseModel):

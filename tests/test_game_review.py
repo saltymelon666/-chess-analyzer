@@ -1,6 +1,6 @@
 import pytest
 
-from app.game_review import analyze_pgn
+from app.game_review import analyze_pgn, parse_pgn_facts
 from app.models import EngineResult, MoveResult
 
 
@@ -53,6 +53,11 @@ async def test_game_review_uses_black_mover_perspective() -> None:
     assert result.moves[1].centipawn_loss == 70
     assert result.moves[1].quality_key == "inaccuracy"
     assert result.moves[1].before_fen.endswith(" b KQkq - 0 1")
+    assert result.moves[1].played_move.piece == "black_pawn"
+    assert result.moves[1].played_move.from_square == "e7"
+    assert result.moves[1].best_move is not None
+    assert result.moves[1].best_move.san == "c5"
+    assert result.moves[1].complexity in {"simple", "normal", "complex"}
 
 
 @pytest.mark.asyncio
@@ -66,3 +71,57 @@ async def test_damaged_pgn_is_rejected_before_engine_call() -> None:
             timeout_seconds=30,
             max_plies=20,
         )
+
+
+def test_rule_facts_for_castling_capture_and_last_white_move() -> None:
+    facts, _ = parse_pgn_facts(
+        "1. e4 d5 2. exd5 Qxd5 3. Nf3 Nc6 4. Bc4 Qd8 5. O-O",
+        max_plies=30,
+    )
+    capture = facts[2]["played_move"]
+    castling = facts[-1]["played_move"]
+    assert capture.capture is True
+    assert capture.captured_piece == "black_pawn"
+    assert castling.castling is True
+    assert castling.san == "O-O"
+    assert facts[-1]["side"] == "white"
+    assert facts[-1]["move_number"] == 5
+    assert len(facts) == 9
+
+
+def test_rule_facts_for_promotion() -> None:
+    pgn = """[SetUp "1"]
+[FEN "7k/P7/8/8/8/8/8/7K w - - 0 1"]
+
+1. a8=Q+"""
+    facts, _ = parse_pgn_facts(pgn, max_plies=10)
+    promoted = facts[0]["played_move"]
+    assert promoted.promotion == "queen"
+    assert promoted.check is True
+    assert promoted.from_square == "a7"
+    assert promoted.to_square == "a8"
+
+
+def test_san_disambiguation_is_generated_by_chess_rules() -> None:
+    pgn = """[SetUp "1"]
+[FEN "7k/8/8/8/8/8/8/1N3N1K w - - 0 1"]
+
+1. Nbd2"""
+    facts, _ = parse_pgn_facts(pgn, max_plies=10)
+    move = facts[0]["played_move"]
+    assert move.san == "Nbd2"
+    assert move.uci == "b1d2"
+    assert move.piece == "white_knight"
+
+
+def test_custom_fen_black_to_move_preserves_full_move_number() -> None:
+    pgn = """[SetUp "1"]
+[FEN "8/8/8/8/8/8/4k3/6RK b - - 0 12"]
+
+12... Kf3"""
+    facts, fens = parse_pgn_facts(pgn, max_plies=10)
+    assert len(facts) == 1
+    assert facts[0]["side"] == "black"
+    assert facts[0]["move_number"] == 12
+    assert facts[0]["notation"] == "12...Kf3"
+    assert fens[0].endswith(" b - - 0 12")

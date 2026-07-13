@@ -8,7 +8,11 @@
 - 使用服务端 Stockfish 18 分析当前局面
 - 对整盘棋逐步计算走棋质量：最佳着、好棋、不精确、错误、败着或常规着
 - 正确按当前走棋一方计算损失，单独处理将杀分数
+- 通过 python-chess 确认每步棋子、起终点、SAN/UCI、吃子、将军、将杀、易位和升变事实
+- 按合法走法数、候选差距、强制变化、评价波动和参战棋子等指标区分简单、普通和复杂局面
+- 对 DeepSeek 输出校验格子、走法、棋子颜色和特殊走法；失败时纠错一次，再失败则使用保守模板
 - 在走法列表显示质量符号，并在棋盘高亮实战走法和最佳走法箭头
+- 走法记录按完整回合显示为“回合 / 白方 / 黑方”，每个单方走棋保持独立 ply 索引
 - 点击某一步时按需生成儿童化解释；相同解释在服务端和浏览器中缓存
 - DeepSeek 不可用时仍展示 Stockfish 等级、分数变化和推荐走法
 - 响应式“棋盘研究所”界面，支持桌面、平板和手机
@@ -23,6 +27,7 @@ app/                 FastAPI 后端
   engine.py          Stockfish 18 服务
   game_review.py     PGN 逐步分析编排
   quality.py         走棋质量阈值和判定
+  complexity.py      局面复杂度和解释长度配置
   ai_explainer.py    DeepSeek 解释服务
   config.py          环境配置
   models.py          请求和响应模型
@@ -95,7 +100,7 @@ Content-Type: application/json
 }
 ```
 
-响应包含 `analysis_id` 和逐步 Stockfish 事实。每步包括走棋前后评价、实战着、最佳着、主要变化、centipawn loss、质量等级以及将杀信息。
+响应包含 `analysis_id` 和逐步 Stockfish 事实。每步包括走棋前后评价、实战着、最佳着、实战后的对手第一选择、已验证 PV、centipawn loss、质量等级、复杂度以及将杀信息。所有具体走法都会由 python-chess 再次确认合法性并转换为权威 SAN。
 
 ### 按需解释某一步
 
@@ -109,7 +114,7 @@ Content-Type: application/json
 }
 ```
 
-重复请求同一个 `analysis_id + move_index` 会命中缓存，不再调用 DeepSeek。若 DeepSeek 暂不可用，接口返回 `warning`，前端继续显示 Stockfish 结果。
+重复请求同一个 `analysis_id + move_index` 会命中缓存，不再调用 DeepSeek。解释长度按 `simple` 40—80 字、`normal` 80—150 字、`complex` 150—280 字控制。模型输出第一次事实校验失败会纠错重试；第二次仍失败会返回由结构化事实组成的保守模板。若 DeepSeek 暂不可用，接口返回 `warning`，前端继续显示 Stockfish 结果。
 
 ## 主要配置
 
