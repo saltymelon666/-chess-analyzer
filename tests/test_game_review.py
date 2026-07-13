@@ -1,6 +1,7 @@
+import chess
 import pytest
 
-from app.game_review import analyze_pgn, parse_pgn_facts
+from app.game_review import _detect_tactical_motifs, analyze_pgn, parse_pgn_facts
 from app.models import EngineResult, MoveResult
 
 
@@ -125,3 +126,23 @@ def test_custom_fen_black_to_move_preserves_full_move_number() -> None:
     assert facts[0]["move_number"] == 12
     assert facts[0]["notation"] == "12...Kf3"
     assert fens[0].endswith(" b - - 0 12")
+
+
+def test_verified_fork_and_pin_are_detected_conservatively() -> None:
+    fork_pgn = """[SetUp "1"]
+[FEN "1r1q3k/8/8/4N3/8/8/8/7K w - - 0 1"]
+
+1. Nc6"""
+    fork_facts, _ = parse_pgn_facts(fork_pgn, max_plies=10)
+    fork_board = chess.Board(fork_facts[0]["before_fen"])
+    fork = _detect_tactical_motifs(fork_board, fork_facts[0]["played_move"])
+    assert any(tactic.name == "double_attack" for tactic in fork)
+
+    pin_pgn = """[SetUp "1"]
+[FEN "4k3/8/2n5/8/8/8/8/5B1K w - - 0 1"]
+
+1. Bb5"""
+    pin_facts, _ = parse_pgn_facts(pin_pgn, max_plies=10)
+    pin_board = chess.Board(pin_facts[-1]["before_fen"])
+    pin = _detect_tactical_motifs(pin_board, pin_facts[-1]["played_move"])
+    assert any(tactic.name == "pin" for tactic in pin)

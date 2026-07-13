@@ -2,7 +2,13 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.ai_explainer import DeepSeekExplainer, conservative_move_explanation, validate_move_explanation
+from app.ai_explainer import (
+    DeepSeekExplainer,
+    conservative_move_details,
+    conservative_move_explanation,
+    parse_move_explanation_details,
+    validate_move_explanation,
+)
 from app.models import ComplexityFactors, EvaluationSnapshot, MoveFacts, MoveReview
 
 
@@ -91,21 +97,25 @@ def test_guard_rejects_wrong_piece_color_and_accepts_negated_event() -> None:
 
     correct_negative = conservative_move_explanation(move).replace("被评为好棋", "不是吃子，被评为好棋")
     assert not any("吃子" in error for error in validate_move_explanation(correct_negative, move))
+    mate_notation = conservative_move_explanation(move).replace("+0.20", "白方M1")
+    assert not any("棋盘范围外" in error for error in validate_move_explanation(mate_notation, move))
 
 
 @pytest.mark.asyncio
 async def test_first_validation_failure_retries_once() -> None:
     move = review()
     valid = conservative_move_explanation(move)
+    valid_json = conservative_move_details(move).model_dump_json(by_alias=True)
     explainer = DeepSeekExplainer(
         api_key="test",
         base_url="https://example.invalid",
         model="test",
         timeout_seconds=1,
     )
-    explainer._chat = AsyncMock(side_effect=["白方应该走Qh5。记住：进攻。", valid])
+    explainer._chat = AsyncMock(side_effect=["白方应该走Qh5。记住：进攻。", valid_json])
     result = await explainer.explain_move(move)
-    assert result == valid
+    assert result.explanation == valid
+    assert result.details.complexity == "simple"
     assert explainer._chat.await_count == 2
 
 
@@ -120,8 +130,8 @@ async def test_second_validation_failure_uses_conservative_template() -> None:
     )
     explainer._chat = AsyncMock(return_value="白方应该走Qh5。记住：进攻。")
     result = await explainer.explain_move(move)
-    assert "Qh5" not in result
-    assert validate_move_explanation(result, move) == []
+    assert "Qh5" not in result.explanation
+    assert validate_move_explanation(result.explanation, move) == []
     assert explainer._chat.await_count == 2
 
 
@@ -130,8 +140,39 @@ def test_simple_and_complex_fallback_lengths_are_distinct() -> None:
     complex_text = conservative_move_explanation(review("complex"))
     simple_length = len("".join(simple.split()))
     complex_length = len("".join(complex_text.split()))
-    assert 40 <= simple_length <= 80
-    assert 150 <= complex_length <= 280
-    assert complex_length - simple_length >= 70
+    assert 50 <= simple_length <= 100
+    assert 250 <= complex_length <= 500
+    assert complex_length - simple_length >= 150
     assert validate_move_explanation(simple, review("simple")) == []
     assert validate_move_explanation(complex_text, review("complex")) == []
+
+
+def test_complex_json_requires_all_sections_and_two_to_four_steps() -> None:
+    move = review("complex")
+    details = conservative_move_details(move)
+    parsed, errors = parse_move_explanation_details(details.model_dump_json(by_alias=True), move)
+    assert errors == []
+    assert parsed is not None
+    assert 2 <= len(parsed.variation_explanation) <= 4
+
+    broken = details.model_copy(update={"opponent_threat": "", "variation_explanation": ["只有一步"]})
+    _, errors = parse_move_explanation_details(broken.model_dump_json(by_alias=True), move)
+    assert any("opponent_threat" in error for error in errors)
+    assert any("2—4" in error for error in errors)
+
+
+@pytest.mark.asyncio
+async def test_complex_request_uses_large_json_token_budget() -> None:
+    move = review("complex")
+    valid_json = conservative_move_details(move).model_dump_json(by_alias=True)
+    explainer = DeepSeekExplainer(
+        api_key="test",
+        base_url="https://example.invalid",
+        model="test",
+        timeout_seconds=1,
+    )
+    explainer._chat = AsyncMock(return_value=valid_json)
+    result = await explainer.explain_move(move)
+    assert result.details.complexity == "complex"
+    assert explainer._chat.await_args.kwargs["max_tokens"] == 1100
+    assert explainer._chat.await_args.kwargs["json_mode"] is True

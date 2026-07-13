@@ -7,7 +7,15 @@ import chess.pgn
 
 from .complexity import classify_complexity
 from .engine import StockfishService
-from .models import EngineResult, EvaluationSnapshot, GameReviewResponse, MoveFacts, MoveReview, MoveResult
+from .models import (
+    EngineResult,
+    EvaluationSnapshot,
+    GameReviewResponse,
+    MoveFacts,
+    MoveReview,
+    MoveResult,
+    VerifiedTactic,
+)
 from .quality import QUALITY_THRESHOLDS, classify_move, mover_value
 
 
@@ -19,6 +27,7 @@ PIECE_NAMES_ZH = {
     chess.QUEEN: "后",
     chess.KING: "王",
 }
+PIECE_VALUES = {"pawn": 1, "knight": 3, "bishop": 3, "rook": 5, "queen": 9, "king": 100}
 
 
 async def analyze_pgn(
@@ -56,6 +65,19 @@ async def analyze_pgn(
         opponent_reply = _verified_best_move(after_board, opponent_result)
         opponent_pv_facts = _verified_principal_variation(after_board, opponent_result, opponent_reply)
         opponent_variation = [fact.san for fact in opponent_pv_facts]
+        verified_tactics = _detect_tactical_motifs(before_board, played)
+        if opponent_reply:
+            verified_tactics.extend(_detect_tactical_motifs(after_board, opponent_reply))
+        direct_piece_loss = bool(
+            opponent_reply
+            and opponent_reply.capture
+            and _piece_value(opponent_reply.captured_piece) >= 3
+        )
+        multi_step_tactic = max(
+            _forcing_prefix_length(pv_facts),
+            _forcing_prefix_length(opponent_pv_facts),
+        ) >= 3
+        opponent_forcing_options = _forcing_candidate_count(after_board, after_result)
 
         quality = classify_move(
             before=before,
@@ -77,6 +99,10 @@ async def analyze_pgn(
             mate_involved=mate_involved,
             only_legal_move=bool(facts["only_legal_move"]),
             engaged_piece_count=int(facts["engaged_piece_count"]),
+            direct_piece_loss=direct_piece_loss,
+            tactical_motif_count=len(verified_tactics),
+            multi_step_tactic=multi_step_tactic,
+            opponent_forcing_options=opponent_forcing_options,
         )
 
         allowed_facts = [played, *pv_facts, *opponent_pv_facts]
@@ -122,14 +148,20 @@ async def analyze_pgn(
                     principal_variation=principal_variation,
                     opponent_reply=opponent_reply,
                     opponent_variation=opponent_variation,
+                    verified_tactics=verified_tactics,
+                    direct_piece_loss=direct_piece_loss,
                 ),
                 allowed_squares=sorted(
-                    {square for fact in allowed_facts for square in (fact.from_square, fact.to_square)}
+                    {
+                        *[square for fact in allowed_facts for square in (fact.from_square, fact.to_square)],
+                        *[square for tactic in verified_tactics for square in tactic.squares],
+                    }
                 ),
                 allowed_moves=sorted(
                     {value for fact in allowed_facts for value in (fact.san, fact.uci)}
                 ),
                 pieces_before=dict(facts["pieces_before"]),
+                verified_tactics=verified_tactics,
             )
         )
 
@@ -273,6 +305,8 @@ def _verified_fact_lines(
     principal_variation: list[str],
     opponent_reply: MoveFacts | None,
     opponent_variation: list[str],
+    verified_tactics: list[VerifiedTactic],
+    direct_piece_loss: bool,
 ) -> list[str]:
     side_zh = "白方" if side == "white" else "黑方"
     lines = [
@@ -308,6 +342,11 @@ def _verified_fact_lines(
         )
     if opponent_variation:
         lines.append("实战后的已验证变化：" + " ".join(opponent_variation) + "。")
+    if direct_piece_loss and opponent_reply and opponent_reply.captured_piece:
+        lines.append(
+            f"实战后的引擎第一选择会直接吃掉{_piece_zh(opponent_reply.captured_piece)}，这是已验证的直接丢子风险。"
+        )
+    lines.extend("已验证战术：" + tactic.description for tactic in verified_tactics)
     return lines
 
 
@@ -355,3 +394,132 @@ def _engaged_piece_count(board: chess.Board) -> int:
                 engaged.add(square)
                 engaged.add(target)
     return len(engaged)
+
+
+def _piece_value(piece_id: str | None) -> int:
+    if not piece_id or "_" not in piece_id:
+        return 0
+    return PIECE_VALUES.get(piece_id.split("_", 1)[1], 0)
+
+
+def _forcing_prefix_length(facts: list[MoveFacts]) -> int:
+    count = 0
+    for fact in facts:
+        if not (fact.capture or fact.check or fact.checkmate or fact.promotion is not None):
+            break
+        count += 1
+    return count
+
+
+def _forcing_candidate_count(board: chess.Board, result: EngineResult) -> int:
+    count = 0
+    for candidate in result.top_moves:
+        try:
+            fact = _verified_best_move(board, candidate)
+        except RuntimeError:
+            continue
+        if fact and (fact.capture or fact.check or fact.checkmate or fact.promotion is not None):
+            count += 1
+    return count
+
+
+def _detect_tactical_motifs(board: chess.Board, fact: MoveFacts) -> list[VerifiedTactic]:
+    try:
+        move = chess.Move.from_uci(fact.uci)
+    except ValueError:
+        return []
+    if move not in board.legal_moves:
+        return []
+
+    actor = board.turn
+    enemy = not actor
+    before_attacks = set(board.attacks(move.from_square))
+    next_board = board.copy(stack=False)
+    next_board.push(move)
+    moved_piece = next_board.piece_at(move.to_square)
+    if moved_piece is None:
+        return []
+
+    motifs: list[VerifiedTactic] = []
+    valuable_targets = [
+        square
+        for square in next_board.attacks(move.to_square)
+        if (target := next_board.piece_at(square)) is not None
+        and target.color == enemy
+        and target.piece_type in {chess.KNIGHT, chess.BISHOP, chess.ROOK, chess.QUEEN, chess.KING}
+    ]
+    newly_attacked = [square for square in valuable_targets if square not in before_attacks]
+    if len(valuable_targets) >= 2 and newly_attacked:
+        target_names = "、".join(
+            f"{_piece_zh(_piece_id(next_board.piece_at(square)))}（{chess.square_name(square)}）"
+            for square in valuable_targets[:3]
+        )
+        motifs.append(
+            VerifiedTactic(
+                name="double_attack",
+                side="white" if actor == chess.WHITE else "black",
+                move_uci=fact.uci,
+                description=f"{fact.san} 后，{_piece_zh(fact.piece)}同时攻击 {target_names}。",
+                squares=[fact.to_square, *[chess.square_name(square) for square in valuable_targets[:3]]],
+            )
+        )
+
+    newly_pinned = [
+        square
+        for square, piece in next_board.piece_map().items()
+        if piece.color == enemy
+        and piece.piece_type != chess.KING
+        and next_board.is_pinned(enemy, square)
+        and not board.is_pinned(enemy, square)
+    ]
+    for square in newly_pinned[:2]:
+        square_name = chess.square_name(square)
+        motifs.append(
+            VerifiedTactic(
+                name="pin",
+                side="white" if actor == chess.WHITE else "black",
+                move_uci=fact.uci,
+                description=f"{fact.san} 后，{_piece_zh(_piece_id(next_board.piece_at(square)))}在 {square_name} 被钉在王前。",
+                squares=[fact.to_square, square_name],
+            )
+        )
+
+    skewer = _king_skewer_target(next_board, move.to_square, enemy)
+    if skewer is not None:
+        king_square, target_square = skewer
+        motifs.append(
+            VerifiedTactic(
+                name="skewer",
+                side="white" if actor == chess.WHITE else "black",
+                move_uci=fact.uci,
+                description=(
+                    f"{fact.san} 形成王在前、{_piece_zh(_piece_id(next_board.piece_at(target_square)))}在后的串击。"
+                ),
+                squares=[fact.to_square, chess.square_name(king_square), chess.square_name(target_square)],
+            )
+        )
+    return motifs
+
+
+def _king_skewer_target(board: chess.Board, attacker_square: int, enemy: chess.Color) -> tuple[int, int] | None:
+    attacker = board.piece_at(attacker_square)
+    if attacker is None or attacker.piece_type not in {chess.BISHOP, chess.ROOK, chess.QUEEN}:
+        return None
+    king_square = board.king(enemy)
+    if king_square is None or king_square not in board.attacks(attacker_square):
+        return None
+    attacker_file, attacker_rank = chess.square_file(attacker_square), chess.square_rank(attacker_square)
+    king_file, king_rank = chess.square_file(king_square), chess.square_rank(king_square)
+    file_step = (king_file > attacker_file) - (king_file < attacker_file)
+    rank_step = (king_rank > attacker_rank) - (king_rank < attacker_rank)
+    file_index, rank_index = king_file + file_step, king_rank + rank_step
+    while 0 <= file_index < 8 and 0 <= rank_index < 8:
+        square = chess.square(file_index, rank_index)
+        piece = board.piece_at(square)
+        if piece is not None:
+            if piece.color == enemy and piece.piece_type in {chess.KNIGHT, chess.BISHOP, chess.ROOK, chess.QUEEN}:
+                return king_square, square
+            return None
+        file_index += file_step
+        rank_index += rank_step
+    return None

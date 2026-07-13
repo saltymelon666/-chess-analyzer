@@ -17,9 +17,9 @@ COMPLEXITY_THRESHOLDS = {
 }
 
 EXPLANATION_PROFILES = {
-    "simple": {"min_chars": 40, "max_chars": 80, "max_tokens": 180},
-    "normal": {"min_chars": 80, "max_chars": 150, "max_tokens": 300},
-    "complex": {"min_chars": 150, "max_chars": 280, "max_tokens": 520},
+    "simple": {"min_chars": 50, "max_chars": 100, "max_tokens": 300},
+    "normal": {"min_chars": 120, "max_chars": 220, "max_tokens": 550},
+    "complex": {"min_chars": 250, "max_chars": 500, "max_tokens": 1100},
 }
 
 
@@ -40,6 +40,10 @@ def classify_complexity(
     mate_involved: bool,
     only_legal_move: bool,
     engaged_piece_count: int,
+    direct_piece_loss: bool = False,
+    tactical_motif_count: int = 0,
+    multi_step_tactic: bool = False,
+    opponent_forcing_options: int = 0,
 ) -> ComplexityResult:
     candidate_gap = candidate_gap_cp(before_result, side)
     only_reasonable = only_legal_move or (
@@ -82,12 +86,27 @@ def classify_complexity(
         score += 1
     if legal_move_count >= COMPLEXITY_THRESHOLDS["many_legal_moves"]:
         score += 1
+    if direct_piece_loss:
+        score += 2
+    if tactical_motif_count >= 2:
+        score += 3
+    elif tactical_motif_count == 1:
+        score += 2
+    if multi_step_tactic:
+        score += 2
+    multiple_threats = opponent_forcing_options >= 2
+    if multiple_threats:
+        score += 2
 
     simple = (
         not mate_involved
         and not tactical_event
         and (evaluation_swing_cp or 0) <= 40
         and engaged_piece_count < 4
+        and not direct_piece_loss
+        and tactical_motif_count == 0
+        and not multi_step_tactic
+        and not multiple_threats
         and score <= 1
     )
     if score >= COMPLEXITY_THRESHOLDS["complex_score"]:
@@ -107,6 +126,11 @@ def classify_complexity(
             evaluation_swing_cp=evaluation_swing_cp,
             forcing_line_plies=forcing_plies,
             engaged_piece_count=engaged_piece_count,
+            direct_piece_loss=direct_piece_loss,
+            tactical_motif_count=tactical_motif_count,
+            multi_step_tactic=multi_step_tactic,
+            opponent_forcing_options=opponent_forcing_options,
+            multiple_threats=multiple_threats,
         ),
     )
 

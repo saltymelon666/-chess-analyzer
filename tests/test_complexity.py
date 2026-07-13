@@ -1,4 +1,4 @@
-from app.complexity import classify_complexity
+from app.complexity import EXPLANATION_PROFILES, classify_complexity
 from app.models import EngineResult, MoveFacts, MoveResult
 
 
@@ -68,3 +68,29 @@ def test_forcing_mating_position_is_complex() -> None:
     assert result.level == "complex"
     assert result.factors.only_reasonable_move is True
     assert result.factors.forcing_line_plies >= 3
+
+
+def test_direct_piece_loss_and_multiple_threats_raise_complexity() -> None:
+    result = classify_complexity(
+        before_result=engine_result(20),
+        side="white",
+        played=move_fact(),
+        pv_facts=[move_fact()],
+        legal_move_count=18,
+        evaluation_swing_cp=120,
+        mate_involved=False,
+        only_legal_move=False,
+        engaged_piece_count=4,
+        direct_piece_loss=True,
+        tactical_motif_count=1,
+        opponent_forcing_options=2,
+    )
+    assert result.level == "complex"
+    assert result.factors.direct_piece_loss is True
+    assert result.factors.multiple_threats is True
+
+
+def test_explanation_budgets_scale_with_complexity() -> None:
+    assert EXPLANATION_PROFILES["simple"] == {"min_chars": 50, "max_chars": 100, "max_tokens": 300}
+    assert EXPLANATION_PROFILES["normal"] == {"min_chars": 120, "max_chars": 220, "max_tokens": 550}
+    assert EXPLANATION_PROFILES["complex"] == {"min_chars": 250, "max_chars": 500, "max_tokens": 1100}

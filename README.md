@@ -114,7 +114,7 @@ Content-Type: application/json
 }
 ```
 
-重复请求同一个 `analysis_id + move_index` 会命中缓存，不再调用 DeepSeek。解释长度按 `simple` 40—80 字、`normal` 80—150 字、`complex` 150—280 字控制。模型输出第一次事实校验失败会纠错重试；第二次仍失败会返回由结构化事实组成的保守模板。若 DeepSeek 暂不可用，接口返回 `warning`，前端继续显示 Stockfish 结果。
+重复请求同一个 `analysis_id + move_index` 会命中缓存，不再调用 DeepSeek。解释长度按 `simple` 50—100 字、`normal` 120—220 字、`complex` 250—500 字控制，对应 Token 上限分别为 300、550、1100。复杂解释以结构化 JSON 返回总体判断、当前局面、对手威胁、实战想法、问题、推荐着、2—4 步已验证变化和儿童提示；前端按小节展示。模型输出第一次事实或结构校验失败会纠错重试；第二次仍失败会返回由结构化事实组成的保守模板。若 DeepSeek 暂不可用，接口返回 `warning`，前端继续显示 Stockfish 结果。
 
 ## 主要配置
 

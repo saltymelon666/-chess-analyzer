@@ -16,6 +16,7 @@ from .game_review import analyze_pgn
 from .models import (
     GameReviewRequest,
     GameReviewResponse,
+    GeneratedMoveExplanation,
     HealthResponse,
     MoveExplanationRequest,
     MoveExplanationResponse,
@@ -43,13 +44,13 @@ explainer = DeepSeekExplainer(
     timeout_seconds=settings.deepseek_timeout_seconds,
 )
 game_cache: OrderedDict[str, list[MoveReview]] = OrderedDict()
-explanation_cache: dict[tuple[str, int], str] = {}
-explanation_tasks: dict[tuple[str, int], asyncio.Task[str]] = {}
+explanation_cache: dict[tuple[str, int], GeneratedMoveExplanation | str] = {}
+explanation_tasks: dict[tuple[str, int], asyncio.Task[GeneratedMoveExplanation | str]] = {}
 MAX_CACHED_GAMES = 20
 
 app = FastAPI(
     title="AI Chess Review API",
-    version="0.2.0",
+    version="0.3.0",
     description="Server-side Stockfish 18 analysis with optional DeepSeek explanation.",
 )
 app.add_middleware(
@@ -141,8 +142,10 @@ async def move_explanation(request: MoveExplanationRequest) -> MoveExplanationRe
 
     cache_key = (request.analysis_id, request.move_index)
     if cache_key in explanation_cache:
+        cached_result = explanation_cache[cache_key]
         return MoveExplanationResponse(
-            explanation=explanation_cache[cache_key],
+            explanation=cached_result if isinstance(cached_result, str) else cached_result.explanation,
+            details=None if isinstance(cached_result, str) else cached_result.details,
             cached=True,
         )
 
@@ -154,9 +157,13 @@ async def move_explanation(request: MoveExplanationRequest) -> MoveExplanationRe
             task = asyncio.create_task(explainer.explain_move(move))
             explanation_tasks[cache_key] = task
             created_task = True
-        explanation = await asyncio.shield(task)
-        explanation_cache[cache_key] = explanation
-        return MoveExplanationResponse(explanation=explanation, cached=not created_task)
+        generated = await asyncio.shield(task)
+        explanation_cache[cache_key] = generated
+        return MoveExplanationResponse(
+            explanation=generated if isinstance(generated, str) else generated.explanation,
+            details=None if isinstance(generated, str) else generated.details,
+            cached=not created_task,
+        )
     except (httpx.HTTPError, RuntimeError) as exc:
         logger.warning("Move explanation unavailable: %s", exc)
         return MoveExplanationResponse(

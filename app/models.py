@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ReviewRequest(BaseModel):
@@ -76,6 +76,19 @@ class ComplexityFactors(BaseModel):
     evaluation_swing_cp: int | None = None
     forcing_line_plies: int
     engaged_piece_count: int
+    direct_piece_loss: bool = False
+    tactical_motif_count: int = 0
+    multi_step_tactic: bool = False
+    opponent_forcing_options: int = 0
+    multiple_threats: bool = False
+
+
+class VerifiedTactic(BaseModel):
+    name: str
+    side: str
+    move_uci: str
+    description: str
+    squares: list[str] = Field(default_factory=list)
 
 
 class MoveReview(BaseModel):
@@ -113,6 +126,7 @@ class MoveReview(BaseModel):
     allowed_squares: list[str] = Field(default_factory=list)
     allowed_moves: list[str] = Field(default_factory=list)
     pieces_before: dict[str, str] = Field(default_factory=dict)
+    verified_tactics: list[VerifiedTactic] = Field(default_factory=list)
 
 
 class GameReviewResponse(BaseModel):
@@ -127,7 +141,27 @@ class MoveExplanationRequest(BaseModel):
     move_index: int = Field(ge=1)
 
 
+class MoveExplanationDetails(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    complexity: str
+    conclusion: str
+    current_situation: str = Field(alias="currentSituation")
+    opponent_threat: str = Field(alias="opponentThreat")
+    played_move_idea: str = Field(alias="playedMoveIdea")
+    problem: str
+    better_move: str = Field(alias="betterMove")
+    variation_explanation: list[str] = Field(alias="variationExplanation", default_factory=list)
+    child_tip: str = Field(alias="childTip")
+
+
+class GeneratedMoveExplanation(BaseModel):
+    explanation: str
+    details: MoveExplanationDetails
+
+
 class MoveExplanationResponse(BaseModel):
     explanation: str | None = None
+    details: MoveExplanationDetails | None = None
     warning: str | None = None
     cached: bool = False

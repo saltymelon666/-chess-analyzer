@@ -4,7 +4,16 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import api
-from app.models import ComplexityFactors, EngineResult, EvaluationSnapshot, MoveFacts, MoveResult, MoveReview
+from app.models import (
+    ComplexityFactors,
+    EngineResult,
+    EvaluationSnapshot,
+    GeneratedMoveExplanation,
+    MoveExplanationDetails,
+    MoveFacts,
+    MoveResult,
+    MoveReview,
+)
 
 
 class FakeStockfish:
@@ -41,9 +50,23 @@ class FakeExplainer:
     async def explain(self, fen: str, result: EngineResult) -> str:
         return "局面接近均势，白方可以争夺中心。"
 
-    async def explain_move(self, move: MoveReview) -> str:
+    async def explain_move(self, move: MoveReview) -> GeneratedMoveExplanation:
         self.move_calls += 1
-        return "这步让局面稍微变难了。\n\n记住：先看看对手的回应。"
+        details = MoveExplanationDetails(
+            complexity="simple",
+            conclusion="这步让局面稍微变难了。",
+            currentSituation="",
+            opponentThreat="",
+            playedMoveIdea="",
+            problem="引擎评价发生了一点变化。",
+            betterMove="实战走法接近第一选择。",
+            variationExplanation=[],
+            childTip="记住：先看看对手的回应。",
+        )
+        return GeneratedMoveExplanation(
+            explanation="这步让局面稍微变难了。\n\n记住：先看看对手的回应。",
+            details=details,
+        )
 
 
 def sample_move_review() -> MoveReview:
@@ -146,6 +169,8 @@ def test_move_explanation_is_cached(monkeypatch) -> None:
     )
     assert first.status_code == 200
     assert first.json()["cached"] is False
+    assert first.json()["details"]["complexity"] == "simple"
+    assert first.json()["details"]["childTip"].startswith("记住：")
     assert second.json()["cached"] is True
     assert fake_explainer.move_calls == 1
 

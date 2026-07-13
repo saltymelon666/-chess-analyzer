@@ -4,9 +4,10 @@ import json
 import re
 
 import httpx
+from pydantic import ValidationError
 
 from .complexity import EXPLANATION_PROFILES
-from .models import EngineResult, MoveReview
+from .models import EngineResult, GeneratedMoveExplanation, MoveExplanationDetails, MoveReview
 
 
 class DeepSeekExplainer:
@@ -82,7 +83,7 @@ class DeepSeekExplainer:
             raise RuntimeError("DeepSeek 返回了空内容")
         return content
 
-    async def explain_move(self, move: MoveReview) -> str:
+    async def explain_move(self, move: MoveReview) -> GeneratedMoveExplanation:
         if not self.configured:
             raise RuntimeError("服务端尚未配置 DeepSeek API Key")
 
@@ -98,10 +99,13 @@ class DeepSeekExplainer:
             prompt=prompt,
             max_tokens=int(profile["max_tokens"]),
             temperature=0.2,
+            json_mode=True,
         )
-        errors = validate_move_explanation(content, move)
+        details, parse_errors = parse_move_explanation_details(content, move)
+        rendered = render_move_explanation(details) if details else ""
+        errors = [*parse_errors, *validate_move_explanation(rendered, move)]
         if not errors:
-            return content
+            return GeneratedMoveExplanation(explanation=rendered, details=details)
 
         correction = (
             prompt
@@ -114,10 +118,17 @@ class DeepSeekExplainer:
             prompt=correction,
             max_tokens=int(profile["max_tokens"]),
             temperature=0.1,
+            json_mode=True,
         )
-        if not validate_move_explanation(corrected, move):
-            return corrected
-        return conservative_move_explanation(move)
+        corrected_details, parse_errors = parse_move_explanation_details(corrected, move)
+        corrected_rendered = render_move_explanation(corrected_details) if corrected_details else ""
+        if not parse_errors and not validate_move_explanation(corrected_rendered, move):
+            return GeneratedMoveExplanation(explanation=corrected_rendered, details=corrected_details)
+        fallback_details = conservative_move_details(move)
+        return GeneratedMoveExplanation(
+            explanation=render_move_explanation(fallback_details),
+            details=fallback_details,
+        )
 
     @staticmethod
     def _move_prompt(move: MoveReview, profile: dict[str, int]) -> str:
@@ -143,16 +154,25 @@ class DeepSeekExplainer:
             "complexity": move.complexity,
             "complexityFactors": move.complexity_factors.model_dump(),
             "verifiedFacts": move.verified_facts,
+            "verifiedTactics": [tactic.model_dump() for tactic in move.verified_tactics],
             "allowedSquares": move.allowed_squares,
             "allowedMoves": move.allowed_moves,
             "piecesBefore": move.pieces_before,
         }
         format_rule = {
-            "simple": "用两小段：说明实战走法和等级；给一句记忆提示。",
-            "normal": "用三小段：说明实战变化；比较合法推荐；给一句记忆提示。",
+            "simple": (
+                "conclusion、problem、betterMove、childTip 必须有内容；其他字段可以是空字符串或空数组。"
+                "直接说明好坏，不展开长变化。"
+            ),
+            "normal": (
+                "currentSituation、opponentThreat、problem、betterMove 必须有内容；"
+                "variationExplanation 可包含 0—2 个已验证步骤。"
+            ),
             "complex": (
-                "用四小段：说明实战变化；只根据 opponentReplyAfterPlayedMove 说明对手下一步的引擎选择；"
-                "比较最佳走法并原样概括主要变化；给一句记忆提示。"
+                "所有字段必须有内容。currentSituation 要说明为什么难；opponentThreat 只能依据 opponentReplyAfterPlayedMove、"
+                "opponentVariationFacts 和 verifiedTactics；playedMoveIdea 要说明实战着看起来合理的已验证表面作用；"
+                "problem 要分步骤说明忽略的事实；betterMove 要说明推荐着首先处理什么；"
+                "variationExplanation 必须按已验证 PV 顺序写 2—4 项，每项只解释对应一步。"
             ),
         }[move.complexity]
         return f"""请把下面已经由 python-chess 和 Stockfish 确认的数据，改写成适合 4—12 岁孩子的中文。
@@ -160,10 +180,23 @@ class DeepSeekExplainer:
 结构化事实：
 {json.dumps(payload, ensure_ascii=False, indent=2)}
 
-本局面复杂度是 {move.complexity}。正文必须为 {profile['min_chars']}—{profile['max_chars']} 个非空白字符。
-{format_rule}最后一句必须以“记住：”开头。
+本局面复杂度是 {move.complexity}。所有字段值合计必须为 {profile['min_chars']}—{profile['max_chars']} 个非空白字符。
+{format_rule}childTip 必须以“记住：”开头。
 只有 verifiedFacts 可以作为具体棋理原因。PV 只能按原样介绍为“可能的主要变化”，不能把它扩写成未提供的威胁。
-不得输出 allowedSquares 之外的格子，不得输出 allowedMoves 之外的具体走法。不要添加标题，不要责怪孩子。"""
+不得输出 allowedSquares 之外的格子，不得输出 allowedMoves 之外的具体走法。不要责怪孩子。
+
+只返回一个 JSON 对象，不要使用 Markdown，不要添加 JSON 之外的文字。字段必须严格为：
+{{
+  "complexity": "{move.complexity}",
+  "conclusion": "总体评价",
+  "currentSituation": "核心局面与难点",
+  "opponentThreat": "经过验证的对手回复或保守说明",
+  "playedMoveIdea": "实战走法的表面作用",
+  "problem": "实战走法的问题",
+  "betterMove": "Stockfish推荐及作用",
+  "variationExplanation": ["按PV顺序的第一步", "第二步"],
+  "childTip": "记住：儿童提示"
+}}"""
 
     async def _chat(
         self,
@@ -172,6 +205,7 @@ class DeepSeekExplainer:
         prompt: str,
         max_tokens: int,
         temperature: float,
+        json_mode: bool = False,
     ) -> str:
         async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
             response = await client.post(
@@ -188,6 +222,7 @@ class DeepSeekExplainer:
                     ],
                     "max_tokens": max_tokens,
                     "temperature": temperature,
+                    **({"response_format": {"type": "json_object"}} if json_mode else {}),
                 },
             )
             response.raise_for_status()
@@ -204,6 +239,64 @@ class DeepSeekExplainer:
         return f"{(centipawn or 0) / 100:+.2f}"
 
 
+def parse_move_explanation_details(
+    content: str,
+    move: MoveReview,
+) -> tuple[MoveExplanationDetails | None, list[str]]:
+    cleaned = content.strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", cleaned, flags=re.IGNORECASE)
+    try:
+        payload = json.loads(cleaned)
+        details = MoveExplanationDetails.model_validate(payload)
+    except (json.JSONDecodeError, ValidationError, TypeError) as exc:
+        return None, [f"返回内容不是规定的 JSON：{exc}"]
+
+    errors: list[str] = []
+    if details.complexity != move.complexity:
+        errors.append(f"complexity 应为 {move.complexity}")
+    required = {
+        "simple": ["conclusion", "problem", "better_move", "child_tip"],
+        "normal": ["conclusion", "current_situation", "opponent_threat", "problem", "better_move", "child_tip"],
+        "complex": [
+            "conclusion",
+            "current_situation",
+            "opponent_threat",
+            "played_move_idea",
+            "problem",
+            "better_move",
+            "child_tip",
+        ],
+    }[move.complexity]
+    for field in required:
+        if not getattr(details, field).strip():
+            errors.append(f"{field} 不能为空")
+    variation_count = len([item for item in details.variation_explanation if item.strip()])
+    if move.complexity == "simple" and variation_count > 1:
+        errors.append("simple 不应展开多步变化")
+    if move.complexity == "normal" and variation_count > 2:
+        errors.append("normal 最多解释 2 个半回合")
+    if move.complexity == "complex" and not 2 <= variation_count <= 4:
+        errors.append("complex 必须逐步解释 2—4 个半回合")
+    if not details.child_tip.strip().startswith("记住："):
+        errors.append("childTip 必须以“记住：”开头")
+    return details, errors
+
+
+def render_move_explanation(details: MoveExplanationDetails) -> str:
+    parts = [
+        details.conclusion,
+        details.current_situation,
+        details.opponent_threat,
+        details.played_move_idea,
+        details.problem,
+        details.better_move,
+        *details.variation_explanation,
+        details.child_tip,
+    ]
+    return "\n\n".join(part.strip() for part in parts if part and part.strip())
+
+
 def validate_move_explanation(content: str, move: MoveReview) -> list[str]:
     errors: list[str] = []
     compact_length = len(re.sub(r"\s+", "", content))
@@ -216,7 +309,9 @@ def validate_move_explanation(content: str, move: MoveReview) -> list[str]:
     allowed_squares = set(move.allowed_squares)
     square_like = set(re.findall(r"(?<![a-z0-9])([a-z][0-9])(?![a-z0-9])", content, re.IGNORECASE))
     out_of_range = sorted(
-        value for value in square_like if not re.fullmatch(r"[a-h][1-8]", value, re.IGNORECASE)
+        value
+        for value in square_like
+        if value.lower()[0] != "m" and not re.fullmatch(r"[a-h][1-8]", value, re.IGNORECASE)
     )
     if out_of_range:
         errors.append("出现棋盘范围外的格子：" + "、".join(out_of_range))
@@ -312,58 +407,123 @@ def validate_move_explanation(content: str, move: MoveReview) -> list[str]:
     return errors
 
 
-def conservative_move_explanation(move: MoveReview) -> str:
+def conservative_move_details(move: MoveReview) -> MoveExplanationDetails:
     side = "白方" if move.side == "white" else "黑方"
     played = move.played_move
     best = move.best_move
-    event = ""
+    event = "完成了一步普通走棋"
     if played.capture:
-        event = "，棋规确认它完成了吃子"
+        event = "完成了吃子"
     if played.castling:
-        event = "，棋规确认它完成了王车易位"
+        event = "完成了王车易位"
     if played.promotion:
-        event = "，棋规确认它完成了升变"
+        event = "完成了升变"
     if played.checkmate:
-        event = "，棋规确认它形成将杀"
+        event = "形成了将杀"
     elif played.check:
-        event = "，棋规确认它形成将军"
-    opening = f"第{move.move_number}回合，{side}走了{played.san}（{played.from_square}到{played.to_square}）{event}，被评为{move.quality_label}。"
-    tip = "记住：先确认棋盘事实，再比较实战走法和引擎推荐。"
-    if move.complexity == "simple":
-        return _fit_fallback(opening + tip, move)
-
-    best_text = (
-        f"Stockfish更推荐{best.san}（{best.from_square}到{best.to_square}）。"
+        event = "形成了将军"
+    conclusion = f"第{move.move_number}回合，{side}走了{played.san}，这步被评为{move.quality_label}。"
+    problem = f"引擎评价从{move.before.evaluation}变为{move.after.evaluation}。"
+    better = (
+        f"Stockfish更推荐{best.san}。"
         if best and best.uci != played.uci
         else "实战走法已经接近Stockfish的第一选择。"
     )
-    score_text = f"从引擎分数看，评价由{move.before.evaluation}变为{move.after.evaluation}。"
-    if move.complexity == "normal":
-        return _fit_fallback(opening + score_text + best_text + tip, move)
+    child_tip = "记住：先看对手最有力的回应，再决定自己的走法。"
+    if move.complexity == "simple":
+        return MoveExplanationDetails(
+            complexity="simple",
+            conclusion=conclusion,
+            currentSituation="",
+            opponentThreat="",
+            playedMoveIdea="",
+            problem=problem,
+            betterMove=better,
+            variationExplanation=[],
+            childTip=child_tip,
+        )
 
-    pv_text = (
-        "已验证的主要变化是" + "、".join(move.principal_variation[:8]) + "。"
-        if move.principal_variation
-        else "Stockfish没有返回足够完整的主要变化，因此不猜测具体战术。"
-    )
-    detail = (
+    current = (
         f"这个局面有{move.complexity_factors.legal_move_count}个合法走法，"
-        f"主要变化长度为{move.complexity_factors.pv_length}个半回合。"
+        f"实战着把{_piece_label(played.piece)}从{played.from_square}走到{played.to_square}，{event}。"
     )
-    return _fit_fallback(opening + score_text + best_text + detail + pv_text + "没有经过棋规确认的威胁不在这里展开。" + tip, move)
+    opponent = (
+        f"实战走完后，对手的引擎第一选择是{move.opponent_reply.san}"
+        f"（{move.opponent_reply.from_square}到{move.opponent_reply.to_square}）。"
+        if move.opponent_reply
+        else "实战走完后没有完整的对手变化，因此这里不猜测具体威胁。"
+    )
+    played_idea = f"这步实际完成的事情是把{_piece_label(played.piece)}放到{played.to_square}；没有经过验证的意图不作猜测。"
+    better_detail = (
+        f"Stockfish更推荐{best.san}（{best.from_square}到{best.to_square}），这是走棋前局面中的合法第一选择。"
+        if best and best.uci != played.uci
+        else "实战走法就是Stockfish在走棋前局面中的合法第一选择。"
+    )
+    if move.complexity == "normal":
+        return MoveExplanationDetails(
+            complexity="normal",
+            conclusion=conclusion,
+            currentSituation=current,
+            opponentThreat=opponent,
+            playedMoveIdea="",
+            problem=problem,
+            betterMove=better_detail,
+            variationExplanation=[f"可能的主要变化从{move.principal_variation[0]}开始。"] if move.principal_variation else [],
+            childTip=child_tip,
+        )
+
+    difficulty = (
+        f"它之所以难，是因为评价波动为{move.complexity_factors.evaluation_swing_cp if move.complexity_factors.evaluation_swing_cp is not None else '将杀变化'}，"
+        f"连续强制变化有{move.complexity_factors.forcing_line_plies}个半回合，"
+        f"并有{move.complexity_factors.engaged_piece_count}枚棋子直接参与攻防。"
+    )
+    tactic_text = (
+        "已确认的战术包括：" + "；".join(tactic.description for tactic in move.verified_tactics[:3]) + "。"
+        if move.verified_tactics
+        else "结构化事实没有确认钉住、双攻或串击，因此不补写隐藏战术。"
+    )
+    complex_problem = problem + opponent + tactic_text
+    variation = _fallback_variation_steps(move)
+    return MoveExplanationDetails(
+        complexity="complex",
+        conclusion=conclusion,
+        currentSituation=current + difficulty,
+        opponentThreat=opponent,
+        playedMoveIdea=played_idea,
+        problem=complex_problem,
+        betterMove=better_detail,
+        variationExplanation=variation,
+        childTip="记住：复杂局面先核对对手最有力的回应，再逐步比较候选走法。",
+    )
 
 
-def _fit_fallback(text: str, move: MoveReview) -> str:
-    profile = EXPLANATION_PROFILES[move.complexity]
-    compact_length = len(re.sub(r"\s+", "", text))
-    if compact_length < profile["min_chars"]:
-        padding = "这段说明只使用已经核对过的棋盘信息。"
-        while len(re.sub(r"\s+", "", text)) < profile["min_chars"]:
-            text = text.replace("记住：", padding + "记住：", 1)
-    if len(re.sub(r"\s+", "", text)) > profile["max_chars"]:
-        # This branch is only a final safety net; keep the verified opening and child-friendly tip.
-        text = text[: max(0, profile["max_chars"] - len("记住：先核对棋盘事实。"))] + "记住：先核对棋盘事实。"
-    return text
+def conservative_move_explanation(move: MoveReview) -> str:
+    return render_move_explanation(conservative_move_details(move))
+
+
+def _fallback_variation_steps(move: MoveReview) -> list[str]:
+    steps = []
+    for index, fact in enumerate(move.principal_variation_facts[:4], start=1):
+        event = []
+        if fact.capture:
+            event.append("吃子")
+        if fact.checkmate:
+            event.append("将杀")
+        elif fact.check:
+            event.append("将军")
+        if fact.promotion:
+            event.append("升变")
+        suffix = "，并且" + "、".join(event) if event else ""
+        steps.append(f"第{index}步是{fact.san}：{_piece_label(fact.piece)}从{fact.from_square}到{fact.to_square}{suffix}。")
+    while len(steps) < 2:
+        steps.append(f"第{len(steps) + 1}步以后PV信息不完整，因此不补写未经验证的变化。")
+    return steps
+
+
+def _piece_label(piece_id: str) -> str:
+    color, piece = piece_id.split("_", 1)
+    names = {"pawn": "兵", "knight": "马", "bishop": "象", "rook": "车", "queen": "后", "king": "王"}
+    return ("白" if color == "white" else "黑") + names.get(piece, "棋子")
 
 
 def _normal_san(value: str) -> str:
