@@ -105,6 +105,7 @@
       font-family: inherit;
     }
     .primary-btn { background: var(--accent); box-shadow:0 7px 14px rgba(244,185,66,.22); }
+    .alliance-import-btn { background:#FFF1C8; color:#765109; border:1px solid #EDB23D; box-shadow:0 7px 14px rgba(244,185,66,.18); }
     .secondary-btn { background: var(--accent-2); color:#346C62; }
     .ghost-btn { background: #F8F3EC; color:var(--muted); font-size: 13px; font-weight: 700; }
     .icon-btn { background: var(--panel); border: 1px solid var(--line); min-width: 44px; padding-inline:12px; }
@@ -258,6 +259,8 @@
         </div>
         <div class="hero-actions">
           <button class="primary-btn" id="importBtn" onclick="importPgn()">导入并显示</button>
+          <button class="alliance-import-btn" type="button" onclick="openAlliancePgnPicker()">📄 导入国象联盟棋谱</button>
+          <input id="alliancePgnInput" type="file" hidden accept=".pgn,.txt,application/x-chess-pgn,text/plain" onchange="importAlliancePgnFile(event)">
           <button class="secondary-btn" onclick="clearAll()">清空</button>
           <button class="ghost-btn" onclick="loadExample('italian')">意大利开局</button>
           <button class="ghost-btn" onclick="loadExample('scholars')">四步杀</button>
@@ -645,6 +648,43 @@ function parsePgn(raw) {
   game = new Chess(replay.fen());
 
   return history;
+}
+
+function openAlliancePgnPicker() {
+  const fileInput = document.getElementById("alliancePgnInput");
+  fileInput.value = "";
+  fileInput.click();
+}
+
+function decodeAlliancePgn(buffer) {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(buffer);
+  } catch (_) {
+    try {
+      return new TextDecoder("gb18030", { fatal: true }).decode(buffer);
+    } catch (_) {
+      return new TextDecoder("utf-8").decode(buffer);
+    }
+  }
+}
+
+async function importAlliancePgnFile(event) {
+  const fileInput = event.currentTarget;
+  const file = fileInput.files && fileInput.files[0];
+  if (!file) return;
+
+  clearError();
+  try {
+    const buffer = await file.arrayBuffer();
+    const pgn = decodeAlliancePgn(buffer).replace(/^\uFEFF/, "").trim();
+    if (!pgn) throw new Error("文件中没有可读取的棋谱内容");
+    document.getElementById("sourceInput").value = pgn;
+    importPgn();
+  } catch (error) {
+    showError(`国象联盟棋谱导入失败：${error.message || "无法读取文件"}`);
+  } finally {
+    fileInput.value = "";
+  }
 }
 
 function importPgn() {
