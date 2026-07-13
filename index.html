@@ -896,6 +896,11 @@ async function loadMoveExplanation(review) {
 }
 
 function formatStructuredExplanation(details) {
+  if (details.complexity === "simple") {
+    return [details.conclusion, details.problem, details.betterMove, details.childTip]
+      .filter(value => value && value.trim())
+      .join("\n\n");
+  }
   const sections = [
     ["总体判断", details.conclusion],
     ["当前局面", details.currentSituation],
