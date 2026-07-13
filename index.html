@@ -132,12 +132,18 @@
     .timeline { display: none; gap: 10px; background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 14px; }
     .timeline.active { display: grid; }
     .step-controls { display: grid; grid-template-columns: auto auto 1fr auto auto; gap: 8px; align-items: center; }
-    .move-preview { display: grid; gap: 7px; max-height: 132px; overflow: auto; padding-right: 4px; }
+    .move-preview { display: grid; gap: 6px; max-height: 220px; overflow: auto; padding-right: 4px; }
+    .move-record-header,.move-record-row { display:grid; grid-template-columns:42px minmax(0,1fr) minmax(0,1fr); gap:7px; align-items:center; }
+    .move-record-header { position:sticky; top:0; z-index:2; padding:3px 0 6px; background:var(--panel-2); color:var(--muted); font-size:11px; font-weight:850; text-align:center; }
+    .move-record-row { padding:2px 0; }
+    .move-round { color:var(--muted); font-size:12px; font-weight:900; text-align:center; }
+    .move-empty { min-height:35px; border:1px dashed #E9E0D5; border-radius:10px; background:rgba(255,255,255,.42); }
     .move-chip {
-      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      width:100%; min-width:0; display:flex; align-items:center; justify-content:space-between; gap:7px;
       border: 1px solid var(--line); background: #fff; color: var(--muted);
       border-radius: 10px; padding: 7px 9px; text-align: left; cursor: pointer; font-size: 13px;
     }
+    .move-chip > span:first-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .move-chip.active { border-color: var(--accent); background: #FFF1C8; color: #7B5200; }
     .quality-badge { display:inline-grid; place-items:center; min-width:29px; height:25px; padding:0 7px; border-radius:999px; font-weight:950; font-size:12px; }
     .quality-brilliant { color:#8A5A00; background:#FFE8A3; }
@@ -150,6 +156,7 @@
     .move-review-card.active { display:grid; gap:14px; }
     .review-head { display:flex; align-items:center; justify-content:space-between; gap:12px; }
     .review-title { margin:0; font-size:21px; }
+    .review-context { margin:0 0 3px; color:var(--muted); font-size:12px; font-weight:850; }
     .review-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
     .review-fact { padding:12px; border:1px solid var(--line); border-radius:var(--radius-sm); background:#FFFCF7; }
     .review-fact span { display:block; color:var(--muted); font-size:11px; margin-bottom:5px; }
@@ -226,6 +233,9 @@
       .review-grid { grid-template-columns:1fr; }
       .review-explanation { grid-template-columns:46px 1fr; padding:12px; }
       .review-mascot { width:46px; height:46px; }
+      .move-record-header,.move-record-row { grid-template-columns:34px minmax(0,1fr) minmax(0,1fr); gap:5px; }
+      .move-chip { padding:7px 6px; gap:4px; font-size:12px; }
+      .quality-badge { min-width:25px; padding:0 5px; }
       button { padding:10px 14px; } .board-shell { border-width:4px; }
     }
   </style>
@@ -285,7 +295,7 @@
     <section class="panel controls">
       <div class="pgn-summary" id="pgnSummary">
         <div class="summary-row"><span>已导入</span><strong id="summaryTitle">PGN 棋谱</strong></div>
-        <div class="summary-row"><span>总步数</span><strong id="summaryMoves">0</strong></div>
+        <div class="summary-row"><span>棋局长度</span><strong id="summaryMoves">0</strong></div>
         <div class="summary-row"><span>当前局面</span><strong id="summaryStep">初始局面</strong></div>
       </div>
 
@@ -318,7 +328,7 @@
 
       <section class="move-review-card" id="moveReviewCard" aria-live="polite">
         <div class="review-head">
-          <h2 class="review-title" id="moveReviewTitle">这一步怎么样？</h2>
+          <div><p class="review-context" id="moveReviewContext">当前回合</p><h2 class="review-title" id="moveReviewTitle">这一步怎么样？</h2></div>
           <span class="quality-badge quality-routine" id="moveReviewBadge">— 常规着</span>
         </div>
         <div class="review-grid">
@@ -387,6 +397,7 @@ const EXAMPLES = {
 
 let game = new Chess();
 let moves = []; // 每步后的 fen
+let initialFen = game.fen();
 let currentStep = 0;
 let totalSteps = 0;
 let pgnHeaders = {};
@@ -600,33 +611,38 @@ function uciToSan(uci, fen) {
 }
 
 // ========== PGN 导入 ==========
-// 存储每步的 SAN 和 FEN
-let pgnMoves = []; // {san: "e4", fen: "..."}
+// 每个元素对应一个半回合（ply），完整回合号从走棋前 FEN 读取。
+let pgnMoves = []; // {san, fen, side, fullMoveNumber, plyIndex}
 
 function parsePgn(raw) {
   const clean = raw.trim();
   const tempGame = new Chess();
-  tempGame.load_pgn(clean, { sloppy: true });
+  if (!tempGame.load_pgn(clean, { sloppy: true })) throw new Error("PGN 中包含无法恢复的走法");
   pgnHeaders = tempGame.header();
 
   // 收集所有走法
   const history = tempGame.history({ verbose: true });
 
   // 重置，逐步记录 fen
-  const replay = new Chess();
+  initialFen = pgnHeaders.FEN || new Chess().fen();
+  const replay = new Chess(initialFen);
   pgnMoves = [];
   moves = [replay.fen()]; // 初始局面
-  for (const m of history) {
-    replay.move(m.san);
-    pgnMoves.push({ san: m.san, fen: replay.fen() });
+  for (let i = 0; i < history.length; i++) {
+    const m = history[i];
+    const beforeParts = replay.fen().split(" ");
+    const side = beforeParts[1] === "w" ? "white" : "black";
+    const fullMoveNumber = Number(beforeParts[5]);
+    const applied = replay.move(m.san);
+    if (!applied) throw new Error(`第 ${i + 1} 个半回合无法恢复`);
+    pgnMoves.push({ san: applied.san, fen: replay.fen(), side, fullMoveNumber, plyIndex: i + 1 });
     moves.push(replay.fen());
   }
   totalSteps = history.length;
   currentStep = totalSteps;
 
   // 最终 game 状态设为终局
-  game = new Chess();
-  game.load_pgn(clean, { sloppy: true });
+  game = new Chess(replay.fen());
 
   return history;
 }
@@ -648,37 +664,58 @@ function importPgn() {
   document.getElementById("timeline").classList.add("active");
   document.getElementById("pgnSummary").classList.add("active");
   document.getElementById("summaryTitle").textContent = pgnHeaders.Event || "PGN 棋谱";
-  document.getElementById("summaryMoves").textContent = `${totalSteps} 个半回合`;
+  const fullMoveCount = new Set(pgnMoves.map(move => move.fullMoveNumber)).size;
+  document.getElementById("summaryMoves").textContent = `${fullMoveCount} 回合 · ${totalSteps} 个半回合`;
   document.getElementById("whiteName").textContent = pgnHeaders.White || "White";
   document.getElementById("blackName").textContent = pgnHeaders.Black || "Black";
   document.getElementById("gameMeta").textContent = [pgnHeaders.Event, pgnHeaders.Date, pgnHeaders.Result].filter(Boolean).join(" · ") || "PGN 棋谱";
+  gameReview = null;
+  moveExplanationCache.clear();
+  explanationRequestToken += 1;
   updateStepLabels();
   renderBoard();
   renderMovePreview();
   document.getElementById("resultSection").classList.remove("active");
   document.getElementById("moveReviewCard").classList.remove("active");
-  gameReview = null;
-  moveExplanationCache.clear();
-  explanationRequestToken += 1;
 }
 
 function updateStepLabels() {
-  const label = currentStep === 0 ? "初始局面" : currentStep >= totalSteps ? "终局" : `第 ${currentStep} 个半回合后`;
+  const selected = currentStep > 0 ? pgnMoves[currentStep - 1] : null;
+  const sideLabel = selected?.side === "black" ? "黑方" : "白方";
+  const label = selected
+    ? `第 ${selected.fullMoveNumber} 回合 · ${sideLabel}${currentStep >= totalSteps ? " · 终局" : ""}`
+    : "初始局面";
   document.getElementById("stepLabel").textContent = label;
   document.getElementById("summaryStep").textContent = label;
-  const sanLabel = currentStep === 0 ? "开局前" : (pgnMoves[currentStep - 1] ? pgnMoves[currentStep - 1].san : "");
+  const sanLabel = !selected
+    ? "开局前"
+    : `${selected.fullMoveNumber}${selected.side === "white" ? "." : "..."}${selected.san}`;
   document.getElementById("moveLabel").textContent = sanLabel;
 }
 
 function renderMovePreview() {
   const box = document.getElementById("movePreview");
-  box.innerHTML = pgnMoves.map((m, i) => {
-    const moveNum = i + 1;
-    const active = currentStep === moveNum;
-    const review = gameReview?.moves?.[i];
-    const badge = review ? `<span class="quality-badge quality-${review.quality_key}" title="${review.quality_label}">${review.quality_symbol}</span>` : "";
-    return `<button class="move-chip ${active ? 'active' : ''}" onclick="jumpStep(${moveNum})"><span>${m.san}</span>${badge}</button>`;
-  }).join("");
+  const rows = [];
+  const byNumber = new Map();
+  pgnMoves.forEach((move, index) => {
+    if (!byNumber.has(move.fullMoveNumber)) {
+      const row = { number: move.fullMoveNumber, white: null, black: null };
+      byNumber.set(move.fullMoveNumber, row);
+      rows.push(row);
+    }
+    byNumber.get(move.fullMoveNumber)[move.side] = { move, index };
+  });
+  const cell = entry => {
+    if (!entry) return `<div class="move-empty" aria-hidden="true"></div>`;
+    const ply = entry.index + 1;
+    const review = gameReview?.moves?.[entry.index];
+    const badge = review
+      ? `<span class="quality-badge quality-${review.quality_key}" title="${review.quality_label}">${review.quality_symbol}</span>`
+      : "";
+    return `<button class="move-chip ${currentStep === ply ? 'active' : ''}" onclick="jumpStep(${ply})" aria-label="第${entry.move.fullMoveNumber}回合${entry.move.side === 'white' ? '白方' : '黑方'} ${entry.move.san}"><span>${entry.move.san}</span>${badge}</button>`;
+  };
+  box.innerHTML = `<div class="move-record-header"><span>回合</span><span>白方</span><span>黑方</span></div>`
+    + rows.map(row => `<div class="move-record-row"><span class="move-round">${row.number}</span>${cell(row.white)}${cell(row.black)}</div>`).join("");
 }
 
 function onSliderInput() {
@@ -705,10 +742,10 @@ function jumpStep(step) {
 
 function rebuildGameAtStep(step) {
   if (step === 0) {
-    game = new Chess();
+    game = new Chess(initialFen);
     return;
   }
-  game = new Chess();
+  game = new Chess(initialFen);
   const movesToReplay = pgnMoves.slice(0, step);
   for (const m of movesToReplay) {
     game.move(m.san);
@@ -718,6 +755,7 @@ function rebuildGameAtStep(step) {
 function clearAll() {
   document.getElementById("sourceInput").value = "";
   game = new Chess();
+  initialFen = game.fen();
   moves = [game.fen()];
   pgnMoves = [];
   currentStep = 0;
@@ -771,6 +809,11 @@ async function analyzeGame() {
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.detail || `整盘分析服务错误 (${response.status})`);
     gameReview = payload;
+    payload.moves?.forEach((review, index) => {
+      if (!pgnMoves[index]) return;
+      pgnMoves[index].fullMoveNumber = review.move_number;
+      pgnMoves[index].side = review.side;
+    });
     moveExplanationCache.clear();
     explanationRequestToken += 1;
     renderMovePreview();
@@ -799,7 +842,10 @@ function updateMoveReviewPanel() {
   }
   card.classList.add("active");
   document.getElementById("resultSection").classList.remove("active");
-  document.getElementById("moveReviewTitle").textContent = `${review.notation} ${review.quality_symbol} ${review.quality_label}`;
+  const sideLabel = review.side === "white" ? "白方" : "黑方";
+  const complexityLabel = { simple: "简单局面", normal: "普通局面", complex: "复杂局面" }[review.complexity] || "普通局面";
+  document.getElementById("moveReviewContext").textContent = `第 ${review.move_number} 回合 · ${sideLabel} · ${complexityLabel}`;
+  document.getElementById("moveReviewTitle").textContent = `${review.san} ${review.quality_symbol} ${review.quality_label}`;
   const badge = document.getElementById("moveReviewBadge");
   badge.className = `quality-badge quality-${review.quality_key}`;
   badge.textContent = `${review.quality_symbol} ${review.quality_label}`;
@@ -848,12 +894,26 @@ async function loadMoveExplanation(review) {
 }
 
 function fallbackMoveExplanation(review, warning) {
-  const change = `从 Stockfish 分数看，这步被评为“${review.quality_label}”。`;
-  const better = review.best_move_san && review.best_move_uci !== review.uci
-    ? `更稳妥的选择是 ${review.best_move_san}。`
-    : "这步已经很接近引擎的第一选择。";
-  const note = warning ? "（AI 详细解释暂时没有生成。）" : "";
-  return `${change}${better}${note}\n\n记住：先看看对手下一步最有力的回应，再决定自己的走法。`;
+  const played = review.played_move || { san: review.san, from_square: review.from_square, to_square: review.to_square };
+  const side = review.side === "white" ? "白方" : "黑方";
+  const intro = `第${review.move_number}回合，${side}走了${played.san}（${played.from_square}到${played.to_square}），被评为“${review.quality_label}”。`;
+  const note = warning ? "AI详细说明暂时没有生成，下面只展示已经核对的引擎事实。" : "";
+  const tip = "记住：先核对棋盘事实，再比较实战走法和引擎推荐。";
+  if (review.complexity === "simple") return `${intro}${warning ? "AI解释暂不可用。" : ""}\n\n${tip}`;
+
+  const score = `Stockfish评价由${review.before.evaluation}变为${review.after.evaluation}。`;
+  const better = review.best_move && review.best_move.uci !== played.uci
+    ? `合法推荐是${review.best_move.san}（${review.best_move.from_square}到${review.best_move.to_square}）。`
+    : "实战走法已经接近Stockfish的第一选择。";
+  if (review.complexity !== "complex") return `${intro}${score}${better}${note}\n\n${tip}`;
+
+  const reply = review.opponent_reply
+    ? `实战走完后，对手的引擎第一选择是${review.opponent_reply.san}（${review.opponent_reply.from_square}到${review.opponent_reply.to_square}）。`
+    : "实战走完后没有可用的对手变化，因此不猜测具体威胁。";
+  const pv = review.principal_variation?.length
+    ? `已验证的主要变化是${review.principal_variation.slice(0, 8).join("、")}。`
+    : "主要变化不完整，因此不展开未经确认的战术。";
+  return `${intro}${score}${reply}${better}${pv}${note}\n\n${tip}`;
 }
 
 async function analyze() {
