@@ -175,6 +175,26 @@ def test_move_explanation_is_cached(monkeypatch) -> None:
     assert fake_explainer.move_calls == 1
 
 
+def test_move_facts_endpoint_returns_selected_ply_without_deepseek(monkeypatch) -> None:
+    fake_explainer = FakeExplainer()
+    monkeypatch.setattr(api, "explainer", fake_explainer)
+    api.game_cache.clear()
+    analysis_id = "analysis-facts-test"
+    api.game_cache[analysis_id] = [sample_move_review()]
+    client = TestClient(api.app)
+
+    response = client.post(
+        "/api/move-facts",
+        json={"analysis_id": analysis_id, "move_index": 1},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["currentMove"]["playedMove"]["uci"] == "e2e4"
+    assert payload["currentMove"]["plyIndex"] == 1
+    assert payload["candidateLines"] == []
+    assert fake_explainer.move_calls == 0
+
+
 @pytest.mark.asyncio
 async def test_simultaneous_move_explanation_requests_share_one_call(monkeypatch) -> None:
     class SlowExplainer(FakeExplainer):

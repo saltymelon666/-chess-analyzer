@@ -6,7 +6,10 @@ from pathlib import Path
 import chess
 import chess.engine
 
-from .models import EngineResult, MoveResult
+from .models import EngineResult, MoveResult, VariationMove
+
+
+MAX_PV_PLIES = 10
 
 
 class StockfishService:
@@ -101,10 +104,13 @@ class StockfishService:
         if board.is_game_over(claim_draw=True):
             return self._terminal_result(board, depth)
 
+        multipv = min(self.multipv, board.legal_moves.count())
+        # python-chess treats MultiPV as a managed UCI option and sends the
+        # equivalent setoption command for this analysis call.
         infos = engine.analyse(
             board,
             chess.engine.Limit(depth=depth),
-            multipv=self.multipv,
+            multipv=multipv,
         )
         if isinstance(infos, dict):
             infos = [infos]
@@ -113,7 +119,7 @@ class StockfishService:
         max_depth = 0
         max_nodes = 0
         max_time_ms = 0
-        for info in infos:
+        for rank, info in enumerate(infos, start=1):
             score = info.get("score")
             pv = info.get("pv", [])
             if score is None or not pv:
@@ -121,7 +127,8 @@ class StockfishService:
             white_score = score.pov(chess.WHITE)
             mate_in = white_score.mate()
             centipawn = None if mate_in is not None else white_score.score()
-            san_line = self._pv_to_san(board, pv)
+            line, resulting_fen = self._pv_details(board, pv[:MAX_PV_PLIES])
+            san_line = [item.san for item in line]
             info_depth = int(info.get("depth", 0))
             max_depth = max(max_depth, info_depth)
             max_nodes = max(max_nodes, int(info.get("nodes", 0)))
@@ -134,6 +141,9 @@ class StockfishService:
                     mate_in=mate_in,
                     pv=san_line[1:],
                     depth=info_depth,
+                    rank=rank,
+                    line=line,
+                    resulting_fen=resulting_fen,
                 )
             )
 
@@ -184,6 +194,48 @@ class StockfishService:
             san_line.append(current.san(move))
             current.push(move)
         return san_line
+
+    @staticmethod
+    def _pv_details(board: chess.Board, pv: list[chess.Move]) -> tuple[list[VariationMove], str]:
+        current = board.copy(stack=False)
+        line: list[VariationMove] = []
+        for ply, move in enumerate(pv[:MAX_PV_PLIES], start=1):
+            if move not in current.legal_moves:
+                break
+            piece = current.piece_at(move.from_square)
+            captured_piece = None
+            if current.is_capture(move):
+                captured_square = move.to_square
+                if current.is_en_passant(move):
+                    captured_square += -8 if current.turn == chess.WHITE else 8
+                captured = current.piece_at(captured_square)
+                if captured is not None:
+                    captured_piece = f"{'white' if captured.color else 'black'}_{chess.piece_name(captured.piece_type)}"
+            next_board = current.copy(stack=False)
+            next_board.push(move)
+            line.append(
+                VariationMove(
+                    ply=ply,
+                    move_number=current.fullmove_number,
+                    side="white" if current.turn == chess.WHITE else "black",
+                    san=current.san(move),
+                    uci=move.uci(),
+                    from_square=chess.square_name(move.from_square),
+                    to_square=chess.square_name(move.to_square),
+                    piece=(
+                        f"{'white' if piece and piece.color else 'black'}_{chess.piece_name(piece.piece_type)}"
+                        if piece else "unknown_piece"
+                    ),
+                    capture=current.is_capture(move),
+                    captured_piece=captured_piece,
+                    check=current.gives_check(move),
+                    checkmate=next_board.is_checkmate(),
+                    castling=current.is_castling(move),
+                    promotion=chess.piece_name(move.promotion) if move.promotion else None,
+                )
+            )
+            current = next_board
+        return line, current.fen()
 
     @staticmethod
     def _format_evaluation(centipawn: int | None, mate_in: int | None) -> str:
