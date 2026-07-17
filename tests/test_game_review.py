@@ -59,6 +59,13 @@ async def test_game_review_uses_black_mover_perspective() -> None:
     assert result.moves[1].best_move is not None
     assert result.moves[1].best_move.san == "c5"
     assert result.moves[1].complexity in {"simple", "normal", "complex"}
+    assert len(result.moves[1].candidate_lines) == 1
+    assert result.moves[1].candidate_lines[0].first_move.san == "c5"
+    assert chess.Board(result.moves[1].candidate_lines[0].resulting_fen).is_valid()
+    assert result.moves[1].actual_move_line is not None
+    assert result.moves[1].actual_move_line.first_move.san == "Nf3"
+    assert result.moves[1].position_facts.side_to_move == "black"
+    assert result.moves[1].position_facts_after.side_to_move == "white"
 
 
 @pytest.mark.asyncio

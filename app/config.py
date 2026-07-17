@@ -6,6 +6,9 @@ from pathlib import Path
 
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
+OFFICIAL_DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash"
+LEGACY_DEEPSEEK_MODELS = {"deepseek-chat", "deepseek-reasoner"}
 
 
 def _read_dotenv(path: Path) -> dict[str, str]:
@@ -23,11 +26,12 @@ def _read_dotenv(path: Path) -> dict[str, str]:
 
 
 def _value(name: str, defaults: dict[str, str], fallback: str = "") -> str:
-    return os.getenv(name, defaults.get(name, fallback))
+    return os.getenv(name, defaults.get(name, fallback)).strip()
 
 
 @dataclass(frozen=True)
 class Settings:
+    environment: str
     deepseek_api_key: str
     deepseek_base_url: str
     deepseek_model: str
@@ -46,6 +50,11 @@ class Settings:
 
 def load_settings() -> Settings:
     defaults = _read_dotenv(ROOT_DIR / ".env")
+    deepseek_api_key = _value("DEEPSEEK_API_KEY", defaults)
+    deepseek_base_url = _value("DEEPSEEK_BASE_URL", defaults, OFFICIAL_DEEPSEEK_BASE_URL).rstrip("/")
+    deepseek_model = _value("DEEPSEEK_MODEL", defaults, DEFAULT_DEEPSEEK_MODEL)
+    if deepseek_model in LEGACY_DEEPSEEK_MODELS:
+        deepseek_model = DEFAULT_DEEPSEEK_MODEL
     stockfish_raw = _value("STOCKFISH_PATH", defaults, "stockfish.exe")
     stockfish_path = Path(stockfish_raw)
     if not stockfish_path.is_absolute():
@@ -59,9 +68,10 @@ def load_settings() -> Settings:
     origins = tuple(item.strip() for item in origins_raw.split(",") if item.strip())
 
     return Settings(
-        deepseek_api_key=_value("DEEPSEEK_API_KEY", defaults),
-        deepseek_base_url=_value("DEEPSEEK_BASE_URL", defaults, "https://api.deepseek.com").rstrip("/"),
-        deepseek_model=_value("DEEPSEEK_MODEL", defaults, "deepseek-chat"),
+        environment=_value("APP_ENV", defaults, "development").lower(),
+        deepseek_api_key=deepseek_api_key,
+        deepseek_base_url=deepseek_base_url,
+        deepseek_model=deepseek_model,
         stockfish_path=stockfish_path,
         stockfish_depth=int(_value("STOCKFISH_DEPTH", defaults, "16")),
         stockfish_threads=max(1, int(_value("STOCKFISH_THREADS", defaults, "1"))),

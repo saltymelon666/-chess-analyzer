@@ -8,6 +8,7 @@ import chess.pgn
 from .complexity import classify_complexity
 from .engine import StockfishService
 from .models import (
+    CandidateLine,
     EngineResult,
     EvaluationSnapshot,
     GameReviewResponse,
@@ -15,7 +16,9 @@ from .models import (
     MoveReview,
     MoveResult,
     VerifiedTactic,
+    VariationMove,
 )
+from .position_facts import extract_position_facts
 from .quality import QUALITY_THRESHOLDS, classify_move, mover_value
 
 
@@ -78,6 +81,13 @@ async def analyze_pgn(
             _forcing_prefix_length(opponent_pv_facts),
         ) >= 3
         opponent_forcing_options = _forcing_candidate_count(after_board, after_result)
+        candidate_lines = _candidate_lines(before_board, before_result)
+        actual_move_line = _actual_move_line(after_board, after_result)
+        for line in candidate_lines:
+            verified_tactics.extend(_detect_line_tactics(before_board, line))
+        if actual_move_line:
+            verified_tactics.extend(_detect_line_tactics(after_board, actual_move_line))
+        verified_tactics = _unique_tactics(verified_tactics)
 
         quality = classify_move(
             before=before,
@@ -153,15 +163,38 @@ async def analyze_pgn(
                 ),
                 allowed_squares=sorted(
                     {
+                        *dict(facts["pieces_before"]).keys(),
                         *[square for fact in allowed_facts for square in (fact.from_square, fact.to_square)],
                         *[square for tactic in verified_tactics for square in tactic.squares],
+                        *[square for line in candidate_lines for item in line.moves for square in (item.from_square, item.to_square)],
+                        *[square for item in (actual_move_line.moves if actual_move_line else []) for square in (item.from_square, item.to_square)],
                     }
                 ),
                 allowed_moves=sorted(
-                    {value for fact in allowed_facts for value in (fact.san, fact.uci)}
+                    {
+                        *[value for fact in allowed_facts for value in (fact.san, fact.uci)],
+                        *[value for line in candidate_lines for item in line.moves for value in (item.san, item.uci)],
+                        *[value for item in (actual_move_line.moves if actual_move_line else []) for value in (item.san, item.uci)],
+                    }
                 ),
                 pieces_before=dict(facts["pieces_before"]),
                 verified_tactics=verified_tactics,
+                candidate_lines=candidate_lines,
+                actual_move_line=actual_move_line,
+                position_facts=extract_position_facts(
+                    str(facts["before_fen"]),
+                    candidate_lines=candidate_lines,
+                    actual_move_line=actual_move_line,
+                    tactics=verified_tactics,
+                    namespace=f"move-{int(facts['index'])}-before",
+                ),
+                position_facts_after=extract_position_facts(
+                    str(facts["after_fen"]),
+                    candidate_lines=[],
+                    actual_move_line=actual_move_line,
+                    tactics=verified_tactics,
+                    namespace=f"move-{int(facts['index'])}-after",
+                ),
             )
         )
 
@@ -194,6 +227,7 @@ def parse_pgn_facts(pgn: str, *, max_plies: int) -> tuple[list[dict[str, object]
         fullmove = board.fullmove_number
         legal_count = board.legal_moves.count()
         played = _move_facts(board, move)
+        played.id = f"move:played:{index}"
         opening_routine = (
             fullmove <= QUALITY_THRESHOLDS["opening_fullmove_max"]
             and not played.capture
@@ -281,17 +315,143 @@ def _verified_principal_variation(
     if result is None or best is None:
         return []
     current = board.copy(stack=False)
-    first = chess.Move.from_uci(best.uci)
-    facts = [_move_facts(current, first)]
-    current.push(first)
-    for san in result.pv:
+    facts: list[MoveFacts] = []
+    uci_line = [item.uci for item in result.line] if result.line else []
+    if not uci_line:
+        uci_line = [best.uci]
+        replay = current.copy(stack=False)
+        replay.push(chess.Move.from_uci(best.uci))
+        for san in result.pv:
+            try:
+                parsed = replay.parse_san(san)
+            except ValueError:
+                break
+            uci_line.append(parsed.uci())
+            replay.push(parsed)
+    for uci in uci_line[:10]:
         try:
-            move = current.parse_san(san)
+            move = chess.Move.from_uci(uci)
         except ValueError:
+            break
+        if move not in current.legal_moves:
             break
         facts.append(_move_facts(current, move))
         current.push(move)
     return facts
+
+
+def _candidate_lines(board: chess.Board, result: EngineResult) -> list[CandidateLine]:
+    lines: list[CandidateLine] = []
+    for rank, candidate in enumerate(result.top_moves[:3], start=1):
+        best = _verified_best_move(board, candidate)
+        if best is None:
+            continue
+        facts = _verified_principal_variation(board, candidate, best)
+        moves, resulting_fen = _variation_moves(board, facts)
+        line = CandidateLine(
+                id=f"line:{rank}",
+                rank=rank,
+                depth=candidate.depth,
+                centipawn=candidate.centipawn,
+                mate_in=candidate.mate_in,
+                first_move=best,
+                moves=moves,
+                resulting_fen=candidate.resulting_fen or resulting_fen,
+            )
+        for item in line.moves:
+            item.id = f"line:{rank}:ply:{item.ply}"
+        line.resulting_position_facts = extract_position_facts(
+            line.resulting_fen,
+            candidate_lines=[],
+            actual_move_line=None,
+            tactics=[],
+            namespace=f"line-{rank}-result",
+        )
+        lines.append(line)
+    return lines
+
+
+def _actual_move_line(board: chess.Board, after_result: EngineResult) -> CandidateLine | None:
+    if not after_result.top_moves:
+        return None
+    reply = _verified_best_move(board, after_result.top_moves[0])
+    if reply is None:
+        return None
+    facts = _verified_principal_variation(board, after_result.top_moves[0], reply)[:10]
+    moves, resulting_fen = _variation_moves(board, facts)
+    line = CandidateLine(
+        id="line:played",
+        rank=1,
+        depth=after_result.depth,
+        centipawn=after_result.centipawn,
+        mate_in=after_result.mate_in,
+        first_move=reply,
+        moves=moves,
+        resulting_fen=resulting_fen,
+    )
+    for item in line.moves:
+        item.id = f"line:played:ply:{item.ply}"
+    line.resulting_position_facts = extract_position_facts(
+        resulting_fen,
+        candidate_lines=[],
+        actual_move_line=None,
+        tactics=[],
+        namespace="line-played-result",
+    )
+    return line
+
+
+def _variation_moves(board: chess.Board, facts: list[MoveFacts]) -> tuple[list[VariationMove], str]:
+    current = board.copy(stack=False)
+    moves: list[VariationMove] = []
+    for ply, fact in enumerate(facts[:10], start=1):
+        move = chess.Move.from_uci(fact.uci)
+        if move not in current.legal_moves:
+            break
+        moves.append(
+            VariationMove(
+                ply=ply,
+                move_number=current.fullmove_number,
+                side="white" if current.turn == chess.WHITE else "black",
+                san=fact.san,
+                uci=fact.uci,
+                from_square=fact.from_square,
+                to_square=fact.to_square,
+                piece=fact.piece,
+                capture=fact.capture,
+                captured_piece=fact.captured_piece,
+                check=fact.check,
+                checkmate=fact.checkmate,
+                castling=fact.castling,
+                promotion=fact.promotion,
+            )
+        )
+        current.push(move)
+    return moves, current.fen()
+
+
+def _detect_line_tactics(board: chess.Board, line: CandidateLine) -> list[VerifiedTactic]:
+    current = board.copy(stack=False)
+    tactics: list[VerifiedTactic] = []
+    for item in line.moves:
+        move = chess.Move.from_uci(item.uci)
+        if move not in current.legal_moves:
+            break
+        fact = _move_facts(current, move)
+        tactics.extend(_detect_tactical_motifs(current, fact))
+        current.push(move)
+    return tactics
+
+
+def _unique_tactics(tactics: list[VerifiedTactic]) -> list[VerifiedTactic]:
+    unique: list[VerifiedTactic] = []
+    seen: set[tuple[str, str, tuple[str, ...]]] = set()
+    for tactic in tactics:
+        key = (tactic.name, tactic.move_uci, tuple(tactic.squares))
+        if key not in seen:
+            seen.add(key)
+            unique.append(tactic)
+    return unique
 
 
 def _verified_fact_lines(
