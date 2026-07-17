@@ -24,8 +24,117 @@ from .professional_validation import (
 
 
 logger = logging.getLogger(__name__)
-PROFESSIONAL_PROMPT_VERSION = "professional-v1"
-PROFESSIONAL_TOKEN_LIMITS = {"simple": 1800, "normal": 3200, "complex": 5200}
+PROFESSIONAL_PROMPT_VERSION = "professional-v4"
+PROFESSIONAL_TOKEN_LIMITS = {"simple": 3500, "normal": 6000, "complex": 10_000}
+STRATEGY_TAGS = [
+    "king_attack",
+    "improve_king_safety",
+    "center_break",
+    "center_control",
+    "kingside_expansion",
+    "queenside_expansion",
+    "control_open_file",
+    "occupy_weak_square",
+    "improve_worst_piece",
+    "exchange_and_simplify",
+    "create_passed_pawn",
+    "defend_immediate_threat",
+    "pawn_break",
+    "transition_to_endgame",
+]
+PROFESSIONAL_OUTPUT_CONTRACT = {
+    "complexity": "simple|normal|complex",
+    "positionAssessment": {
+        "summary": "string",
+        "material": {"description": "string", "evidenceRefs": ["evidence-id"]},
+        "kingSafety": {
+            "white": {"description": "string", "evidenceRefs": ["evidence-id"]},
+            "black": {"description": "string", "evidenceRefs": ["evidence-id"]},
+        },
+        "pieceActivity": {"description": "string", "evidenceRefs": ["evidence-id"]},
+        "pawnStructure": {"description": "string", "evidenceRefs": ["evidence-id"]},
+    },
+    "mainDanger": {
+        "sideInDanger": "white|black|both|none",
+        "level": "immediate|short_term|long_term",
+        "description": "string",
+        "consequence": "string",
+        "evidenceRefs": ["evidence-id"],
+    },
+    "keyPieces": [{
+        "side": "white|black",
+        "piece": "pawn|knight|bishop|rook|queen|king",
+        "square": "a1-h8",
+        "role": "string",
+        "futureTask": "string",
+        "evidenceRefs": ["evidence-id"],
+    }],
+    "plans": {
+        "white": [{
+            "strategyTag": "one allowed strategy tag",
+            "description": "string",
+            "requiredPreparation": "string",
+            "evidenceRefs": ["evidence-id"],
+        }],
+        "black": [{
+            "strategyTag": "one allowed strategy tag",
+            "description": "string",
+            "requiredPreparation": "string",
+            "evidenceRefs": ["evidence-id"],
+        }],
+    },
+    "weaknesses": {
+        "white": [{"description": "string", "exploitation": "string", "evidenceRefs": ["evidence-id"]}],
+        "black": [{"description": "string", "exploitation": "string", "evidenceRefs": ["evidence-id"]}],
+    },
+    "threats": [{
+        "side": "white|black",
+        "level": "immediate|short_term|long_term",
+        "description": "string",
+        "target": "string",
+        "evidenceRefs": ["evidence-id"],
+    }],
+    "playedMoveAnalysis": {
+        "move": "actual SAN or UCI",
+        "intention": "string",
+        "positiveEffects": ["string"],
+        "problems": ["string"],
+        "strongestResponse": "SAN or UCI from playedMoveContinuation",
+        "continuationPhases": [{
+            "phase": "string",
+            "moves": ["SAN or UCI in exact PV order"],
+            "explanation": "string",
+            "evidenceRefs": ["evidence-id"],
+        }],
+        "resultingPosition": "string",
+        "evaluationReason": "string",
+        "errorType": "tactical|strategic|both|none",
+        "evidenceRefs": ["evidence-id"],
+    },
+    "candidateLines": [{
+        "rank": 1,
+        "firstMove": "route first SAN or UCI",
+        "strategyTags": ["allowed strategy tag"],
+        "directPurpose": "string",
+        "opponentResponse": "string",
+        "continuationPhases": [{
+            "phase": "string",
+            "moves": ["SAN or UCI in exact PV order"],
+            "explanation": "string",
+            "evidenceRefs": ["evidence-id"],
+        }],
+        "resultingPosition": "string",
+        "advantages": ["string"],
+        "risks": ["string"],
+        "whyThisRank": "string",
+        "evidenceRefs": ["evidence-id"],
+    }],
+    "comparison": {
+        "mainDifference": "string",
+        "whyFirstLineIsBest": "string",
+        "evidenceRefs": ["evidence-id"],
+    },
+}
 
 
 @dataclass(frozen=True)
@@ -65,7 +174,6 @@ class ProfessionalAnalysisService:
         prompt = professional_user_prompt(payload, complexity.level)
         usage_results: list[ChatResult] = []
         last_errors: list[str] = []
-        last_content = ""
         parsed: ProfessionalAnalysis | None = None
 
         for attempt in range(2):
@@ -73,9 +181,8 @@ class ProfessionalAnalysisService:
             if attempt:
                 current_prompt += (
                     "\n\n上一次返回未通过程序校验。错误如下：\n- "
-                    + "\n- ".join(last_errors)
-                    + "\n请对照原始事实包纠正一次，完整返回JSON。不得保留错误字段，也不得新增事实。"
-                    + f"\n上一次返回：\n{last_content}"
+                    + "\n- ".join(_compact_validation_errors(last_errors))
+                    + "\n请重新根据上面的原始事实包生成完整JSON。不得保留错误字段，也不得新增事实。"
                 )
             result = await self._chat(
                 system=system,
@@ -84,7 +191,6 @@ class ProfessionalAnalysisService:
                 temperature=0.1 if attempt else 0.2,
             )
             usage_results.append(result)
-            last_content = result.content
             parsed, parse_errors = parse_professional_analysis(result.content)
             last_errors = parse_errors
             if parsed is not None:
@@ -102,10 +208,11 @@ class ProfessionalAnalysisService:
             )
 
         safe = build_safe_professional_analysis(move, complexity)
-        safe_errors = validate_professional_analysis(safe, context, enforce_length=False)
-        warnings = ["DeepSeek两次返回均未通过校验，已删除不可信内容并使用结构化事实生成安全结果。", *last_errors]
+        safe_errors = validate_professional_analysis(safe, context)
         if safe_errors:
-            warnings.extend("安全结果提示：" + item for item in safe_errors)
+            logger.error("Safe professional analysis failed validation: %s", safe_errors)
+            raise RuntimeError("安全专业分析未通过事实校验")
+        warnings = ["DeepSeek两次返回均未通过校验，已删除不可信内容并使用结构化事实生成安全结果。", *last_errors]
         return GeneratedProfessionalAnalysis(
             analysis=safe,
             complexity_reasons=complexity.reasons,
@@ -137,6 +244,7 @@ class ProfessionalAnalysisService:
                     ],
                     "max_tokens": max_tokens,
                     "temperature": temperature,
+                    "thinking": {"type": "disabled"},
                     "response_format": {"type": "json_object"},
                 },
             )
@@ -250,18 +358,41 @@ def build_professional_payload(
             "centipawnLoss": move.centipawn_loss,
             "quality": move.quality_label,
         },
-        "positionBefore": move.position_facts.model_dump(by_alias=True),
-        "positionAfter": move.position_facts_after.model_dump(by_alias=True),
-        "playedMoveContinuation": (
-            move.actual_move_line.model_dump(by_alias=True) if move.actual_move_line else None
+        "positionBefore": _compact_prompt_value(
+            move.position_facts.model_dump(by_alias=True, exclude_none=True, exclude_defaults=True)
         ),
-        "candidateLines": [line.model_dump(by_alias=True) for line in move.candidate_lines],
+        "positionAfter": _compact_prompt_value(
+            move.position_facts_after.model_dump(by_alias=True, exclude_none=True, exclude_defaults=True)
+        ),
+        "playedMoveContinuation": (
+            _compact_prompt_value(
+                move.actual_move_line.model_dump(by_alias=True, exclude_none=True, exclude_defaults=True)
+            )
+            if move.actual_move_line else None
+        ),
+        "candidateLines": [
+            _compact_prompt_value(line.model_dump(by_alias=True, exclude_none=True, exclude_defaults=True))
+            for line in move.candidate_lines
+        ],
         "complexity": complexity.level,
         "complexityReasons": complexity.reasons,
         "allowedSquares": sorted(set(move.allowed_squares)),
         "allowedMoves": sorted(set(move.allowed_moves)),
         "allowedEvidenceIds": sorted(allowed_evidence_ids),
     }
+
+
+def _compact_prompt_value(value: Any) -> Any:
+    """Drop duplicated human-readable derivation notes while retaining facts, IDs and squares."""
+    if isinstance(value, dict):
+        return {
+            key: _compact_prompt_value(child)
+            for key, child in value.items()
+            if key != "evidence"
+        }
+    if isinstance(value, list):
+        return [_compact_prompt_value(child) for child in value]
+    return value
 
 
 def professional_system_prompt() -> str:
@@ -276,9 +407,11 @@ def professional_system_prompt() -> str:
 
 def professional_user_prompt(payload: dict[str, Any], complexity: str) -> str:
     length = {"simple": "400—700", "normal": "800—1300", "complex": "1400—2200"}[complexity]
-    schema = ProfessionalAnalysis.model_json_schema(by_alias=True)
+    compact_payload = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    compact_contract = json.dumps(PROFESSIONAL_OUTPUT_CONTRACT, ensure_ascii=False, separators=(",", ":"))
+    strategy_tags = ",".join(STRATEGY_TAGS)
     return f"""请分析以下完整事实包：
-{json.dumps(payload, ensure_ascii=False, indent=2)}
+{compact_payload}
 
 严格规则：
 1. 每个evidenceRefs只能取自allowedEvidenceIds，并且必须支持对应颜色和结论。
@@ -286,12 +419,12 @@ def professional_user_prompt(payload: dict[str, Any], complexity: str) -> str:
 3. candidateLines必须与输入路线数量、rank和firstMove一一对应；每个continuationPhases.moves只能来自自己的PV，不能串线。
 4. 禁止只写“加强中心、注意防守、改善子力、形成压力、准备进攻、局面复杂”。如使用类似结论，必须继续说明具体棋子、格子、目标、实现走法和路线证据。
 5. 最大危险必须说明处于危险的一方、来源棋子与格子、目标、危险级别和不处理的后果。无可靠危险时sideInDanger写none，并明确证据不足。
-6. strategyTags只能使用JSON Schema中的枚举。每个战略方向至少引用一条证据。
+6. strategyTags只能使用以下枚举：{strategy_tags}。每个战略方向至少引用一条证据。
 7. 变化按阶段解释，不能只堆SAN。PV只能描述为参考变化。
 8. 正文目标长度为{length}个中文字符；complexity必须是{complexity}。
 
-只返回一个符合以下JSON Schema的对象，不要Markdown，不要额外文字：
-{json.dumps(schema, ensure_ascii=False)}"""
+只返回一个字段与以下契约完全一致的JSON对象，不要Markdown，不要额外字段或文字。数组中的对象表示元素结构，不表示固定数量：
+{compact_contract}"""
 
 
 def professional_cache_key(
@@ -354,7 +487,16 @@ def build_safe_professional_analysis(
             f"{danger_side}的直接危险来自{threat_source.side}_{threat_source.piece.split('_')[-1]}从"
             f"{threat_source.from_square}走到{threat_source.to_square}的参考着{threat_source.san}。"
         )
-        danger_consequence = "若进入这条参考变化，将发生已由棋规库确认的吃子或将军事件。"
+        verified_events = []
+        if threat_source.capture:
+            verified_events.append("吃子")
+        if threat_source.checkmate:
+            verified_events.append("将杀")
+        elif threat_source.check:
+            verified_events.append("将军")
+        danger_consequence = (
+            "若进入这条参考变化，将发生已由棋规库确认的" + "、".join(verified_events) + "事件。"
+        )
         danger_refs = [threat_source.id]
 
     key_pieces = []
@@ -502,7 +644,128 @@ def build_safe_professional_analysis(
             "evidenceRefs": comparison_refs,
         },
     }
-    return ProfessionalAnalysis.model_validate(safe_payload)
+    analysis = ProfessionalAnalysis.model_validate(safe_payload)
+    return _apply_safe_length_profile(analysis, move, complexity.level)
+
+
+def _apply_safe_length_profile(
+    analysis: ProfessionalAnalysis,
+    move: MoveReview,
+    level: str,
+) -> ProfessionalAnalysis:
+    """Keep the deterministic fallback inside the same length bands required from DeepSeek."""
+    if level == "complex":
+        return analysis
+
+    result = analysis.model_copy(deep=True)
+    fact_limit = 1
+    weakness_limit = 1
+    threat_limit = 1 if level == "simple" else 2
+
+    for side, target in (
+        ("white", result.position_assessment.king_safety.white),
+        ("black", result.position_assessment.king_safety.black),
+    ):
+        facts = [fact for fact in move.position_facts.king_safety if fact.side == side][:fact_limit]
+        if facts:
+            target.description = "；".join(fact.description for fact in facts)
+            target.evidence_refs = [fact.id for fact in facts]
+
+    activity = move.position_facts.piece_activity[:fact_limit]
+    if activity:
+        result.position_assessment.piece_activity.description = "；".join(fact.description for fact in activity)
+        result.position_assessment.piece_activity.evidence_refs = [fact.id for fact in activity]
+    pawns = move.position_facts.pawn_structure[:fact_limit]
+    if pawns:
+        result.position_assessment.pawn_structure.description = "；".join(fact.description for fact in pawns)
+        result.position_assessment.pawn_structure.evidence_refs = [fact.id for fact in pawns]
+
+    result.weaknesses.white = result.weaknesses.white[:weakness_limit]
+    result.weaknesses.black = result.weaknesses.black[:weakness_limit]
+    result.threats = result.threats[:threat_limit]
+    for weakness in [*result.weaknesses.white, *result.weaknesses.black]:
+        weakness.exploitation = "利用方式须以对应参考路线为准。"
+
+    result.played_move_analysis.resulting_position = _short_result_position(move.actual_move_line)
+    for phase in result.played_move_analysis.continuation_phases:
+        phase.explanation = "按Stockfish顺序参考，不代表必然发生。"
+    for line, source in zip(result.candidate_lines, move.candidate_lines):
+        line.resulting_position = _short_result_position(source)
+        line.advantages = ["这是Stockfish给出的合法候选。"]
+        line.risks = ["路线之外证据不足。"]
+        line.why_this_rank = f"Stockfish排名{line.rank}。"
+        for phase in line.continuation_phases:
+            phase.explanation = "按该PV顺序参考，不代表必然发生。"
+
+    result.position_assessment.summary = f"{move.side}行棋；判断只引用事实包与Stockfish参考线。"
+    for piece in result.key_pieces:
+        piece.role = f"{piece.side}_{piece.piece}位于{piece.square}。"
+        piece.future_task = "仅沿参考线观察。"
+    for plans in (result.plans.white, result.plans.black):
+        for plan in plans:
+            plan.required_preparation = "路线外准备证据不足。"
+
+    if level == "normal":
+        return result
+
+    result.position_assessment.material.description = (
+        f"白减黑子力差{move.position_facts.material.get('valueDifferenceWhiteMinusBlack', 0)}。"
+    )
+    if result.main_danger.side_in_danger == "none":
+        result.main_danger.description = "未确认单一直接危险，证据不足。"
+        result.main_danger.consequence = "继续比较合法强制着与第一参考线。"
+    else:
+        result.main_danger.consequence = "若进入该参考线，将出现已验证的吃子或将军。"
+    for plans in (result.plans.white, result.plans.black):
+        for plan in plans:
+            plan.description = plan.description.replace("参考路线只确认", "PV确认").replace("走到", "到")
+    result.played_move_analysis.intention = (
+        f"{move.played_move.piece}从{move.played_move.from_square}到{move.played_move.to_square}；主观意图证据不足。"
+    )
+    result.played_move_analysis.problems = [f"评价{move.before.evaluation}变为{move.after.evaluation}。"]
+    result.played_move_analysis.evaluation_reason = "只确认评价变化与参考线。"
+    if move.actual_move_line:
+        result.played_move_analysis.continuation_phases = _model_phases(move.actual_move_line.moves, 1)
+        for phase in result.played_move_analysis.continuation_phases:
+            phase.phase = "PV"
+            phase.explanation = "按PV顺序参考。"
+    result.played_move_analysis.resulting_position = _very_short_result_position(move.actual_move_line)
+    result.weaknesses.white = []
+    result.weaknesses.black = []
+    for line, source in zip(result.candidate_lines, move.candidate_lines):
+        first = source.moves[0] if source.moves else None
+        if first:
+            line.direct_purpose = f"{first.piece}从{first.from_square}到{first.to_square}。"
+        line.continuation_phases = _model_phases(source.moves, 1)
+        for phase in line.continuation_phases:
+            phase.phase = "PV"
+            phase.explanation = "按PV顺序参考。"
+        line.resulting_position = _very_short_result_position(source)
+    result.comparison.main_difference = "三线首着、顺序与评价不同。"
+    result.comparison.why_first_line_is_best = "第一线由Stockfish排首位。"
+    return result
+
+
+def _model_phases(moves: list[Any], count: int) -> list[Any]:
+    from .models import ProfessionalContinuationPhase
+
+    return [ProfessionalContinuationPhase.model_validate(item) for item in _safe_phases(moves, count)]
+
+
+def _short_result_position(line: Any) -> str:
+    if line is None:
+        return "没有可用续算终点。"
+    facts = line.resulting_position_facts
+    difference = facts.material.get("valueDifferenceWhiteMinusBlack", 0) if facts else "未知"
+    return f"参考线终点已验证，白减黑子力差{difference}。"
+
+
+def _very_short_result_position(line: Any) -> str:
+    if line is None:
+        return "无续算终点。"
+    facts = line.resulting_position_facts
+    difference = facts.material.get("valueDifferenceWhiteMinusBlack", 0) if facts else "未知"
+    return f"终点子力差{difference}。"
 
 
 def _safe_phases(moves: list[Any], count: int) -> list[dict[str, Any]]:
@@ -612,6 +875,17 @@ def _usage(results: list[ChatResult]) -> ProfessionalAnalysisUsage:
         elapsed_ms=sum(result.elapsed_ms for result in results),
         attempts=len(results),
     )
+
+
+def _compact_validation_errors(errors: list[str]) -> list[str]:
+    compact: list[str] = []
+    for error in errors:
+        normalized = " ".join(str(error).split())[:240]
+        if normalized and normalized not in compact:
+            compact.append(normalized)
+        if len(compact) == 12:
+            break
+    return compact or ["返回结构未通过校验，请严格按契约重新生成"]
 
 
 def _optional_int(value: Any) -> int | None:

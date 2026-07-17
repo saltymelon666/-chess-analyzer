@@ -1,4 +1,5 @@
 import asyncio
+import json
 from unittest.mock import AsyncMock
 
 import chess
@@ -12,7 +13,9 @@ from app.models import (
     ComplexityFactors,
     EvaluationSnapshot,
     GeneratedProfessionalAnalysis,
+    EvidenceFact,
     MoveReview,
+    ProfessionalComplexity,
     ProfessionalAnalysisUsage,
 )
 from app.position_facts import extract_position_facts
@@ -21,13 +24,17 @@ from app.professional_analysis import (
     PROFESSIONAL_PROMPT_VERSION,
     PROFESSIONAL_TOKEN_LIMITS,
     ProfessionalAnalysisService,
+    build_professional_payload,
     build_safe_professional_analysis,
     compute_professional_complexity,
     professional_cache_key,
+    professional_user_prompt,
 )
 from app.professional_validation import (
     LENGTH_RANGES,
+    _narrative_length,
     build_validation_context,
+    parse_professional_analysis,
     validate_professional_analysis,
 )
 
@@ -258,3 +265,158 @@ def test_professional_api_cache_uses_fact_hash_without_second_service_call(monke
     assert first.json()["cached"] is False
     assert second.json()["cached"] is True
     assert fake.calls == 1
+
+
+def test_compact_prompt_keeps_complete_contract_without_full_pydantic_schema() -> None:
+    move = professional_review()
+    complexity = compute_professional_complexity(move)
+    context = build_validation_context(move, complexity.level)
+    prompt = professional_user_prompt(
+        build_professional_payload(move, complexity, context.allowed_evidence_ids),
+        complexity.level,
+    )
+    assert len(prompt) < 105_000
+    assert '"promptVersion":"professional-v4"' in prompt
+    assert '"playedMoveAnalysis"' in prompt
+    assert '"candidateLines"' in prompt
+    assert "$defs" not in prompt
+
+
+@pytest.mark.asyncio
+async def test_retry_reports_compact_errors_without_echoing_untrusted_output() -> None:
+    move = professional_review()
+    marker = "UNTRUSTED_OUTPUT_MUST_NOT_BE_ECHOED"
+    service = ProfessionalAnalysisService(
+        api_key="test", base_url="https://example.invalid", model="test", timeout_seconds=1
+    )
+    service._chat = AsyncMock(
+        return_value=ChatResult(
+            content=json.dumps({"not": "the schema", "marker": marker}),
+            prompt_tokens=10,
+            completion_tokens=5,
+            total_tokens=15,
+            elapsed_ms=20,
+        )
+    )
+    result = await service.analyze(move)
+    retry_prompt = service._chat.await_args_list[1].kwargs["prompt"]
+    assert marker not in retry_prompt
+    assert "上一次返回未通过程序校验" in retry_prompt
+    assert result.validation_warnings
+
+
+@pytest.mark.asyncio
+async def test_professional_chat_explicitly_disables_thinking_mode(monkeypatch) -> None:
+    captured: dict = {}
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            return {
+                "choices": [{"message": {"content": "{}"}}],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+            }
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, traceback) -> None:
+            return None
+
+        async def post(self, url, *, headers, json):
+            captured.update(json)
+            return FakeResponse()
+
+    monkeypatch.setattr("app.professional_analysis.httpx.AsyncClient", lambda timeout: FakeClient())
+    service = ProfessionalAnalysisService(
+        api_key="test", base_url="https://example.invalid", model="test", timeout_seconds=1
+    )
+    await service._chat(system="system", prompt="json", max_tokens=100, temperature=0.1)
+    assert captured["thinking"] == {"type": "disabled"}
+    assert captured["response_format"] == {"type": "json_object"}
+
+
+@pytest.mark.parametrize("level", ["simple", "normal", "complex"])
+def test_safe_fallback_respects_length_band_and_all_validators(level: str) -> None:
+    move = professional_review()
+    complexity = ProfessionalComplexity(level=level, reasons=["固定测试"])
+    analysis = build_safe_professional_analysis(move, complexity)
+    length = _narrative_length(analysis.model_dump(by_alias=True))
+    assert LENGTH_RANGES[level][0] <= length <= LENGTH_RANGES[level][1]
+    assert validate_professional_analysis(analysis, build_validation_context(move, level)) == []
+
+
+def test_nested_extra_fields_are_rejected_in_strict_json() -> None:
+    move = professional_review()
+    complexity = compute_professional_complexity(move)
+    payload = build_safe_professional_analysis(move, complexity).model_dump(by_alias=True)
+    payload["positionAssessment"]["kingSafety"]["unexpected"] = "hallucinated"
+    parsed, errors = parse_professional_analysis(json.dumps(payload, ensure_ascii=False))
+    assert parsed is None
+    assert errors
+
+
+def test_fact_squares_are_allowed_even_when_they_are_empty_in_starting_fen() -> None:
+    move = professional_review()
+    fact = EvidenceFact(
+        id="fact:test:empty-target:h3",
+        category="verified_target",
+        side="white",
+        description="结构化事实明确涉及h3格",
+        evidence=["固定事实"],
+        squares=["h3"],
+    )
+    move.position_facts.piece_activity.append(fact)
+    move.allowed_squares = [square for square in move.allowed_squares if square != "h3"]
+    complexity = compute_professional_complexity(move)
+    context = build_validation_context(move, complexity.level)
+    assert "h3" in context.allowed_squares
+    analysis = build_safe_professional_analysis(move, complexity)
+    analysis.position_assessment.piece_activity.description += "；结构化事实涉及h3格。"
+    analysis.position_assessment.piece_activity.evidence_refs.append(fact.id)
+    errors = validate_professional_analysis(analysis, context, enforce_length=False)
+    assert not any("事实包之外的格子" in error for error in errors)
+
+
+def test_validator_rejects_wrong_side_and_cross_route_evidence() -> None:
+    move = professional_review()
+    complexity = compute_professional_complexity(move)
+    context = build_validation_context(move, complexity.level)
+    analysis = build_safe_professional_analysis(move, complexity)
+    black_king_ref = next(
+        fact.id for fact in move.position_facts.king_safety if fact.side == "black"
+    )
+    analysis.position_assessment.king_safety.white.evidence_refs = [black_king_ref]
+    analysis.candidate_lines[0].evidence_refs = [move.candidate_lines[1].id]
+    analysis.candidate_lines[0].continuation_phases[0].evidence_refs = [
+        move.candidate_lines[1].moves[0].id
+    ]
+    errors = validate_professional_analysis(analysis, context, enforce_length=False)
+    assert any("white王安全" in error for error in errors)
+    assert any("候选路线1没有引用自身路线证据" in error for error in errors)
+    assert any("候选路线1的阶段没有引用自身PV证据" in error for error in errors)
+
+
+def test_complexity_thresholds_produce_simple_normal_and_complex() -> None:
+    simple = professional_review()
+    simple.candidate_lines = simple.candidate_lines[:1]
+    simple.position_facts.immediate_checks = []
+    simple.position_facts.immediate_captures = []
+    simple.position_facts.threats = []
+    simple.position_facts.piece_activity = []
+    simple.position_facts.pawn_structure = []
+    simple.complexity_factors.evaluation_swing_cp = 0
+    simple.complexity_factors.only_reasonable_move = False
+    assert compute_professional_complexity(simple).level == "simple"
+
+    normal = professional_review()
+    assert compute_professional_complexity(normal).level == "normal"
+
+    complex_move = simple.model_copy(deep=True)
+    complex_move.candidate_lines[0].mate_in = 2
+    complex_move.complexity_factors.evaluation_swing_cp = 250
+    complex_move.complexity_factors.only_reasonable_move = True
+    assert compute_professional_complexity(complex_move).level == "complex"

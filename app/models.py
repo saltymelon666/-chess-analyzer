@@ -260,11 +260,15 @@ class ProfessionalEvidenceText(BaseModel):
 
 
 class ProfessionalKingSafety(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     white: ProfessionalEvidenceText
     black: ProfessionalEvidenceText
 
 
 class ProfessionalPositionAssessment(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
     summary: str
     material: ProfessionalEvidenceText
     king_safety: ProfessionalKingSafety = Field(alias="kingSafety")
@@ -321,6 +325,8 @@ class ProfessionalPlan(BaseModel):
 
 
 class ProfessionalPlans(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     white: list[ProfessionalPlan] = Field(default_factory=list)
     black: list[ProfessionalPlan] = Field(default_factory=list)
 
@@ -334,6 +340,8 @@ class ProfessionalWeakness(BaseModel):
 
 
 class ProfessionalWeaknesses(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     white: list[ProfessionalWeakness] = Field(default_factory=list)
     black: list[ProfessionalWeakness] = Field(default_factory=list)
 

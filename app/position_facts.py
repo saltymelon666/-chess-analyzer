@@ -361,6 +361,29 @@ def _pawn_structure(board: chess.Board) -> list[EvidenceFact]:
                     )
                 )
 
+    locked_center_pairs: list[str] = []
+    locked_center_squares: list[str] = []
+    for file_index in (3, 4):
+        for white_square in board.pieces(chess.PAWN, chess.WHITE):
+            if chess.square_file(white_square) != file_index:
+                continue
+            black_square = white_square + 8
+            if black_square < 64 and board.piece_at(black_square) == chess.Piece(chess.PAWN, chess.BLACK):
+                white_name = chess.square_name(white_square)
+                black_name = chess.square_name(black_square)
+                locked_center_pairs.append(f"{white_name}-{black_name}")
+                locked_center_squares.extend((white_name, black_name))
+    if len(locked_center_pairs) >= 2:
+        facts.append(
+            EvidenceFact(
+                category="closed_center",
+                side=None,
+                description=f"中心由相互阻挡的兵链封闭：{'、'.join(locked_center_pairs)}",
+                evidence=["d/e线至少有两对白兵与正前方黑兵相互阻挡"],
+                squares=sorted(set(locked_center_squares)),
+            )
+        )
+
     for file_index, file_name in enumerate(chess.FILE_NAMES):
         white_count = all_pawn_files[chess.WHITE].get(file_index, 0)
         black_count = all_pawn_files[chess.BLACK].get(file_index, 0)
