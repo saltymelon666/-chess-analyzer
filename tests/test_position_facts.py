@@ -4,6 +4,7 @@ import chess
 import pytest
 
 from app.engine import StockfishService
+from app.game_review import _move_facts, _variation_moves
 from app.models import CandidateLine, MoveFacts, VariationMove
 from app.position_facts import extract_position_facts
 
@@ -109,3 +110,51 @@ def test_candidate_line_serializes_complete_route_metadata() -> None:
     assert payload["pv"][0]["fullMoveNumber"] == 1
     assert payload["pv"][0]["from"] == "e2"
     assert chess.Board(payload["resultingFen"]).is_valid()
+
+
+def test_closed_center_is_recorded_as_structured_evidence() -> None:
+    result = facts("4k3/8/8/3pp3/3PP3/8/8/4K3 w - - 0 1")
+    closed = next(item for item in result.pawn_structure if item.category == "closed_center")
+    assert set(closed.squares) == {"d4", "d5", "e4", "e5"}
+    assert closed.evidence
+
+
+def test_mate_route_becomes_verifiable_threat_fact() -> None:
+    fen = "6k1/8/6KQ/8/8/8/8/8 w - - 0 1"
+    board = chess.Board(fen)
+    move = chess.Move.from_uci("h6g7")
+    move_fact = _move_facts(board, move)
+    route, resulting_fen = _variation_moves(board, [move_fact])
+    route[0].id = "line:1:ply:1"
+    line = CandidateLine(
+        id="line:1",
+        rank=1,
+        depth=18,
+        centipawn=None,
+        mate_in=1,
+        first_move=move_fact,
+        moves=route,
+        resulting_fen=resulting_fen,
+    )
+    result = extract_position_facts(
+        fen,
+        candidate_lines=[line],
+        actual_move_line=None,
+        tactics=[],
+        namespace="mate-test",
+    )
+    mate_fact = next(
+        item for item in result.threats
+        if item.category == "route_event" and "将杀" in item.description
+    )
+    assert set(mate_fact.squares) == {"h6", "g7"}
+    assert mate_fact.id
+
+
+def test_undefended_piece_and_black_to_move_are_explicit() -> None:
+    result = facts("4k3/8/8/8/Q7/8/8/4K3 b - - 0 1")
+    assert result.side_to_move == "black"
+    assert any(
+        item.category == "undefended_piece" and item.side == "white" and "a4" in item.squares
+        for item in result.piece_activity
+    )

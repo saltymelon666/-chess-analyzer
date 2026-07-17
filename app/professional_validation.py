@@ -22,6 +22,7 @@ VAGUE_PHRASES = ("加强中心", "注意防守", "改善子力", "形成压力",
 class ProfessionalValidationContext:
     allowed_evidence_ids: set[str]
     evidence_sides: dict[str, str | None]
+    evidence_squares: dict[str, set[str]]
     allowed_squares: set[str]
     allowed_moves: set[str]
     played_moves: set[str]
@@ -34,7 +35,9 @@ class ProfessionalValidationContext:
     candidate_moves: dict[int, set[str]]
     candidate_first_moves: dict[int, set[str]]
     candidate_sequences: dict[int, list[tuple[str, str]]]
+    candidate_evidence_ids: dict[int, set[str]]
     pieces: dict[str, tuple[str, str]]
+    actual_evidence_ids: set[str]
     complexity: str
     allows_capture: bool
     allows_check: bool
@@ -54,17 +57,28 @@ def build_validation_context(move: MoveReview, complexity: str) -> ProfessionalV
         f"complexity:{move.index}": None,
         move.played_move.id or f"move:played:{move.index}": move.side,
     }
+    evidence_squares: dict[str, set[str]] = {
+        f"evaluation:before:{move.index}": set(),
+        f"evaluation:after:{move.index}": set(),
+        f"complexity:{move.index}": set(),
+        move.played_move.id or f"move:played:{move.index}": {
+            move.played_move.from_square,
+            move.played_move.to_square,
+        },
+    }
 
     def add_position(position: Any) -> None:
         material_id = str(position.material.get("id", ""))
         if material_id:
             evidence_ids.add(material_id)
             evidence_sides[material_id] = None
+            evidence_squares[material_id] = set()
         for piece in position.pieces:
             piece_id = piece.get("id", "")
             if piece_id:
                 evidence_ids.add(piece_id)
                 evidence_sides[piece_id] = piece.get("side")
+                evidence_squares[piece_id] = {piece.get("square", "")} - {""}
         for group in (
             position.piece_activity,
             position.king_safety,
@@ -76,27 +90,35 @@ def build_validation_context(move: MoveReview, complexity: str) -> ProfessionalV
                 if fact.id:
                     evidence_ids.add(fact.id)
                     evidence_sides[fact.id] = fact.side
+                    evidence_squares[fact.id] = set(fact.squares)
         for fact in (*position.immediate_checks, *position.immediate_captures):
             if fact.id:
                 evidence_ids.add(fact.id)
                 evidence_sides[fact.id] = "white" if fact.piece.startswith("white_") else "black"
+                evidence_squares[fact.id] = {fact.from_square, fact.to_square}
 
     add_position(move.position_facts)
     add_position(move.position_facts_after)
     candidate_moves: dict[int, set[str]] = {}
     candidate_first: dict[int, set[str]] = {}
     candidate_sequences: dict[int, list[tuple[str, str]]] = {}
+    candidate_evidence_ids: dict[int, set[str]] = {}
     all_variations = []
     for line in move.candidate_lines:
         evidence_ids.add(line.id)
         evidence_sides[line.id] = None
+        evidence_squares[line.id] = {
+            square for item in line.moves for square in (item.from_square, item.to_square)
+        }
         moves = {value for item in line.moves for value in (item.san, item.uci)}
         candidate_moves[line.rank] = moves
         candidate_first[line.rank] = {line.first_move.san, line.first_move.uci}
         candidate_sequences[line.rank] = [(item.san, item.uci) for item in line.moves]
+        candidate_evidence_ids[line.rank] = {line.id, *(item.id for item in line.moves)}
         for item in line.moves:
             evidence_ids.add(item.id)
             evidence_sides[item.id] = item.side
+            evidence_squares[item.id] = {item.from_square, item.to_square}
         all_variations.extend(line.moves)
         if line.resulting_position_facts:
             add_position(line.resulting_position_facts)
@@ -104,9 +126,14 @@ def build_validation_context(move: MoveReview, complexity: str) -> ProfessionalV
     actual_moves: set[str] = set()
     actual_first: set[str] = set()
     actual_sequence: list[tuple[str, str]] = []
+    actual_evidence_ids: set[str] = set()
     if move.actual_move_line:
         evidence_ids.add(move.actual_move_line.id)
         evidence_sides[move.actual_move_line.id] = None
+        evidence_squares[move.actual_move_line.id] = {
+            square for item in move.actual_move_line.moves for square in (item.from_square, item.to_square)
+        }
+        actual_evidence_ids.add(move.actual_move_line.id)
         actual_moves = {
             value for item in move.actual_move_line.moves for value in (item.san, item.uci)
         }
@@ -115,6 +142,8 @@ def build_validation_context(move: MoveReview, complexity: str) -> ProfessionalV
         for item in move.actual_move_line.moves:
             evidence_ids.add(item.id)
             evidence_sides[item.id] = item.side
+            evidence_squares[item.id] = {item.from_square, item.to_square}
+            actual_evidence_ids.add(item.id)
         all_variations.extend(move.actual_move_line.moves)
         if move.actual_move_line.resulting_position_facts:
             add_position(move.actual_move_line.resulting_position_facts)
@@ -124,6 +153,8 @@ def build_validation_context(move: MoveReview, complexity: str) -> ProfessionalV
         for piece in move.position_facts.pieces
     }
     allowed_squares = set(move.allowed_squares) | set(pieces)
+    for squares in evidence_squares.values():
+        allowed_squares.update(squares)
     for item in all_variations:
         allowed_squares.update((item.from_square, item.to_square))
     allowed_moves = set(move.allowed_moves) | actual_moves
@@ -135,6 +166,7 @@ def build_validation_context(move: MoveReview, complexity: str) -> ProfessionalV
     return ProfessionalValidationContext(
         allowed_evidence_ids=evidence_ids,
         evidence_sides=evidence_sides,
+        evidence_squares=evidence_squares,
         allowed_squares=allowed_squares,
         allowed_moves=allowed_moves,
         played_moves={move.played_move.san, move.played_move.uci},
@@ -147,7 +179,9 @@ def build_validation_context(move: MoveReview, complexity: str) -> ProfessionalV
         candidate_moves=candidate_moves,
         candidate_first_moves=candidate_first,
         candidate_sequences=candidate_sequences,
+        candidate_evidence_ids=candidate_evidence_ids,
         pieces=pieces,
+        actual_evidence_ids=actual_evidence_ids,
         complexity=complexity,
         allows_capture=allows_capture,
         allows_check=allows_check,
@@ -213,6 +247,15 @@ def validate_professional_analysis(
             errors.append(f"关键棋子{item.side}_{item.piece}@{item.square}不存在于走棋前FEN")
         if not _refs_support_side(item.evidence_refs, item.side, context):
             errors.append(f"关键棋子{item.square}的证据与颜色不符")
+        if not _refs_support_square(item.evidence_refs, item.square, context):
+            errors.append(f"关键棋子{item.square}的证据没有指向该格")
+
+    for side, assessment in (
+        ("white", analysis.position_assessment.king_safety.white),
+        ("black", analysis.position_assessment.king_safety.black),
+    ):
+        if not _refs_support_side(assessment.evidence_refs, side, context, allow_neutral=True):
+            errors.append(f"{side}王安全结论的证据颜色不符")
 
     if analysis.played_move_analysis.move not in context.played_moves:
         errors.append("playedMoveAnalysis.move不等于实际走法")
@@ -237,6 +280,8 @@ def validate_professional_analysis(
         errors.append("strongestResponse不在实战走法后的Stockfish路线中")
     for phase in analysis.played_move_analysis.continuation_phases:
         errors.extend(_validate_phase_moves(phase.moves, context.actual_line_moves, "实战续算"))
+        if phase.moves and not set(phase.evidence_refs).intersection(context.actual_evidence_ids):
+            errors.append("实战续算阶段没有引用对应Stockfish路线证据")
     errors.extend(
         _validate_phase_sequence(
             [move for phase in analysis.played_move_analysis.continuation_phases for move in phase.moves],
@@ -273,8 +318,13 @@ def validate_professional_analysis(
             continue
         if line.first_move not in context.candidate_first_moves[line.rank]:
             errors.append(f"候选路线{line.rank}的firstMove与Stockfish不符")
+        route_evidence = context.candidate_evidence_ids[line.rank]
+        if not set(line.evidence_refs).intersection(route_evidence):
+            errors.append(f"候选路线{line.rank}没有引用自身路线证据")
         for phase in line.continuation_phases:
             errors.extend(_validate_phase_moves(phase.moves, context.candidate_moves[line.rank], f"候选路线{line.rank}"))
+            if phase.moves and not set(phase.evidence_refs).intersection(route_evidence):
+                errors.append(f"候选路线{line.rank}的阶段没有引用自身PV证据")
         errors.extend(
             _validate_phase_sequence(
                 [move for phase in line.continuation_phases for move in phase.moves],
@@ -310,6 +360,18 @@ def validate_professional_analysis(
             elif not _refs_support_side(plan.evidence_refs, side, context, allow_neutral=True):
                 errors.append(f"{side}计划只引用了对方证据")
 
+    for side, weaknesses in (("white", analysis.weaknesses.white), ("black", analysis.weaknesses.black)):
+        for weakness in weaknesses:
+            if not _refs_support_side(weakness.evidence_refs, side, context):
+                errors.append(f"{side}弱点的证据颜色不符")
+
+    for threat in analysis.threats:
+        if not _refs_support_side(threat.evidence_refs, threat.side, context, allow_neutral=True):
+            errors.append(f"{threat.side}威胁的证据颜色不符")
+        target_squares = _mentioned_squares(threat.target)
+        if target_squares and not _refs_support_any_square(threat.evidence_refs, target_squares, context):
+            errors.append(f"{threat.side}威胁目标没有对应证据")
+
     for side in ("white", "black"):
         count = sum(1 for item in analysis.key_pieces if item.side == side)
         if not 1 <= count <= 3:
@@ -317,10 +379,15 @@ def validate_professional_analysis(
 
     danger = analysis.main_danger
     if danger.side_in_danger != "none":
-        has_concrete_square = bool(re.search(r"(?<![A-Za-z0-9])[a-h][1-8](?![A-Za-z0-9])", danger.description))
+        danger_squares = _mentioned_squares(danger.description)
+        has_concrete_square = bool(danger_squares)
         has_piece = bool(re.search(r"(?:白|黑)(?:兵|马|象|车|后|王)|(?:pawn|knight|bishop|rook|queen|king)", danger.description, re.IGNORECASE))
         if not (has_concrete_square and has_piece):
             errors.append("mainDanger没有同时指出具体棋子和格子")
+        if len(danger_squares) < 2:
+            errors.append("mainDanger没有同时指出来源格和目标格")
+        if danger_squares and not _refs_support_any_square(danger.evidence_refs, danger_squares, context):
+            errors.append("mainDanger提到的格子没有对应证据")
         if len(danger.consequence.strip()) < 6:
             errors.append("mainDanger没有说明不处理的后果")
     if not danger.evidence_refs:
@@ -420,6 +487,35 @@ def _refs_support_side(
     if side in sides:
         return True
     return allow_neutral and None in sides and (not ({"white", "black"} - {side}).intersection(sides))
+
+
+def _refs_support_square(
+    refs: list[str],
+    square: str,
+    context: ProfessionalValidationContext,
+) -> bool:
+    normalized = square.lower()
+    return any(normalized in {item.lower() for item in context.evidence_squares.get(ref, set())} for ref in refs)
+
+
+def _refs_support_any_square(
+    refs: list[str],
+    squares: set[str],
+    context: ProfessionalValidationContext,
+) -> bool:
+    supported = {
+        square.lower()
+        for ref in refs
+        for square in context.evidence_squares.get(ref, set())
+    }
+    return bool({square.lower() for square in squares}.intersection(supported))
+
+
+def _mentioned_squares(text: str) -> set[str]:
+    return {
+        item.lower()
+        for item in re.findall(r"(?<![A-Za-z0-9])([a-h][1-8])(?![A-Za-z0-9])", text, re.IGNORECASE)
+    }
 
 
 def _is_concrete(sentence: str, context: ProfessionalValidationContext) -> bool:
