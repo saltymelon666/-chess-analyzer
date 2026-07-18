@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -152,10 +153,7 @@ class ProfessionalAnalysisService:
                 resolved_validation_ms = round((time.perf_counter() - resolved_started) * 1000)
                 validation_ms += resolved_validation_ms
                 attempt_validation_ms += resolved_validation_ms
-                last_issues.extend(
-                    DraftValidationIssue("resolvedAnalysis", "其他原因", error)
-                    for error in resolved_errors
-                )
+                last_issues.extend(_resolved_validation_issue(error) for error in resolved_errors)
             accepted = parsed is not None and not last_issues
             all_issues.extend(last_issues)
             if diagnostics is not None:
@@ -1070,6 +1068,16 @@ def _usage(
         validation_ms=validation_ms,
         postprocess_ms=postprocess_ms,
     )
+
+
+def _resolved_validation_issue(error: str) -> DraftValidationIssue:
+    path, separator, message = error.partition(": ")
+    if separator and re.fullmatch(
+        r"\$?(?:[A-Za-z_][A-Za-z0-9_]*)(?:\.[A-Za-z_][A-Za-z0-9_]*|\[\d+\])*",
+        path,
+    ):
+        return DraftValidationIssue(path, "其他原因", message)
+    return DraftValidationIssue("resolvedAnalysis", "其他原因", error)
 
 
 def _compact_validation_errors(errors: list[str]) -> list[str]:

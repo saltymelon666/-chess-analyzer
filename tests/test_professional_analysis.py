@@ -460,6 +460,14 @@ def test_reference_draft_reports_precise_paths_for_invalid_refs() -> None:
     assert any(issue.path == "plans.black[0].evidenceRefs" and issue.category == "黑白说反" for issue in issues)
 
 
+def test_resolved_validation_errors_keep_their_field_path() -> None:
+    from app.professional_analysis import _resolved_validation_issue
+
+    issue = _resolved_validation_issue("mainDanger.description: 没有同时指出具体棋子和格子")
+    assert issue.path == "mainDanger.description"
+    assert issue.message == "没有同时指出具体棋子和格子"
+
+
 def test_reference_draft_allows_only_board_literals_already_present_in_facts() -> None:
     move = professional_review()
     context = build_validation_context(move, "normal")

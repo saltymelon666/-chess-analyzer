@@ -383,15 +383,15 @@ def validate_professional_analysis(
         has_concrete_square = bool(danger_squares)
         has_piece = bool(re.search(r"(?:白|黑)(?:兵|马|象|车|后|王)|(?:pawn|knight|bishop|rook|queen|king)", danger.description, re.IGNORECASE))
         if not (has_concrete_square and has_piece):
-            errors.append("mainDanger没有同时指出具体棋子和格子")
+            errors.append("mainDanger.description: 没有同时指出具体棋子和格子")
         if len(danger_squares) < 2:
-            errors.append("mainDanger没有同时指出来源格和目标格")
+            errors.append("mainDanger.description: 没有同时指出来源格和目标格")
         if danger_squares and not _refs_support_any_square(danger.evidence_refs, danger_squares, context):
-            errors.append("mainDanger提到的格子没有对应证据")
+            errors.append("mainDanger.evidenceRefs: 提到的格子没有对应证据")
         if len(danger.consequence.strip()) < 6:
-            errors.append("mainDanger没有说明不处理的后果")
+            errors.append("mainDanger.consequence: 没有说明不处理的后果")
     if not danger.evidence_refs:
-        errors.append("mainDanger没有证据")
+        errors.append("mainDanger.evidenceRefs: 没有证据")
 
     for phrase in VAGUE_PHRASES:
         found = False

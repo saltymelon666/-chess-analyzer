@@ -350,15 +350,15 @@
     "issues": [
       {
         "attempt": 1,
-        "path": "resolvedAnalysis",
+        "path": "mainDanger.description",
         "category": "其他原因",
-        "message": "mainDanger没有同时指出具体棋子和格子"
+        "message": "没有同时指出具体棋子和格子"
       },
       {
         "attempt": 1,
-        "path": "resolvedAnalysis",
+        "path": "mainDanger.description",
         "category": "其他原因",
-        "message": "mainDanger没有同时指出来源格和目标格"
+        "message": "没有同时指出来源格和目标格"
       }
     ],
     "normalizations": [

@@ -9,6 +9,7 @@
 - 第一次：`candidateLines[*].firstMove / continuationPhases[*].moves` 出现不属于三条 Stockfish 路线的 `Bxh7+`、`Qxc3`、`Qxh2+`；`playedMoveAnalysis.positiveEffects` 把实战走法写成未验证吃子；`weaknesses.white[*].evidenceRefs` 引用了错误一方；`mainDanger` 缺少来源格和目标格，且描述了事实包中不存在的将军；正文 2,259 字，超过复杂局面上限。
 - 第二次：多个 `evidenceRefs` 使用不存在的 `centipawnLoss:103` 和 `fact:move-1-after:key:pv_key_piece:black:c7`；候选路线中出现 `Bxe7`、`Bxh7+`、`Qxh2+`、`Rxb7`、`Rxh6`；`keyPieces[*]` 声称存在局面前 FEN 中没有的 `white_bishop@g5`；`weaknesses.white[*].evidenceRefs` 黑白说反；再次描述不存在的将军；正文 2,260 字。
 - 安全回退曾把结果 FEN 的一段 `p7` 误判成棋盘格；现已停止把结果 FEN写入正文，只保留结构化结果事实。
+- 历史生产日志只保留到字段组和错误值，没有保留上述数组项的原始下标；报告使用 `[*]` 标记这一事实，不虚构无法恢复的索引。新验证流程会为每次尝试保存完整字段路径。
 
 ## 优化方案
 
@@ -58,8 +59,8 @@
 
 ## 原始输出校验明细
 
-- `closed-1` attempt 1 `resolvedAnalysis` / 其他原因：mainDanger没有同时指出具体棋子和格子
-- `closed-1` attempt 1 `resolvedAnalysis` / 其他原因：mainDanger没有同时指出来源格和目标格
+- `closed-1` attempt 1 `mainDanger.description` / 其他原因：没有同时指出具体棋子和格子
+- `closed-1` attempt 1 `mainDanger.description` / 其他原因：没有同时指出来源格和目标格
 
 ## 安全字面量归一化
 
