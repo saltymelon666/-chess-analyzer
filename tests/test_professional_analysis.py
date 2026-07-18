@@ -17,6 +17,7 @@ from app.models import (
     MoveReview,
     ProfessionalComplexity,
     ProfessionalAnalysisUsage,
+    ProfessionalAnalysisDraft,
 )
 from app.position_facts import extract_position_facts
 from app.professional_analysis import (
@@ -36,6 +37,12 @@ from app.professional_validation import (
     build_validation_context,
     parse_professional_analysis,
     validate_professional_analysis,
+)
+from app.professional_refs import (
+    build_reference_payload,
+    normalize_professional_draft_literals,
+    resolve_professional_draft,
+    validate_professional_draft,
 )
 
 
@@ -275,11 +282,229 @@ def test_compact_prompt_keeps_complete_contract_without_full_pydantic_schema() -
         build_professional_payload(move, complexity, context.allowed_evidence_ids),
         complexity.level,
     )
-    assert len(prompt) < 105_000
-    assert '"promptVersion":"professional-v4"' in prompt
+    assert len(prompt) < 30_000
+    assert '"v":"professional-v5-refs"' in prompt
     assert '"playedMoveAnalysis"' in prompt
     assert '"candidateLines"' in prompt
+    assert '"pieceRef"' in prompt
+    assert '"lineRef"' in prompt
+    assert '"plyRefs"' in prompt
+    assert '"positionAfter"' not in prompt
+    assert '"allowedEvidenceIds"' not in prompt
+    assert '"allowedMoves"' not in prompt
+    assert '"uci"' not in prompt
     assert "$defs" not in prompt
+
+
+def _valid_reference_draft(move: MoveReview) -> ProfessionalAnalysisDraft:
+    payload = build_reference_payload(move, "normal", ["fixed test"])
+    pieces = payload["pos"]["pieces"]
+    facts = payload["pos"]["facts"]
+    routes = payload["lines"]
+    actual = payload["actual"]["plies"]
+
+    material_ref = next(item["id"] for item in facts if item["kind"] == "material")
+
+    def side_fact(side: str) -> str:
+        return next(
+            (
+                item["id"]
+                for item in facts
+                if item.get("side") in {side, "neutral", None}
+            ),
+            material_ref,
+        )
+
+    def side_piece(side: str) -> dict:
+        return next(item for item in pieces if item["side"] == side and item["piece"] != "pawn")
+
+    def side_ply(side: str) -> str:
+        return next(
+            ply["id"]
+            for route in routes
+            for ply in route["plies"]
+            if ply["side"] == side
+        )
+
+    danger_ply = routes[0]["plies"][0]
+    white_piece = side_piece("white")
+    black_piece = side_piece("black")
+
+    return ProfessionalAnalysisDraft.model_validate(
+        {
+            "complexity": "normal",
+            "positionAssessment": {
+                "summary": "局面保持平衡，双方都需要先完成发展。",
+                "material": {"explanation": "物质没有明显差距。", "evidenceRefs": [material_ref]},
+                "kingSafety": {
+                    "white": {"explanation": "白方需要继续保护王。", "evidenceRefs": [side_fact("white")]},
+                    "black": {"explanation": "黑方也需要继续保护王。", "evidenceRefs": [side_fact("black")]},
+                },
+                "pieceActivity": {"explanation": "子力发展决定主动权。", "evidenceRefs": [material_ref]},
+                "pawnStructure": {"explanation": "兵形暂时没有明显弱点。", "evidenceRefs": [material_ref]},
+            },
+            "mainDanger": {
+                "level": "short_term",
+                "dangerRef": danger_ply["id"],
+                "explanation": "首要危险来自候选路线第一步造成的节奏变化。",
+                "consequence": "若忽略这个变化，对手会取得主动。",
+                "evidenceRefs": [danger_ply["id"]],
+            },
+            "keyPieces": {
+                "white": {
+                    "pieceRef": white_piece["id"],
+                    "role": "负责协调白方子力并支持下一步计划。",
+                    "futureTask": "它的活动会影响白方能否顺利发展。",
+                    "evidenceRefs": [white_piece["id"]],
+                },
+                "black": {
+                    "pieceRef": black_piece["id"],
+                    "role": "负责协调黑方子力并限制对手计划。",
+                    "futureTask": "它的部署会影响黑方的反击速度。",
+                    "evidenceRefs": [black_piece["id"]],
+                },
+            },
+            "plans": {
+                "white": [
+                    {
+                        "strategyTag": "center_control",
+                        "explanation": "白方先改善子力协调，再争取主动。",
+                        "requiredPreparation": "减少未发展子力并保持中心控制。",
+                        "evidenceRefs": [side_ply("white")],
+                    }
+                ],
+                "black": [
+                    {
+                        "strategyTag": "center_control",
+                        "explanation": "黑方先完成发展，再寻找反击时机。",
+                        "requiredPreparation": "让子力互相保护并准备争夺中心。",
+                        "evidenceRefs": [side_ply("black")],
+                    }
+                ],
+            },
+            "playedMoveAnalysis": {
+                "moveRef": payload["played"]["ref"],
+                "intention": "实战走法合理地推进了当前计划。",
+                "positiveEffects": ["它改善了白方的中心影响力。"],
+                "problems": ["仍需注意对手的直接反击。"],
+                "strongestReplyRef": actual[0]["id"],
+                "plyRefs": [item["id"] for item in actual],
+                "continuationExplanation": "双方围绕发展和中心继续调整。",
+                "errorType": "none",
+                "evidenceRefs": [payload["played"]["ref"]],
+            },
+            "candidateLines": [
+                {
+                    "lineRef": route["id"],
+                    "strategyTags": ["center_control"],
+                    "directPurpose": "这条路线用自然发展保持局面稳定。",
+                    "advantages": ["行动顺序清楚并有事实路线支持。"],
+                    "risks": ["仍要检查对手下一步的强制回应。"],
+                    "plyRefs": [item["id"] for item in route["plies"]],
+                    "continuationExplanation": "路线展示了双方最直接的应对顺序。",
+                    "evidenceRefs": [route["id"]],
+                }
+                for route in routes
+            ],
+            "comparison": {
+                "mainDifference": "最佳路线更快改善协调，实战路线保留了更多变化。",
+                "whyFirstLineIsBest": "第一路线减少了对手反击并保持行动连续。",
+                "evidenceRefs": [routes[0]["id"], payload["actual"]["id"]],
+            },
+        }
+    )
+def test_reference_draft_resolves_ids_without_model_generated_board_literals() -> None:
+    move = professional_review()
+    draft = _valid_reference_draft(move)
+    context = build_validation_context(move, "normal")
+    assert validate_professional_draft(draft, move, context) == []
+
+    resolved = resolve_professional_draft(draft, move, context)
+    assert validate_professional_analysis(resolved, context, enforce_length=False) == []
+    assert resolved.key_pieces[0].square in move.pieces_before
+    assert [item.rank for item in resolved.candidate_lines] == [1, 2, 3]
+    assert resolved.candidate_lines[0].first_move == move.candidate_lines[0].first_move.san
+
+
+def test_reference_resolver_removes_unverified_event_words_before_final_validation() -> None:
+    move = professional_review()
+    payload = _valid_reference_draft(move).model_dump(by_alias=True)
+    payload["plans"]["white"][0]["explanation"] = "准备将杀并通过吃子扩大优势。"
+    draft = ProfessionalAnalysisDraft.model_validate(payload)
+    context = build_validation_context(move, "normal")
+
+    resolved = resolve_professional_draft(draft, move, context)
+    assert "将杀" not in resolved.plans.white[0].description
+    assert "吃子" not in resolved.plans.white[0].description
+    assert validate_professional_analysis(resolved, context, enforce_length=False) == []
+
+
+def test_reference_draft_reports_precise_paths_for_invalid_refs() -> None:
+    move = professional_review()
+    payload = _valid_reference_draft(move).model_dump(by_alias=True)
+    payload["keyPieces"]["white"]["pieceRef"] = "piece:not-real"
+    payload["candidateLines"][1]["lineRef"] = "line:not-real"
+    payload["plans"]["black"][0]["evidenceRefs"] = [
+        next(
+            item.id
+            for line in move.candidate_lines
+            for item in line.moves
+            if item.side == "white"
+        )
+    ]
+    draft = ProfessionalAnalysisDraft.model_validate(payload)
+    issues = validate_professional_draft(draft, move, build_validation_context(move, "normal"))
+
+    assert any(issue.path == "keyPieces.white.pieceRef" and issue.category == "不存在的棋子" for issue in issues)
+    assert any(issue.path == "candidateLines[1].lineRef" and issue.category == "不属于Stockfish的走法" for issue in issues)
+    assert any(issue.path == "plans.black[0].evidenceRefs" and issue.category == "黑白说反" for issue in issues)
+
+
+def test_reference_draft_allows_only_board_literals_already_present_in_facts() -> None:
+    move = professional_review()
+    context = build_validation_context(move, "normal")
+    payload = _valid_reference_draft(move).model_dump(by_alias=True)
+    payload["positionAssessment"]["summary"] += " 已有事实中的d4可以被复述。"
+    allowed = ProfessionalAnalysisDraft.model_validate(payload)
+    assert not any(
+        issue.category in {"不存在的格子", "不属于Stockfish的走法"}
+        for issue in validate_professional_draft(allowed, move, context)
+    )
+
+    payload["positionAssessment"]["summary"] += " 但z9和Qh5不是有效事实。"
+    invalid = ProfessionalAnalysisDraft.model_validate(payload)
+    issues = validate_professional_draft(invalid, move, context)
+    assert any(issue.path == "positionAssessment.summary" and "z9" in issue.message for issue in issues)
+    assert any(issue.path == "positionAssessment.summary" and "Qh5" in issue.message for issue in issues)
+
+
+def test_reference_literal_normalizer_removes_hallucinated_board_tokens_then_revalidates() -> None:
+    move = professional_review()
+    context = build_validation_context(move, "normal")
+    payload = _valid_reference_draft(move).model_dump(by_alias=True)
+    payload["plans"]["white"][0]["explanation"] = "计划把子力放到z9并走Qh5或e2e5。"
+    draft = ProfessionalAnalysisDraft.model_validate(payload)
+
+    normalized, changes = normalize_professional_draft_literals(draft, move, context)
+    assert {item.path for item in changes} == {"plans.white[0].explanation"}
+    assert "z9" not in normalized.plans.white[0].explanation
+    assert "Qh5" not in normalized.plans.white[0].explanation
+    assert "e2e5" not in normalized.plans.white[0].explanation
+    assert validate_professional_draft(normalized, move, context) == []
+
+
+def test_reference_payload_deduplicates_facts_and_excludes_internal_fields() -> None:
+    move = professional_review()
+    payload = build_reference_payload(move, "normal", ["fixed test"])
+    serialized = json.dumps(payload, ensure_ascii=False)
+    fact_ids = [item["id"] for item in payload["pos"]["facts"]]
+
+    assert len(fact_ids) == len(set(fact_ids))
+    assert "positionAfter" not in serialized
+    assert "allowedEvidenceIds" not in serialized
+    assert "legalMoves" not in serialized
+    assert '"uci"' not in serialized
+    assert all(len(line["plies"]) <= 10 for line in payload["lines"])
 
 
 @pytest.mark.asyncio

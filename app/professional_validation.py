@@ -216,7 +216,7 @@ def validate_professional_analysis(
     if invalid_refs:
         errors.append("出现不存在的evidenceRefs：" + "、".join(invalid_refs))
 
-    all_text = "\n".join(_all_strings(payload))
+    all_text = "\n".join(_all_prose_strings(payload))
     malformed = sorted(set(re.findall(r"(?<![A-Za-z0-9])([A-Za-z][0-9])(?![A-Za-z0-9])", all_text)))
     malformed = [
         item for item in malformed
@@ -394,18 +394,24 @@ def validate_professional_analysis(
         errors.append("mainDanger没有证据")
 
     for phrase in VAGUE_PHRASES:
-        for sentence in re.findall(r"[^。！？\n]*" + re.escape(phrase) + r"[^。！？\n]*", all_text):
-            if not _is_concrete(sentence, context):
-                errors.append(f"空泛结论“{phrase}”缺少棋子、格子或路线说明")
+        found = False
+        for path, value in _all_strings_with_paths(payload):
+            for sentence in re.findall(r"[^。！？\n]*" + re.escape(phrase) + r"[^。！？\n]*", value):
+                if not _is_concrete(sentence, context):
+                    errors.append(f"{path}: 空泛结论“{phrase}”缺少棋子、格子或路线说明")
+                    found = True
+                    break
+            if found:
                 break
 
-    positive_text = _remove_negated_events(all_text)
-    if re.search(r"吃子|吃掉|捕获|拿掉", positive_text) and not context.allows_capture:
-        errors.append("描述了结构化数据中不存在的吃子")
-    if re.search(r"将杀|绝杀", positive_text) and not context.allows_checkmate:
-        errors.append("描述了结构化数据中不存在的将杀")
-    if "将军" in positive_text and not context.allows_check:
-        errors.append("描述了结构化数据中不存在的将军")
+    for path, value in _all_strings_with_paths(payload):
+        positive_text = _remove_negated_events(value)
+        if re.search(r"吃子|吃掉|捕获|拿掉", positive_text) and not context.allows_capture:
+            errors.append(f"{path}: 描述了结构化数据中不存在的吃子")
+        if re.search(r"将杀|绝杀", positive_text) and not context.allows_checkmate:
+            errors.append(f"{path}: 描述了结构化数据中不存在的将杀")
+        if "将军" in positive_text and not context.allows_check:
+            errors.append(f"{path}: 描述了结构化数据中不存在的将军")
 
     if enforce_length:
         length = _narrative_length(payload)
@@ -523,6 +529,35 @@ def _is_concrete(sentence: str, context: ProfessionalValidationContext) -> bool:
     has_move = any(move and move in sentence for move in context.allowed_moves)
     has_piece = bool(re.search(r"(?:白|黑)?(?:兵|马|象|车|后|王)|pawn|knight|bishop|rook|queen|king", sentence, re.IGNORECASE))
     return (has_square and has_piece) or has_move
+
+
+def _all_strings_with_paths(value: Any, path: str = "$") -> list[tuple[str, str]]:
+    result: list[tuple[str, str]] = []
+    if isinstance(value, str):
+        result.append((path, value))
+    elif isinstance(value, dict):
+        for key, child in value.items():
+            result.extend(_all_strings_with_paths(child, f"{path}.{key}"))
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            result.extend(_all_strings_with_paths(child, f"{path}[{index}]"))
+    return result
+
+
+def _all_prose_strings(value: Any, key: str = "") -> list[str]:
+    if key == "evidenceRefs":
+        return []
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict):
+        return [
+            text
+            for child_key, child in value.items()
+            for text in _all_prose_strings(child, child_key)
+        ]
+    if isinstance(value, list):
+        return [text for child in value for text in _all_prose_strings(child, key)]
+    return []
 
 
 def _remove_negated_events(text: str) -> str:
