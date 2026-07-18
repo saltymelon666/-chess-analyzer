@@ -349,6 +349,33 @@ def test_safe_fallback_respects_length_band_and_all_validators(level: str) -> No
     assert validate_professional_analysis(analysis, build_validation_context(move, level)) == []
 
 
+def test_complex_safe_fallback_compacts_variable_fact_text_without_losing_evidence() -> None:
+    move = professional_review()
+    move.position_facts.piece_activity.extend(
+        [
+            EvidenceFact(
+                id=f"fact:long-activity:{index}",
+                category="verified_activity",
+                side="white",
+                description="白方棋子的活动事实已经由当前局面验证，分析只能引用这条事实。" * 8,
+                evidence=["固定复杂局面回归测试"],
+                squares=["b1"],
+            )
+            for index in range(2)
+        ]
+    )
+    complexity = ProfessionalComplexity(level="complex", reasons=["可变事实文本较长"])
+    analysis = build_safe_professional_analysis(move, complexity)
+    length = _narrative_length(analysis.model_dump(by_alias=True))
+
+    assert LENGTH_RANGES["complex"][0] <= length <= LENGTH_RANGES["complex"][1]
+    assert validate_professional_analysis(
+        analysis,
+        build_validation_context(move, "complex"),
+    ) == []
+    assert all(item.evidence_refs for item in analysis.key_pieces)
+
+
 def test_nested_extra_fields_are_rejected_in_strict_json() -> None:
     move = professional_review()
     complexity = compute_professional_complexity(move)

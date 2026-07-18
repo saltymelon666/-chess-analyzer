@@ -17,6 +17,8 @@ from .models import (
     ProfessionalComplexity,
 )
 from .professional_validation import (
+    LENGTH_RANGES,
+    _narrative_length,
     build_validation_context,
     parse_professional_analysis,
     validate_professional_analysis,
@@ -655,7 +657,7 @@ def _apply_safe_length_profile(
 ) -> ProfessionalAnalysis:
     """Keep the deterministic fallback inside the same length bands required from DeepSeek."""
     if level == "complex":
-        return analysis
+        return _fit_complex_safe_length(analysis, move)
 
     result = analysis.model_copy(deep=True)
     fact_limit = 1
@@ -743,6 +745,110 @@ def _apply_safe_length_profile(
         line.resulting_position = _very_short_result_position(source)
     result.comparison.main_difference = "三线首着、顺序与评价不同。"
     result.comparison.why_first_line_is_best = "第一线由Stockfish排首位。"
+    return result
+
+
+def _fit_complex_safe_length(
+    analysis: ProfessionalAnalysis,
+    move: MoveReview,
+) -> ProfessionalAnalysis:
+    """Compact only non-structural prose when a complex safe fallback exceeds its ceiling."""
+    minimum, maximum = LENGTH_RANGES["complex"]
+    result = analysis.model_copy(deep=True)
+
+    def length() -> int:
+        return _narrative_length(result.model_dump(by_alias=True))
+
+    if length() <= maximum:
+        return result
+
+    compact = _apply_safe_length_profile(analysis, move, "normal")
+
+    def replace(target: Any, attribute: str, value: Any) -> bool:
+        previous = getattr(target, attribute)
+        setattr(target, attribute, value)
+        current = length()
+        if current < minimum:
+            setattr(target, attribute, previous)
+            return False
+        return current <= maximum
+
+    replacements: list[tuple[Any, str, Any]] = [
+        (result.comparison, "main_difference", compact.comparison.main_difference),
+        (result.comparison, "why_first_line_is_best", compact.comparison.why_first_line_is_best),
+        (result.position_assessment, "summary", compact.position_assessment.summary),
+    ]
+    for line, compact_line in zip(result.candidate_lines, compact.candidate_lines):
+        replacements.extend(
+            [
+                (line, "why_this_rank", compact_line.why_this_rank),
+                (line, "advantages", compact_line.advantages),
+                (line, "risks", compact_line.risks),
+            ]
+        )
+    replacements.extend(
+        [
+            (
+                result.position_assessment,
+                "piece_activity",
+                compact.position_assessment.piece_activity,
+            ),
+            (
+                result.position_assessment,
+                "pawn_structure",
+                compact.position_assessment.pawn_structure,
+            ),
+            (
+                result.position_assessment.king_safety,
+                "white",
+                compact.position_assessment.king_safety.white,
+            ),
+            (
+                result.position_assessment.king_safety,
+                "black",
+                compact.position_assessment.king_safety.black,
+            ),
+            (result.weaknesses, "white", compact.weaknesses.white),
+            (result.weaknesses, "black", compact.weaknesses.black),
+            (result, "threats", compact.threats),
+            (result, "key_pieces", compact.key_pieces),
+            (result, "plans", compact.plans),
+            (result, "played_move_analysis", compact.played_move_analysis),
+        ]
+    )
+    for line, compact_line in zip(result.candidate_lines, compact.candidate_lines):
+        replacements.extend(
+            [
+                (line, "direct_purpose", compact_line.direct_purpose),
+                (line, "opponent_response", compact_line.opponent_response),
+                (line, "continuation_phases", compact_line.continuation_phases),
+                (line, "resulting_position", compact_line.resulting_position),
+            ]
+        )
+
+    for target, attribute, value in replacements:
+        if replace(target, attribute, value):
+            return result
+
+    # The normal profile is already substantially shorter than the complex minimum.
+    # Reaching this branch would mean a single unusually long free-text field remains.
+    # Trim only comparison prose; structured moves, squares, pieces and evidence stay intact.
+    for target, attribute in (
+        (result.comparison, "main_difference"),
+        (result.comparison, "why_first_line_is_best"),
+        (result.position_assessment, "summary"),
+    ):
+        while length() > maximum:
+            text = getattr(target, attribute)
+            if len(text) <= 8:
+                break
+            excess = length() - maximum
+            remove = min(excess + 1, len(text) - 8)
+            shortened = text[:-remove].rstrip(" ，；：,.!?！？") + "。"
+            setattr(target, attribute, shortened)
+        if length() <= maximum:
+            return result
+
     return result
 
 
