@@ -157,12 +157,30 @@ def build_validation_context(move: MoveReview, complexity: str) -> ProfessionalV
         allowed_squares.update(squares)
     for item in all_variations:
         allowed_squares.update((item.from_square, item.to_square))
-    allowed_moves = set(move.allowed_moves) | actual_moves
+    immediate_moves = {
+        value
+        for item in (*move.position_facts.immediate_checks, *move.position_facts.immediate_captures)
+        for value in (item.san, item.uci)
+    }
+    allowed_moves = set(move.allowed_moves) | actual_moves | immediate_moves
     for values in candidate_moves.values():
         allowed_moves.update(values)
-    allows_capture = move.played_move.capture or any(item.capture for item in all_variations)
-    allows_checkmate = move.played_move.checkmate or any(item.checkmate for item in all_variations)
-    allows_check = allows_checkmate or move.played_move.check or any(item.check for item in all_variations)
+    allows_capture = (
+        move.played_move.capture
+        or bool(move.position_facts.immediate_captures)
+        or any(item.capture for item in all_variations)
+    )
+    allows_checkmate = (
+        move.played_move.checkmate
+        or any(item.checkmate for item in move.position_facts.immediate_checks)
+        or any(item.checkmate for item in all_variations)
+    )
+    allows_check = (
+        allows_checkmate
+        or move.played_move.check
+        or bool(move.position_facts.immediate_checks)
+        or any(item.check for item in all_variations)
+    )
     return ProfessionalValidationContext(
         allowed_evidence_ids=evidence_ids,
         evidence_sides=evidence_sides,
@@ -210,6 +228,12 @@ def validate_professional_analysis(
     if analysis.complexity != context.complexity:
         errors.append(f"complexity应为{context.complexity}")
 
+    # Dynamic sections are checked against the same deterministic selector used before DeepSeek.
+    # The MoveReview is not stored in the context, so scope checks below use route evidence sets;
+    # the resolver itself enforces the complete selected-fact allow-list.
+    if analysis.position_assessment.material is not None:
+        errors.append("positionAssessment.material: 不允许固定展示物质差栏目")
+
     payload = analysis.model_dump(by_alias=True)
     refs = _collect_key_values(payload, "evidenceRefs")
     invalid_refs = sorted({ref for values in refs for ref in values if ref not in context.allowed_evidence_ids})
@@ -254,8 +278,15 @@ def validate_professional_analysis(
         ("white", analysis.position_assessment.king_safety.white),
         ("black", analysis.position_assessment.king_safety.black),
     ):
+        if assessment is None:
+            continue
         if not _refs_support_side(assessment.evidence_refs, side, context, allow_neutral=True):
             errors.append(f"{side}王安全结论的证据颜色不符")
+    king_safety = analysis.position_assessment.king_safety
+    if not king_safety.is_relevant and (king_safety.white is not None or king_safety.black is not None):
+        errors.append("kingSafety.isRelevant为false时不得保留王安全说明")
+    if king_safety.is_relevant and king_safety.white is None and king_safety.black is None:
+        errors.append("kingSafety.isRelevant为true时至少需要一方的具体证据")
 
     if analysis.played_move_analysis.move not in context.played_moves:
         errors.append("playedMoveAnalysis.move不等于实际走法")
@@ -325,6 +356,12 @@ def validate_professional_analysis(
             errors.extend(_validate_phase_moves(phase.moves, context.candidate_moves[line.rank], f"候选路线{line.rank}"))
             if phase.moves and not set(phase.evidence_refs).intersection(route_evidence):
                 errors.append(f"候选路线{line.rank}的阶段没有引用自身PV证据")
+        expected_scope = f"candidate_line_{line.rank}"
+        for event in line.events:
+            if event.scope != expected_scope:
+                errors.append(f"候选路线{line.rank}的事件scope串入了其他路线")
+            if not set(event.evidence_refs).intersection(route_evidence):
+                errors.append(f"候选路线{line.rank}的内部事件没有引用自身PV证据")
         errors.extend(
             _validate_phase_sequence(
                 [move for phase in line.continuation_phases for move in phase.moves],
@@ -366,6 +403,8 @@ def validate_professional_analysis(
                 errors.append(f"{side}弱点的证据颜色不符")
 
     for threat in analysis.threats:
+        if threat.scope != "current_position":
+            errors.append("全局潜在威胁只能使用current_position scope")
         if not _refs_support_side(threat.evidence_refs, threat.side, context, allow_neutral=True):
             errors.append(f"{threat.side}威胁的证据颜色不符")
         target_squares = _mentioned_squares(threat.target)

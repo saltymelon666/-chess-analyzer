@@ -7,6 +7,7 @@ from typing import Any, Iterable
 
 from pydantic import ValidationError
 
+from .analysis_focus import AnalysisFocus, select_analysis_focus
 from .models import (
     MoveReview,
     ProfessionalAnalysis,
@@ -14,9 +15,9 @@ from .models import (
     ProfessionalCandidateLineAnalysis,
     ProfessionalComparison,
     ProfessionalContinuationPhase,
-    ProfessionalDraftEvidenceText,
     ProfessionalEvidenceText,
     ProfessionalKeyPiece,
+    ProfessionalLineEvent,
     ProfessionalMainDanger,
     ProfessionalPlan,
     ProfessionalPlans,
@@ -35,13 +36,6 @@ REFERENCE_OUTPUT_CONTRACT = {
     "complexity": "simple|normal|complex",
     "positionAssessment": {
         "summary": "explanation without chess notation",
-        "material": {"explanation": "why it matters", "evidenceRefs": ["fact-id"]},
-        "kingSafety": {
-            "white": {"explanation": "why it matters", "evidenceRefs": ["fact-id"]},
-            "black": {"explanation": "why it matters", "evidenceRefs": ["fact-id"]},
-        },
-        "pieceActivity": {"explanation": "why it matters", "evidenceRefs": ["fact-id"]},
-        "pawnStructure": {"explanation": "why it matters", "evidenceRefs": ["fact-id"]},
     },
     "mainDanger": {
         "level": "immediate|short_term|medium_term|long_term|none",
@@ -118,43 +112,13 @@ class DraftValidationIssue:
 
 
 def build_reference_payload(move: MoveReview, complexity: str, reasons: list[str]) -> dict[str, Any]:
+    focus = select_analysis_focus(move)
     pieces = [
         {"id": item["id"], "side": item["side"], "piece": item["piece"], "square": item["square"]}
         for item in move.position_facts.pieces
     ]
     piece_at = {item["square"]: item["id"] for item in pieces}
-    facts: list[dict[str, Any]] = []
-    material = move.position_facts.material
-    facts.append({
-        "id": material.get("id"),
-        "kind": "material",
-        "side": None,
-        "squares": [],
-        "text": f"white-minus-black={material.get('valueDifferenceWhiteMinusBlack', 0)}",
-    })
-    for group in (
-        move.position_facts.piece_activity,
-        move.position_facts.king_safety,
-        move.position_facts.pawn_structure,
-        move.position_facts.threats,
-        move.position_facts.key_pieces,
-    ):
-        for fact in group:
-            facts.append({
-                "id": fact.id,
-                "kind": fact.category,
-                "side": fact.side,
-                "squares": fact.squares,
-                "text": fact.description,
-            })
-    for fact in (*move.position_facts.immediate_checks, *move.position_facts.immediate_captures):
-        facts.append({
-            "id": fact.id,
-            "kind": "legal_check" if fact.check else "legal_capture",
-            "side": "white" if fact.piece.startswith("white_") else "black",
-            "squares": [fact.from_square, fact.to_square],
-            "text": fact.san,
-        })
+    facts = [item.prompt_dict() for item in focus.selected_facts]
 
     def compact_ply(item: Any) -> dict[str, Any]:
         events = [
@@ -191,8 +155,15 @@ def build_reference_payload(move: MoveReview, complexity: str, reasons: list[str
         })
 
     payload = {
-        "v": "professional-v5-refs",
+        "v": "professional-v6-focus",
         "cx": {"level": complexity, "reasons": reasons},
+        "focus": {
+            "priority": "only facts that materially affect the current decision",
+            "displaySections": list(focus.display_sections),
+            "kingSafetyRelevant": bool(focus.king_safety_relevant_sides),
+            "kingSafetySides": sorted(focus.king_safety_relevant_sides),
+            "selectedFacts": facts,
+        },
         "pos": {
             "fen": move.before_fen,
             "turn": move.side,
@@ -398,22 +369,6 @@ def validate_professional_draft(
         if not _refs_support_side(refs, side, context):
             issues.append(DraftValidationIssue(f"keyPieces.{side}.evidenceRefs", "黑白说反", "证据不支持该棋子颜色"))
 
-    _validate_side_evidence(
-        canonical(draft.position_assessment.king_safety.white.evidence_refs),
-        "white",
-        "positionAssessment.kingSafety.white.evidenceRefs",
-        context,
-        issues,
-        allow_neutral=True,
-    )
-    _validate_side_evidence(
-        canonical(draft.position_assessment.king_safety.black.evidence_refs),
-        "black",
-        "positionAssessment.kingSafety.black.evidenceRefs",
-        context,
-        issues,
-        allow_neutral=True,
-    )
     for side, plans in (("white", draft.plans.white), ("black", draft.plans.black)):
         for index, plan in enumerate(plans):
             _validate_side_evidence(
@@ -475,6 +430,7 @@ def resolve_professional_draft(
     move: MoveReview,
     context: ProfessionalValidationContext,
 ) -> ProfessionalAnalysis:
+    focus = select_analysis_focus(move)
     draft = ProfessionalAnalysisDraft.model_validate(
         _sanitize_draft_event_words(draft.model_dump(by_alias=True))
     )
@@ -496,13 +452,6 @@ def resolve_professional_draft(
             if source and source in context.allowed_evidence_ids and source not in result:
                 result.append(source)
         return result
-
-    def evidence_text(item: ProfessionalDraftEvidenceText) -> ProfessionalEvidenceText:
-        evidence = refs(item.evidence_refs)
-        return ProfessionalEvidenceText(
-            description=_explanation_with_evidence(item.explanation, evidence, descriptions),
-            evidenceRefs=evidence,
-        )
 
     key_pieces = []
     for item in (draft.key_pieces.white, draft.key_pieces.black):
@@ -533,30 +482,28 @@ def resolve_professional_draft(
             ))
 
     weaknesses = {"white": [], "black": []}
-    for fact in [*move.position_facts.piece_activity, *move.position_facts.pawn_structure]:
-        if fact.side not in weaknesses or weaknesses[fact.side]:
-            continue
-        if fact.category not in {
-            "undefended_piece", "underprotected", "isolated_pawn",
-            "doubled_pawns", "vulnerable_pawn",
-        }:
-            continue
-        weaknesses[fact.side].append(ProfessionalWeakness(
-            description=fact.description,
-            exploitation="具体利用方式只沿三条Stockfish候选路线判断，不补写路线外走法。",
-            evidenceRefs=[fact.id],
-        ))
+    for side, items in focus.weaknesses.items():
+        for item in items:
+            weaknesses[side].append(ProfessionalWeakness(
+                description=item.description,
+                exploitation=item.decision_impact,
+                evidenceRefs=refs(item.evidence_refs),
+            ))
 
     threats = []
-    for fact in move.position_facts.threats[:1]:
-        if fact.side not in {"white", "black"}:
+    for item in focus.global_threats:
+        if item.side not in {"white", "black"}:
             continue
         threats.append(ProfessionalThreat(
-            side=fact.side,
-            level="immediate" if fact.category.startswith("immediate") else "short_term",
-            description=fact.description,
-            target="、".join(fact.squares) or "证据未提供具体目标格",
-            evidenceRefs=[fact.id],
+            side=item.side,
+            level="immediate" if item.importance_score >= 4 else "short_term",
+            scope="current_position",
+            description=item.description,
+            attacker=item.squares[0] if item.squares else "证据中的攻击棋子",
+            target=item.squares[-1] if item.squares else "证据中的具体目标",
+            preparation="当前局面已经具备执行条件，无需把单条路线事件提升为准备步骤。",
+            consequence=item.decision_impact,
+            evidenceRefs=refs(item.evidence_refs),
         ))
 
     danger_ref = draft.main_danger.danger_ref
@@ -570,6 +517,8 @@ def resolve_professional_draft(
     if danger_ref:
         source = source_by_alias.get(danger_ref, danger_ref)
         danger_description = f"{descriptions.get(source, source)}；{danger_description}"
+    elif len(danger_description.strip()) < 4:
+        danger_description = "当前没有需要优先处理的单一直接危险。"
     main_danger = ProfessionalMainDanger(
         sideInDanger=danger_side,
         level=_normalized_level(draft.main_danger.level),
@@ -582,7 +531,7 @@ def resolve_professional_draft(
         evidenceRefs=refs(
             draft.main_danger.evidence_refs,
             danger_ref,
-            str(move.position_facts.material.get("id", "")),
+            move.played_move.id or f"move:played:{move.index}",
         ),
     )
 
@@ -599,8 +548,7 @@ def resolve_professional_draft(
             return "没有提供实战续算的结果局面。"
         facts = line.resulting_position_facts
         if facts:
-            difference = facts.material.get("valueDifferenceWhiteMinusBlack", 0)
-            return f"路线结束时轮到{facts.side_to_move}方行棋；白方减黑方子力差为{difference}。"
+            return f"路线结束时轮到{facts.side_to_move}方行棋；具体子力后果只在路线确实发生重要得失时说明。"
         return "路线结束后没有额外的结果局面事实。"
 
     played = draft.played_move_analysis
@@ -627,6 +575,15 @@ def resolve_professional_draft(
     for item in draft.candidate_lines:
         line = lines_by_id[item.line_ref]
         reply = line.moves[1].san if len(line.moves) > 1 else "路线未提供对手回应"
+        route_events = [
+            ProfessionalLineEvent(
+                scope=event.scope,
+                description=event.description,
+                significance=event.decision_impact,
+                evidenceRefs=refs(event.evidence_refs),
+            )
+            for event in focus.line_events.get(line.rank, ())
+        ]
         candidate_lines.append(ProfessionalCandidateLineAnalysis(
             rank=line.rank,
             firstMove=line.first_move.san,
@@ -637,21 +594,49 @@ def resolve_professional_draft(
             resultingPosition=result_position(line),
             advantages=item.advantages,
             risks=item.risks,
+            events=route_events,
             whyThisRank=f"该路线由Stockfish列为第{line.rank}候选。",
             evidenceRefs=refs(item.evidence_refs, item.line_ref),
         ))
+
+    def selected_evidence(items: list[Any]) -> ProfessionalEvidenceText | None:
+        if not items:
+            return None
+        evidence = refs([ref for item in items for ref in item.evidence_refs])
+        return ProfessionalEvidenceText(
+            description="；".join(item.description for item in items),
+            evidenceRefs=evidence,
+        )
+
+    king_evidence = {
+        side: selected_evidence([
+            item for item in focus.selected_facts
+            if item.display_section == "kingSafety" and item.side == side
+        ])
+        for side in ("white", "black")
+    }
+    activity_ids = {item.id for item in move.position_facts.piece_activity}
+    pawn_ids = {item.id for item in move.position_facts.pawn_structure}
+    activity_evidence = selected_evidence([
+        item for item in focus.selected_facts
+        if item.display_section == "positionAssessment" and item.id in activity_ids
+    ][:1])
+    pawn_evidence = selected_evidence([
+        item for item in focus.selected_facts
+        if item.display_section == "positionAssessment" and item.id in pawn_ids
+    ][:1])
 
     analysis = ProfessionalAnalysis(
         complexity=draft.complexity,
         positionAssessment=ProfessionalPositionAssessment(
             summary=draft.position_assessment.summary,
-            material=evidence_text(draft.position_assessment.material),
             kingSafety={
-                "white": evidence_text(draft.position_assessment.king_safety.white),
-                "black": evidence_text(draft.position_assessment.king_safety.black),
+                "isRelevant": bool(focus.king_safety_relevant_sides),
+                "white": king_evidence["white"],
+                "black": king_evidence["black"],
             },
-            pieceActivity=evidence_text(draft.position_assessment.piece_activity),
-            pawnStructure=evidence_text(draft.position_assessment.pawn_structure),
+            pieceActivity=activity_evidence,
+            pawnStructure=pawn_evidence,
         ),
         mainDanger=main_danger,
         keyPieces=key_pieces,

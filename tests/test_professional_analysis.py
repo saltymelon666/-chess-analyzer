@@ -18,8 +18,10 @@ from app.models import (
     ProfessionalComplexity,
     ProfessionalAnalysisUsage,
     ProfessionalAnalysisDraft,
+    ProfessionalEvidenceText,
 )
 from app.position_facts import extract_position_facts
+from app.analysis_focus import select_analysis_focus
 from app.professional_analysis import (
     ChatResult,
     PROFESSIONAL_PROMPT_VERSION,
@@ -270,6 +272,11 @@ def test_professional_api_cache_uses_fact_hash_without_second_service_call(monke
     second = client.post("/api/professional-analysis", json={"analysis_id": analysis_id, "move_index": 1})
     assert first.status_code == 200
     assert first.json()["cached"] is False
+    position = first.json()["analysis"]["positionAssessment"]
+    assert "material" not in position
+    if position["kingSafety"]["isRelevant"] is False:
+        assert "white" not in position["kingSafety"]
+        assert "black" not in position["kingSafety"]
     assert second.json()["cached"] is True
     assert fake.calls == 1
 
@@ -283,7 +290,9 @@ def test_compact_prompt_keeps_complete_contract_without_full_pydantic_schema() -
         complexity.level,
     )
     assert len(prompt) < 30_000
-    assert '"v":"professional-v5-refs"' in prompt
+    assert '"v":"professional-v6-focus"' in prompt
+    assert '"selectedFacts"' in prompt
+    assert '"material"' not in prompt
     assert '"playedMoveAnalysis"' in prompt
     assert '"candidateLines"' in prompt
     assert '"pieceRef"' in prompt
@@ -303,7 +312,7 @@ def _valid_reference_draft(move: MoveReview) -> ProfessionalAnalysisDraft:
     routes = payload["lines"]
     actual = payload["actual"]["plies"]
 
-    material_ref = next(item["id"] for item in facts if item["kind"] == "material")
+    fallback_ref = routes[0]["id"]
 
     def side_fact(side: str) -> str:
         return next(
@@ -312,7 +321,7 @@ def _valid_reference_draft(move: MoveReview) -> ProfessionalAnalysisDraft:
                 for item in facts
                 if item.get("side") in {side, "neutral", None}
             ),
-            material_ref,
+            fallback_ref,
         )
 
     def side_piece(side: str) -> dict:
@@ -335,13 +344,6 @@ def _valid_reference_draft(move: MoveReview) -> ProfessionalAnalysisDraft:
             "complexity": "normal",
             "positionAssessment": {
                 "summary": "局面保持平衡，双方都需要先完成发展。",
-                "material": {"explanation": "物质没有明显差距。", "evidenceRefs": [material_ref]},
-                "kingSafety": {
-                    "white": {"explanation": "白方需要继续保护王。", "evidenceRefs": [side_fact("white")]},
-                    "black": {"explanation": "黑方也需要继续保护王。", "evidenceRefs": [side_fact("black")]},
-                },
-                "pieceActivity": {"explanation": "子力发展决定主动权。", "evidenceRefs": [material_ref]},
-                "pawnStructure": {"explanation": "兵形暂时没有明显弱点。", "evidenceRefs": [material_ref]},
             },
             "mainDanger": {
                 "level": "short_term",
@@ -635,8 +637,10 @@ def test_fact_squares_are_allowed_even_when_they_are_empty_in_starting_fen() -> 
     context = build_validation_context(move, complexity.level)
     assert "h3" in context.allowed_squares
     analysis = build_safe_professional_analysis(move, complexity)
-    analysis.position_assessment.piece_activity.description += "；结构化事实涉及h3格。"
-    analysis.position_assessment.piece_activity.evidence_refs.append(fact.id)
+    analysis.position_assessment.piece_activity = ProfessionalEvidenceText(
+        description="结构化事实涉及h3格。",
+        evidenceRefs=[fact.id],
+    )
     errors = validate_professional_analysis(analysis, context, enforce_length=False)
     assert not any("事实包之外的格子" in error for error in errors)
 
@@ -649,7 +653,11 @@ def test_validator_rejects_wrong_side_and_cross_route_evidence() -> None:
     black_king_ref = next(
         fact.id for fact in move.position_facts.king_safety if fact.side == "black"
     )
-    analysis.position_assessment.king_safety.white.evidence_refs = [black_king_ref]
+    analysis.position_assessment.king_safety.is_relevant = True
+    analysis.position_assessment.king_safety.white = ProfessionalEvidenceText(
+        description="白王安全结论引用了错误颜色证据。",
+        evidenceRefs=[black_king_ref],
+    )
     analysis.candidate_lines[0].evidence_refs = [move.candidate_lines[1].id]
     analysis.candidate_lines[0].continuation_phases[0].evidence_refs = [
         move.candidate_lines[1].moves[0].id
@@ -680,3 +688,156 @@ def test_complexity_thresholds_produce_simple_normal_and_complex() -> None:
     complex_move.complexity_factors.evaluation_swing_cp = 250
     complex_move.complexity_factors.only_reasonable_move = True
     assert compute_professional_complexity(complex_move).level == "complex"
+
+
+@pytest.mark.parametrize(
+    ("fact_id", "side", "square", "description"),
+    [
+        ("fact:test:undefended:g5", "white", "g5", "白马g5当前没有本方棋子保护"),
+        ("fact:test:undefended:a7", "black", "a7", "黑兵a7当前没有本方棋子保护"),
+        ("fact:test:undefended:h4", "white", "h4", "白象h4当前没有本方棋子保护"),
+        ("fact:test:undefended:b7", "black", "b7", "黑象b7当前没有本方棋子保护"),
+    ],
+)
+def test_undefended_piece_without_concrete_exploitation_is_not_a_weakness(
+    fact_id: str,
+    side: str,
+    square: str,
+    description: str,
+) -> None:
+    move = professional_review()
+    move.position_facts.piece_activity.append(EvidenceFact(
+        id=fact_id,
+        category="undefended_piece",
+        side=side,
+        description=description,
+        evidence=["固定回归事实"],
+        squares=[square],
+    ))
+    focus = select_analysis_focus(move)
+    selected = [item for values in focus.weaknesses.values() for item in values]
+    assert fact_id not in {item.id for item in selected}
+    rejected = next(item for item in focus.facts if item.id == fact_id)
+    assert rejected.importance_score == 0
+    assert "仅仅没有保护" in (rejected.rejection_reason or "")
+
+
+def test_castling_rights_and_pawn_shield_alone_do_not_trigger_king_safety() -> None:
+    move = professional_review()
+    move.position_facts.king_safety = [
+        EvidenceFact(
+            id="fact:test:king:g1",
+            category="king_square",
+            side="white",
+            description="白王位于g1",
+            evidence=["固定回归事实"],
+            squares=["g1"],
+        ),
+        EvidenceFact(
+            id="fact:test:castle:g1",
+            category="castling_rights",
+            side="white",
+            description="白方没有易位权",
+            evidence=["固定回归事实"],
+            squares=["g1"],
+        ),
+        EvidenceFact(
+            id="fact:test:shield:g8",
+            category="pawn_shield",
+            side="black",
+            description="g8王前相邻一排有1枚本方兵",
+            evidence=["固定回归事实"],
+            squares=["g8", "g7"],
+        ),
+    ]
+    focus = select_analysis_focus(move)
+    assert focus.king_safety_relevant_sides == frozenset()
+    safe = build_safe_professional_analysis(move, compute_professional_complexity(move))
+    assert safe.position_assessment.king_safety.is_relevant is False
+    assert safe.position_assessment.king_safety.white is None
+    assert safe.position_assessment.king_safety.black is None
+
+
+def test_continuous_forcing_checks_trigger_only_supported_king_safety() -> None:
+    move = professional_review()
+    move.candidate_lines[0].moves[0].check = True
+    move.candidate_lines[0].moves[2].check = True
+    focus = select_analysis_focus(move)
+    assert "black" in focus.king_safety_relevant_sides
+    assert "white" not in focus.king_safety_relevant_sides
+
+
+def test_single_line_gxh4_stays_inside_candidate_line_one() -> None:
+    move = professional_review()
+    event_move = move.candidate_lines[0].moves[3]
+    event_move.san = "gxh4"
+    event_move.from_square = "g5"
+    event_move.to_square = "h4"
+    event_move.capture = True
+    event_move.captured_piece = "white_bishop"
+    move.position_facts.threats.append(EvidenceFact(
+        id="fact:test:route:gxh4",
+        category="direct_piece_loss",
+        side="white",
+        description="候选路线1第4个半回合gxh4包含吃子",
+        evidence=["固定回归路线"],
+        squares=["g5", "h4"],
+    ))
+    focus = select_analysis_focus(move)
+    assert not focus.global_threats
+    assert {item.id for item in focus.line_events[1]} == {"fact:test:route:gxh4"}
+    assert not focus.line_events[2]
+    assert not focus.line_events[3]
+
+
+def test_ordinary_pv_capture_is_not_promoted_to_global_threat() -> None:
+    move = professional_review()
+    move.position_facts.threats.append(EvidenceFact(
+        id="fact:test:ordinary-pv-capture",
+        category="route_event",
+        side="white",
+        description="候选路线1第3个半回合Nxd4包含吃子",
+        evidence=["固定回归路线"],
+        squares=["f3", "d4"],
+    ))
+    focus = select_analysis_focus(move)
+    assert "fact:test:ordinary-pv-capture" not in {item.id for item in focus.global_threats}
+    assert "fact:test:ordinary-pv-capture" not in {item.id for item in focus.line_events[1]}
+
+
+def test_quiet_position_can_return_empty_weaknesses_and_threats() -> None:
+    move = professional_review()
+    focus = select_analysis_focus(move)
+    assert focus.weaknesses == {"white": (), "black": ()}
+    assert focus.global_threats == ()
+
+
+def test_material_remains_raw_but_fixed_material_section_is_removed() -> None:
+    move = professional_review()
+    assert move.position_facts.material.get("id")
+    safe = build_safe_professional_analysis(move, compute_professional_complexity(move))
+    response_payload = safe.model_dump(by_alias=True, exclude_none=True)
+    assert "material" not in response_payload["positionAssessment"]
+
+
+def test_direct_piece_loss_is_allowed_only_as_route_consequence() -> None:
+    move = professional_review()
+    event_move = move.candidate_lines[1].moves[1]
+    event_move.san = "Qxd4"
+    event_move.from_square = "d8"
+    event_move.to_square = "d4"
+    event_move.capture = True
+    event_move.captured_piece = "white_rook"
+    move.position_facts.threats.append(EvidenceFact(
+        id="fact:test:route:major-loss",
+        category="direct_piece_loss",
+        side="white",
+        description="候选路线2中的Qxd4直接吃掉价值至少3分的棋子",
+        evidence=["固定回归路线"],
+        squares=["d8", "d4"],
+    ))
+    safe = build_safe_professional_analysis(move, compute_professional_complexity(move))
+    assert not safe.threats
+    assert [event.scope for event in safe.candidate_lines[1].events] == ["candidate_line_2"]
+    assert not safe.candidate_lines[0].events
+    assert not safe.candidate_lines[2].events

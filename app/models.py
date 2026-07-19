@@ -260,20 +260,22 @@ class ProfessionalEvidenceText(BaseModel):
 
 
 class ProfessionalKingSafety(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
-    white: ProfessionalEvidenceText
-    black: ProfessionalEvidenceText
+    is_relevant: bool = Field(alias="isRelevant")
+    white: ProfessionalEvidenceText | None = None
+    black: ProfessionalEvidenceText | None = None
 
 
 class ProfessionalPositionAssessment(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
     summary: str
-    material: ProfessionalEvidenceText
+    # Material remains available in raw facts and validation, but is not a fixed user section.
+    material: ProfessionalEvidenceText | None = None
     king_safety: ProfessionalKingSafety = Field(alias="kingSafety")
-    piece_activity: ProfessionalEvidenceText = Field(alias="pieceActivity")
-    pawn_structure: ProfessionalEvidenceText = Field(alias="pawnStructure")
+    piece_activity: ProfessionalEvidenceText | None = Field(alias="pieceActivity", default=None)
+    pawn_structure: ProfessionalEvidenceText | None = Field(alias="pawnStructure", default=None)
 
 
 class ProfessionalMainDanger(BaseModel):
@@ -351,8 +353,21 @@ class ProfessionalThreat(BaseModel):
 
     side: Literal["white", "black"]
     level: Literal["immediate", "short_term", "long_term"]
+    scope: Literal["current_position"] = "current_position"
     description: str
+    attacker: str
     target: str
+    preparation: str
+    consequence: str
+    evidence_refs: list[str] = Field(alias="evidenceRefs", min_length=1)
+
+
+class ProfessionalLineEvent(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    scope: Literal["candidate_line_1", "candidate_line_2", "candidate_line_3"]
+    description: str
+    significance: str
     evidence_refs: list[str] = Field(alias="evidenceRefs", min_length=1)
 
 
@@ -392,6 +407,7 @@ class ProfessionalCandidateLineAnalysis(BaseModel):
     resulting_position: str = Field(alias="resultingPosition")
     advantages: list[str] = Field(default_factory=list)
     risks: list[str] = Field(default_factory=list)
+    events: list[ProfessionalLineEvent] = Field(default_factory=list, max_length=2)
     why_this_rank: str = Field(alias="whyThisRank")
     evidence_refs: list[str] = Field(alias="evidenceRefs", min_length=1)
 
@@ -419,28 +435,10 @@ class ProfessionalAnalysis(BaseModel):
     comparison: ProfessionalComparison
 
 
-class ProfessionalDraftEvidenceText(BaseModel):
-    model_config = ConfigDict(populate_by_name=True, extra="forbid")
-
-    explanation: str = Field(min_length=4, max_length=500)
-    evidence_refs: list[str] = Field(alias="evidenceRefs", min_length=1, max_length=100)
-
-
-class ProfessionalDraftKingSafety(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    white: ProfessionalDraftEvidenceText
-    black: ProfessionalDraftEvidenceText
-
-
 class ProfessionalDraftPositionAssessment(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
     summary: str = Field(min_length=4, max_length=500)
-    material: ProfessionalDraftEvidenceText
-    king_safety: ProfessionalDraftKingSafety = Field(alias="kingSafety")
-    piece_activity: ProfessionalDraftEvidenceText = Field(alias="pieceActivity")
-    pawn_structure: ProfessionalDraftEvidenceText = Field(alias="pawnStructure")
 
 
 class ProfessionalDraftMainDanger(BaseModel):
@@ -448,7 +446,7 @@ class ProfessionalDraftMainDanger(BaseModel):
 
     level: Literal["immediate", "short_term", "medium_term", "long_term", "none"]
     danger_ref: str | None = Field(alias="dangerRef", default=None)
-    explanation: str = Field(min_length=4, max_length=500)
+    explanation: str = Field(default="", max_length=500)
     consequence: str = Field(default="", max_length=500)
     evidence_refs: list[str] = Field(alias="evidenceRefs", default_factory=list, max_length=100)
 
@@ -480,7 +478,7 @@ class ProfessionalDraftPlan(BaseModel):
         serialization_alias="explanation",
     )
     required_preparation: str = Field(alias="requiredPreparation", min_length=1, max_length=400)
-    evidence_refs: list[str] = Field(alias="evidenceRefs", min_length=1, max_length=100)
+    evidence_refs: list[str] = Field(alias="evidenceRefs", default_factory=list, max_length=100)
 
 
 class ProfessionalDraftPlans(BaseModel):

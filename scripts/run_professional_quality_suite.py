@@ -11,6 +11,7 @@ from typing import Any
 from fastapi.testclient import TestClient
 
 from app import api
+from app.analysis_focus import select_analysis_focus
 from app.config import load_settings
 from app.engine import StockfishService
 from app.game_review import analyze_pgn
@@ -25,6 +26,54 @@ from app.professional_validation import build_validation_context, validate_profe
 DEFAULT_FIXTURES = Path("tests/fixtures/professional_validation_positions.json")
 DEFAULT_RESULTS = Path("docs/professional-analysis-quality-results.json")
 DEFAULT_REPORT = Path("docs/professional-analysis-quality-report.md")
+
+
+def focus_summary(move: Any) -> dict[str, Any]:
+    focus = select_analysis_focus(move)
+    old_candidates = {"white": [], "black": []}
+    for fact in [*move.position_facts.piece_activity, *move.position_facts.pawn_structure]:
+        if fact.side in old_candidates and fact.category in {
+            "undefended_piece", "underprotected", "isolated_pawn",
+            "doubled_pawns", "vulnerable_pawn",
+        }:
+            old_candidates[fact.side].append(fact.description)
+    old_weaknesses = {
+        side: items[:1]
+        for side, items in old_candidates.items()
+    }
+    old_threats = [fact.description for fact in move.position_facts.threats[:1]]
+    after_weaknesses = {
+        side: [item.description for item in items]
+        for side, items in focus.weaknesses.items()
+    }
+    return {
+        "beforeWeaknessCount": sum(len(items) for items in old_weaknesses.values()),
+        "afterWeaknessCount": sum(len(items) for items in after_weaknesses.values()),
+        "filteredUndefendedOnly": focus.counters["filteredUndefendedOnly"],
+        "filteredKingSafety": focus.counters["filteredKingSafety"],
+        "movedToCandidateLine": focus.counters["movedToCandidateLine"],
+        "filteredOrdinaryPvCaptures": focus.counters["filteredOrdinaryPvCaptures"],
+        "fixedMaterialSectionRemoved": True,
+        "displayedSections": list(focus.display_sections),
+        "beforeWeaknesses": old_weaknesses,
+        "afterWeaknesses": after_weaknesses,
+        "beforeKingSafety": [fact.description for fact in move.position_facts.king_safety],
+        "afterKingSafety": [
+            item.description for item in focus.selected_facts
+            if item.display_section == "kingSafety"
+        ],
+        "beforeGlobalThreats": old_threats,
+        "afterGlobalThreats": [item.description for item in focus.global_threats],
+        "candidateLineEvents": {
+            str(rank): [item.description for item in items]
+            for rank, items in focus.line_events.items()
+        },
+        "meaninglessWeaknessStillDisplayed": any(
+            any(token in item.description for token in ("白马(g5)", "黑兵(a7)", "白象(h4)", "黑象(b7)", "白马g5", "黑兵a7", "白象h4", "黑象b7"))
+            for items in focus.weaknesses.values()
+            for item in items
+        ),
+    }
 
 
 def valid_key_pieces(move: Any, analysis: Any) -> bool:
@@ -128,6 +177,7 @@ async def run_suite(
             "category": fixture["category"],
             "complexity": fixture["complexity"],
             "httpEquivalent": 200,
+            **focus_summary(move),
         }
         try:
             generated = await service.analyze(move, diagnostics=diagnostics)
@@ -222,6 +272,12 @@ def render_report(results: list[dict[str, Any]], cache_ms: int | None, model: st
     first_rate = first_passes / count * 100 if count else 0
     final_rate = final_valid / count * 100 if count else 0
     fallback_rate = fallbacks / count * 100 if count else 0
+    before_weaknesses = sum(item.get("beforeWeaknessCount", 0) for item in results)
+    after_weaknesses = sum(item.get("afterWeaknessCount", 0) for item in results)
+    filtered_undefended = sum(item.get("filteredUndefendedOnly", 0) for item in results)
+    filtered_king = sum(item.get("filteredKingSafety", 0) for item in results)
+    moved_line_events = sum(item.get("movedToCandidateLine", 0) for item in results)
+    filtered_pv_captures = sum(item.get("filteredOrdinaryPvCaptures", 0) for item in results)
     table_rows = []
     for item in results:
         table_rows.append(
@@ -259,6 +315,48 @@ def render_report(results: list[dict[str, Any]], cache_ms: int | None, model: st
     if not normalization_rows:
         normalization_rows.append("- 无需移除事实包外棋盘字面量。")
 
+    focus_rows = []
+    for item in results:
+        focus_rows.append(
+            "| {id} | {before} | {after} | {undefended} | {king} | {moved} | {captures} | {sections} |".format(
+                id=item["id"],
+                before=item.get("beforeWeaknessCount", 0),
+                after=item.get("afterWeaknessCount", 0),
+                undefended=item.get("filteredUndefendedOnly", 0),
+                king=item.get("filteredKingSafety", 0),
+                moved=item.get("movedToCandidateLine", 0),
+                captures=item.get("filteredOrdinaryPvCaptures", 0),
+                sections="、".join(item.get("displayedSections", [])),
+            )
+        )
+
+    comparison_blocks = []
+    preferred = ["opening-1", "tactic-2", "closed-2"]
+    selected = [next((item for item in results if item["id"] == wanted), None) for wanted in preferred]
+    selected = [item for item in selected if item]
+    if len(selected) < 3:
+        selected.extend(item for item in results if item not in selected)
+        selected = selected[:3]
+    for item in selected:
+        before_weak = [text for values in item.get("beforeWeaknesses", {}).values() for text in values] or ["无"]
+        after_weak = [text for values in item.get("afterWeaknesses", {}).values() for text in values] or ["无"]
+        before_threat = item.get("beforeGlobalThreats") or ["无"]
+        after_threat = item.get("afterGlobalThreats") or ["无"]
+        line_events = [
+            f"路线{rank}：{text}"
+            for rank, values in item.get("candidateLineEvents", {}).items()
+            for text in values
+        ] or ["无需要额外解释的路线内部事件"]
+        comparison_blocks.append(
+            f"### {item['id']}\n\n"
+            f"- 修改前弱点：{'；'.join(before_weak)}\n"
+            f"- 修改后弱点：{'；'.join(after_weak)}\n"
+            f"- 修改前全局威胁：{'；'.join(before_threat)}\n"
+            f"- 修改后全局威胁：{'；'.join(after_threat)}\n"
+            f"- 路线内部事件：{'；'.join(line_events)}\n"
+            f"- 最终栏目：{'、'.join(item.get('displayedSections', []))}"
+        )
+
     return f"""# 专业棋局分析质量与性能报告
 
 生成模型：`{model}`。本报告不包含 API Key、Authorization 请求头或任何密钥内容。
@@ -291,6 +389,24 @@ def render_report(results: list[dict[str, Any]], cache_ms: int | None, model: st
 - 最终严格校验通过：{final_valid}/{count}（{final_rate:.1f}%）
 - 安全回退：{fallbacks}/{count}（{fallback_rate:.1f}%）
 - 缓存响应：{cache_ms if cache_ms is not None else '未测得'}ms
+
+## 分析重点筛选验收
+
+| 局面 | 修改前弱点 | 修改后弱点 | 过滤仅未保护 | 过滤无关王安全 | 移入候选路线 | 过滤普通PV吃子 | 最终展示栏目 |
+|---|---:|---:|---:|---:|---:|---:|---|
+{chr(10).join(focus_rows)}
+
+- 修改前显示弱点：{before_weaknesses} 项；修改后：{after_weaknesses} 项。
+- 被过滤的“仅未保护”事实：{filtered_undefended} 项。
+- 被过滤的无关王安全描述：{filtered_king} 项。
+- 从全局威胁归入候选路线内部：{moved_line_events} 项。
+- 被过滤的普通PV吃子：{filtered_pv_captures} 项。
+- 固定物质差栏目：已移除；物质事实仍保留在底层事实包和严格校验上下文。
+- g5马、a7兵、h4象、b7象类无意义弱点：{'仍有，需要阻止合并' if any(item.get('meaninglessWeaknessStillDisplayed') for item in results) else '未再显示'}。
+
+## 三个修改前后对比
+
+{chr(10).join(comparison_blocks)}
 
 ## 原始输出校验明细
 

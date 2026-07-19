@@ -255,7 +255,11 @@ async def move_facts(request: MoveExplanationRequest) -> MoveFactPackage:
     )
 
 
-@app.post("/api/professional-analysis", response_model=ProfessionalAnalysisResponse)
+@app.post(
+    "/api/professional-analysis",
+    response_model=ProfessionalAnalysisResponse,
+    response_model_exclude_none=True,
+)
 async def professional_analysis(request: MoveExplanationRequest) -> ProfessionalAnalysisResponse:
     moves = game_cache.get(request.analysis_id)
     if moves is None:
