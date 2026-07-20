@@ -3,8 +3,9 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
@@ -18,16 +19,25 @@ from .models import (
 )
 from .professional_validation import (
     LENGTH_RANGES,
+    VAGUE_PHRASES,
     _narrative_length,
     build_validation_context,
-    parse_professional_analysis,
     validate_professional_analysis,
+)
+from .professional_refs import (
+    REFERENCE_OUTPUT_CONTRACT,
+    DraftValidationIssue,
+    build_reference_payload,
+    parse_professional_draft,
+    normalize_professional_draft_literals,
+    resolve_professional_draft,
+    validate_professional_draft,
 )
 
 
 logger = logging.getLogger(__name__)
-PROFESSIONAL_PROMPT_VERSION = "professional-v4"
-PROFESSIONAL_TOKEN_LIMITS = {"simple": 3500, "normal": 6000, "complex": 10_000}
+PROFESSIONAL_PROMPT_VERSION = "professional-v5-refs"
+PROFESSIONAL_TOKEN_LIMITS = {"simple": 1500, "normal": 2600, "complex": 3400}
 STRATEGY_TAGS = [
     "king_attack",
     "improve_king_safety",
@@ -44,99 +54,7 @@ STRATEGY_TAGS = [
     "pawn_break",
     "transition_to_endgame",
 ]
-PROFESSIONAL_OUTPUT_CONTRACT = {
-    "complexity": "simple|normal|complex",
-    "positionAssessment": {
-        "summary": "string",
-        "material": {"description": "string", "evidenceRefs": ["evidence-id"]},
-        "kingSafety": {
-            "white": {"description": "string", "evidenceRefs": ["evidence-id"]},
-            "black": {"description": "string", "evidenceRefs": ["evidence-id"]},
-        },
-        "pieceActivity": {"description": "string", "evidenceRefs": ["evidence-id"]},
-        "pawnStructure": {"description": "string", "evidenceRefs": ["evidence-id"]},
-    },
-    "mainDanger": {
-        "sideInDanger": "white|black|both|none",
-        "level": "immediate|short_term|long_term",
-        "description": "string",
-        "consequence": "string",
-        "evidenceRefs": ["evidence-id"],
-    },
-    "keyPieces": [{
-        "side": "white|black",
-        "piece": "pawn|knight|bishop|rook|queen|king",
-        "square": "a1-h8",
-        "role": "string",
-        "futureTask": "string",
-        "evidenceRefs": ["evidence-id"],
-    }],
-    "plans": {
-        "white": [{
-            "strategyTag": "one allowed strategy tag",
-            "description": "string",
-            "requiredPreparation": "string",
-            "evidenceRefs": ["evidence-id"],
-        }],
-        "black": [{
-            "strategyTag": "one allowed strategy tag",
-            "description": "string",
-            "requiredPreparation": "string",
-            "evidenceRefs": ["evidence-id"],
-        }],
-    },
-    "weaknesses": {
-        "white": [{"description": "string", "exploitation": "string", "evidenceRefs": ["evidence-id"]}],
-        "black": [{"description": "string", "exploitation": "string", "evidenceRefs": ["evidence-id"]}],
-    },
-    "threats": [{
-        "side": "white|black",
-        "level": "immediate|short_term|long_term",
-        "description": "string",
-        "target": "string",
-        "evidenceRefs": ["evidence-id"],
-    }],
-    "playedMoveAnalysis": {
-        "move": "actual SAN or UCI",
-        "intention": "string",
-        "positiveEffects": ["string"],
-        "problems": ["string"],
-        "strongestResponse": "SAN or UCI from playedMoveContinuation",
-        "continuationPhases": [{
-            "phase": "string",
-            "moves": ["SAN or UCI in exact PV order"],
-            "explanation": "string",
-            "evidenceRefs": ["evidence-id"],
-        }],
-        "resultingPosition": "string",
-        "evaluationReason": "string",
-        "errorType": "tactical|strategic|both|none",
-        "evidenceRefs": ["evidence-id"],
-    },
-    "candidateLines": [{
-        "rank": 1,
-        "firstMove": "route first SAN or UCI",
-        "strategyTags": ["allowed strategy tag"],
-        "directPurpose": "string",
-        "opponentResponse": "string",
-        "continuationPhases": [{
-            "phase": "string",
-            "moves": ["SAN or UCI in exact PV order"],
-            "explanation": "string",
-            "evidenceRefs": ["evidence-id"],
-        }],
-        "resultingPosition": "string",
-        "advantages": ["string"],
-        "risks": ["string"],
-        "whyThisRank": "string",
-        "evidenceRefs": ["evidence-id"],
-    }],
-    "comparison": {
-        "mainDifference": "string",
-        "whyFirstLineIsBest": "string",
-        "evidenceRefs": ["evidence-id"],
-    },
-}
+PROFESSIONAL_OUTPUT_CONTRACT = REFERENCE_OUTPUT_CONTRACT
 
 
 @dataclass(frozen=True)
@@ -146,6 +64,20 @@ class ChatResult:
     completion_tokens: int | None
     total_tokens: int | None
     elapsed_ms: int
+
+
+@dataclass(frozen=True)
+class ProfessionalAttemptDiagnostic:
+    attempt: int
+    accepted: bool
+    issues: list[DraftValidationIssue]
+    prompt_tokens: int | None
+    completion_tokens: int | None
+    total_tokens: int | None
+    network_ms: int
+    validation_ms: int
+    postprocess_ms: int
+    normalizations: list[DraftValidationIssue] = field(default_factory=list)
 
 
 class ProfessionalAnalysisService:
@@ -166,7 +98,11 @@ class ProfessionalAnalysisService:
     def configured(self) -> bool:
         return bool(self.api_key)
 
-    async def analyze(self, move: MoveReview) -> GeneratedProfessionalAnalysis:
+    async def analyze(
+        self,
+        move: MoveReview,
+        diagnostics: list[ProfessionalAttemptDiagnostic] | None = None,
+    ) -> GeneratedProfessionalAnalysis:
         if not self.configured:
             raise RuntimeError("服务端尚未配置 DeepSeek API Key")
         complexity = compute_professional_complexity(move)
@@ -175,51 +111,102 @@ class ProfessionalAnalysisService:
         system = professional_system_prompt()
         prompt = professional_user_prompt(payload, complexity.level)
         usage_results: list[ChatResult] = []
-        last_errors: list[str] = []
+        last_issues: list[DraftValidationIssue] = []
+        all_issues: list[DraftValidationIssue] = []
         parsed: ProfessionalAnalysis | None = None
+        validation_ms = 0
+        postprocess_ms = 0
 
         for attempt in range(2):
             current_prompt = prompt
             if attempt:
                 current_prompt += (
                     "\n\n上一次返回未通过程序校验。错误如下：\n- "
-                    + "\n- ".join(_compact_validation_errors(last_errors))
-                    + "\n请重新根据上面的原始事实包生成完整JSON。不得保留错误字段，也不得新增事实。"
+                    + "\n- ".join(_compact_validation_errors([issue.render() for issue in last_issues]))
+                    + "\n请只修正这些引用或字段，不要重新输入棋子、格子、SAN或UCI。"
                 )
             result = await self._chat(
                 system=system,
                 prompt=current_prompt,
                 max_tokens=PROFESSIONAL_TOKEN_LIMITS[complexity.level],
-                temperature=0.1 if attempt else 0.2,
+                temperature=0.0,
             )
             usage_results.append(result)
-            parsed, parse_errors = parse_professional_analysis(result.content)
-            last_errors = parse_errors
-            if parsed is not None:
-                last_errors.extend(validate_professional_analysis(parsed, context))
-            if parsed is not None and not last_errors:
+            validation_started = time.perf_counter()
+            draft, last_issues = parse_professional_draft(result.content)
+            normalizations: list[DraftValidationIssue] = []
+            if draft is not None:
+                draft, normalizations = normalize_professional_draft_literals(draft, move, context)
+                last_issues.extend(validate_professional_draft(draft, move, context))
+            attempt_validation_ms = round((time.perf_counter() - validation_started) * 1000)
+            validation_ms += attempt_validation_ms
+
+            attempt_postprocess_ms = 0
+            if draft is not None and not last_issues:
+                postprocess_started = time.perf_counter()
+                parsed = resolve_professional_draft(draft, move, context)
+                parsed = _fit_resolved_analysis_length(parsed, move, complexity.level)
+                attempt_postprocess_ms = round((time.perf_counter() - postprocess_started) * 1000)
+                postprocess_ms += attempt_postprocess_ms
+                resolved_started = time.perf_counter()
+                resolved_errors = validate_professional_analysis(parsed, context)
+                resolved_validation_ms = round((time.perf_counter() - resolved_started) * 1000)
+                validation_ms += resolved_validation_ms
+                attempt_validation_ms += resolved_validation_ms
+                last_issues.extend(_resolved_validation_issue(error) for error in resolved_errors)
+            accepted = parsed is not None and not last_issues
+            all_issues.extend(last_issues)
+            if diagnostics is not None:
+                diagnostics.append(ProfessionalAttemptDiagnostic(
+                    attempt=attempt + 1,
+                    accepted=accepted,
+                    issues=list(last_issues),
+                    prompt_tokens=result.prompt_tokens,
+                    completion_tokens=result.completion_tokens,
+                    total_tokens=result.total_tokens,
+                    network_ms=result.elapsed_ms,
+                    validation_ms=attempt_validation_ms,
+                    postprocess_ms=attempt_postprocess_ms,
+                    normalizations=normalizations,
+                ))
+            if accepted:
                 return GeneratedProfessionalAnalysis(
                     analysis=parsed,
                     complexity_reasons=complexity.reasons,
-                    usage=_usage(usage_results),
+                    usage=_usage(
+                        usage_results,
+                        validation_ms=validation_ms,
+                        postprocess_ms=postprocess_ms,
+                    ),
                 )
             logger.warning(
                 "Professional DeepSeek validation failed on attempt %s: %s",
                 attempt + 1,
-                last_errors,
+                [issue.render() for issue in last_issues],
             )
 
+        postprocess_started = time.perf_counter()
         safe = build_safe_professional_analysis(move, complexity)
+        postprocess_ms += round((time.perf_counter() - postprocess_started) * 1000)
+        validation_started = time.perf_counter()
         safe_errors = validate_professional_analysis(safe, context)
+        validation_ms += round((time.perf_counter() - validation_started) * 1000)
         if safe_errors:
             logger.error("Safe professional analysis failed validation: %s", safe_errors)
             raise RuntimeError("安全专业分析未通过事实校验")
-        warnings = ["DeepSeek两次返回均未通过校验，已删除不可信内容并使用结构化事实生成安全结果。", *last_errors]
+        warnings = [
+            "DeepSeek两次返回均未通过校验，已删除不可信内容并使用结构化事实生成安全结果。",
+            *[issue.render() for issue in all_issues],
+        ]
         return GeneratedProfessionalAnalysis(
             analysis=safe,
             complexity_reasons=complexity.reasons,
             validation_warnings=warnings,
-            usage=_usage(usage_results),
+            usage=_usage(
+                usage_results,
+                validation_ms=validation_ms,
+                postprocess_ms=postprocess_ms,
+            ),
         )
 
     async def _chat(
@@ -231,27 +218,38 @@ class ProfessionalAnalysisService:
         temperature: float,
     ) -> ChatResult:
         started = time.perf_counter()
-        async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-            response = await client.post(
-                f"{self.base_url}/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": self.model,
-                    "messages": [
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": prompt},
-                    ],
-                    "max_tokens": max_tokens,
-                    "temperature": temperature,
-                    "thinking": {"type": "disabled"},
-                    "response_format": {"type": "json_object"},
-                },
-            )
-            response.raise_for_status()
-            data = response.json()
+        request_body = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": prompt},
+            ],
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "thinking": {"type": "disabled"},
+            "response_format": {"type": "json_object"},
+        }
+        data: dict[str, Any] | None = None
+        for transport_attempt in range(2):
+            try:
+                async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+                    response = await client.post(
+                        f"{self.base_url}/v1/chat/completions",
+                        headers={
+                            "Authorization": f"Bearer {self.api_key}",
+                            "Content-Type": "application/json",
+                        },
+                        json=request_body,
+                    )
+                    response.raise_for_status()
+                    data = response.json()
+                break
+            except httpx.TransportError:
+                if transport_attempt:
+                    raise
+                logger.warning("DeepSeek transport interrupted; retrying once without logging request headers")
+        if data is None:
+            raise RuntimeError("DeepSeek专业分析未返回响应")
         content = data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
         if not content:
             raise RuntimeError("DeepSeek专业分析返回了空内容")
@@ -345,43 +343,10 @@ def build_professional_payload(
     complexity: ProfessionalComplexity,
     allowed_evidence_ids: set[str],
 ) -> dict[str, Any]:
-    return {
-        "promptVersion": PROFESSIONAL_PROMPT_VERSION,
-        "currentMove": {
-            "id": move.played_move.id or f"move:played:{move.index}",
-            "plyIndex": move.index,
-            "fullMoveNumber": move.move_number,
-            "side": move.side,
-            "fenBefore": move.before_fen,
-            "fenAfter": move.after_fen,
-            "playedMove": move.played_move.model_dump(by_alias=True),
-            "evaluationBefore": {"id": f"evaluation:before:{move.index}", **move.before.model_dump()},
-            "evaluationAfter": {"id": f"evaluation:after:{move.index}", **move.after.model_dump()},
-            "centipawnLoss": move.centipawn_loss,
-            "quality": move.quality_label,
-        },
-        "positionBefore": _compact_prompt_value(
-            move.position_facts.model_dump(by_alias=True, exclude_none=True, exclude_defaults=True)
-        ),
-        "positionAfter": _compact_prompt_value(
-            move.position_facts_after.model_dump(by_alias=True, exclude_none=True, exclude_defaults=True)
-        ),
-        "playedMoveContinuation": (
-            _compact_prompt_value(
-                move.actual_move_line.model_dump(by_alias=True, exclude_none=True, exclude_defaults=True)
-            )
-            if move.actual_move_line else None
-        ),
-        "candidateLines": [
-            _compact_prompt_value(line.model_dump(by_alias=True, exclude_none=True, exclude_defaults=True))
-            for line in move.candidate_lines
-        ],
-        "complexity": complexity.level,
-        "complexityReasons": complexity.reasons,
-        "allowedSquares": sorted(set(move.allowed_squares)),
-        "allowedMoves": sorted(set(move.allowed_moves)),
-        "allowedEvidenceIds": sorted(allowed_evidence_ids),
-    }
+    # The context still owns the complete allow-list for server-side validation.
+    # DeepSeek receives each current-position fact once and refers to it by ID.
+    del allowed_evidence_ids
+    return build_reference_payload(move, complexity.level, complexity.reasons)
 
 
 def _compact_prompt_value(value: Any) -> Any:
@@ -399,33 +364,35 @@ def _compact_prompt_value(value: Any) -> Any:
 
 def professional_system_prompt() -> str:
     return (
-        "你负责根据已经验证的棋盘事实和Stockfish变化，生成专业、具体的国际象棋局面分析。"
-        "你不是国际象棋引擎，不能自行计算或猜测棋局。你只能引用输入中存在的棋子和格子、实战走法、"
-        "Stockfish候选路线、局面事实和证据ID。每个关于危险、弱点、关键棋子、战略方向和走法目的的结论，"
-        "都必须提供evidenceRefs。如果数据不能可靠确定某个战略判断，必须输出“证据不足，无法可靠判断”，"
-        "不能编造内容。Stockfish的PV只是双方采用较强应对时的参考路线，不能描述成必然发生。"
+        "你只负责解释后端提供的国际象棋事实引用，不负责重新抄写或计算棋盘。"
+        "所有棋子必须用pieceRef，候选路线必须用lineRef，PV必须用plyRefs，事实必须用evidenceRefs。"
+        "自由解释文本只能使用中文、中文标点和常用百分数，禁止任何拉丁字母、棋盘格、SAN或UCI；"
+        "自由解释文本也禁止自行写吃子、将军、将杀或绝杀，这些事件由后端从ply事实填充；"
+        "需要指代具体对象时只能写‘该棋子’‘该路线’‘该阶段’，后端会从引用ID回填真实棋子、格子和走法。"
+        "不能引用输入目录之外的ID，不能把白方与黑方说反。证据不足时明确说明，不能编造战略结论。"
+        "PV只是参考变化，不是必然发生。"
     )
 
 
 def professional_user_prompt(payload: dict[str, Any], complexity: str) -> str:
-    length = {"simple": "400—700", "normal": "800—1300", "complex": "1400—2200"}[complexity]
+    length = {"simple": "180—300", "normal": "320—500", "complex": "550—800"}[complexity]
     compact_payload = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     compact_contract = json.dumps(PROFESSIONAL_OUTPUT_CONTRACT, ensure_ascii=False, separators=(",", ":"))
     strategy_tags = ",".join(STRATEGY_TAGS)
-    return f"""请分析以下完整事实包：
+    return f"""请根据以下引用目录生成分析草稿：
 {compact_payload}
 
 严格规则：
-1. 每个evidenceRefs只能取自allowedEvidenceIds，并且必须支持对应颜色和结论。
-2. keyPieces必须真实存在于fenBefore；playedMoveAnalysis.move必须等于实际SAN或UCI。
-3. candidateLines必须与输入路线数量、rank和firstMove一一对应；每个continuationPhases.moves只能来自自己的PV，不能串线。
-4. 禁止只写“加强中心、注意防守、改善子力、形成压力、准备进攻、局面复杂”。如使用类似结论，必须继续说明具体棋子、格子、目标、实现走法和路线证据。
-5. 最大危险必须说明处于危险的一方、来源棋子与格子、目标、危险级别和不处理的后果。无可靠危险时sideInDanger写none，并明确证据不足。
-6. strategyTags只能使用以下枚举：{strategy_tags}。每个战略方向至少引用一条证据。
-7. 变化按阶段解释，不能只堆SAN。PV只能描述为参考变化。
-8. 正文目标长度为{length}个中文字符；complexity必须是{complexity}。
+1. pieceRef只能来自pos.pieces[].id；不得输出piece、square或自造棋子名称。
+2. lineRef必须按lines顺序逐条引用；每条路线只返回一个plyRefs数组，必须按顺序完整覆盖该路线plies[].id，不能串线。
+3. playedMoveAnalysis.moveRef必须等于played.ref；strongestReplyRef及唯一的plyRefs数组只能来自并完整覆盖actual.plies。
+4. evidenceRefs、dangerRef只能引用输入中出现的ID。每组evidenceRefs只选1—4个最相关ID，不要枚举整份事实目录。每个危险、计划和因果结论必须有证据。
+5. 自由文本只能使用中文和中文标点，禁止拉丁字母、数字、棋盘格、SAN和UCI。不得自行写“吃子、将军、将杀、绝杀”等事件词，这些事件由后端根据ply填充。错误示例：“控制d4”“走Qe2”；正确示例：“控制该中心格”“该路线首着完成协调”。
+6. mainDanger有具体危险时用dangerRef引用一个已有ply；无可靠直接危险时dangerRef写null且level写none。危险一方由后端从ply推导，不要输出sideInDanger。
+7. 为避免重复，白方与黑方计划各1—2条且保持简短；keyPieces.white只能引用白方棋子，keyPieces.black只能引用黑方棋子；弱点和威胁由后端事实生成，不要输出weaknesses或threats；不要自行拆分PV阶段。strategyTags只能使用：{strategy_tags}。
+8. 草稿解释文字目标为{length}个中文字符；后端会追加事实标签并回填真实走法。complexity必须是{complexity}。
 
-只返回一个字段与以下契约完全一致的JSON对象，不要Markdown，不要额外字段或文字。数组中的对象表示元素结构，不表示固定数量：
+只返回与以下契约完全一致的JSON，不要Markdown或额外字段。数组对象表示元素结构：
 {compact_contract}"""
 
 
@@ -708,7 +675,7 @@ def _apply_safe_length_profile(
             plan.required_preparation = "路线外准备证据不足。"
 
     if level == "normal":
-        return result
+        return _trim_profile_max(result, level)
 
     result.position_assessment.material.description = (
         f"白减黑子力差{move.position_facts.material.get('valueDifferenceWhiteMinusBlack', 0)}。"
@@ -745,6 +712,116 @@ def _apply_safe_length_profile(
         line.resulting_position = _very_short_result_position(source)
     result.comparison.main_difference = "三线首着、顺序与评价不同。"
     result.comparison.why_first_line_is_best = "第一线由Stockfish排首位。"
+    return _trim_profile_max(result, level)
+
+
+def _fit_resolved_analysis_length(
+    analysis: ProfessionalAnalysis,
+    move: MoveReview,
+    level: str,
+) -> ProfessionalAnalysis:
+    """Fit generated prose to the existing band without changing any referenced chess fact."""
+    result = _trim_profile_max(analysis, level)
+    minimum = LENGTH_RANGES[level][0]
+    first_line = move.candidate_lines[0] if move.candidate_lines else None
+    first = first_line.first_move if first_line else None
+    verified = (
+        f"事实补充：实战{move.played_move.piece}从{move.played_move.from_square}到"
+        f"{move.played_move.to_square}（{move.played_move.san}）"
+    )
+    if first:
+        verified += (
+            f"；Stockfish第一路线首着为{first.san}，从{first.from_square}到{first.to_square}"
+        )
+    verified += "。"
+    while _narrative_length(result.model_dump(by_alias=True)) < minimum:
+        if len(result.position_assessment.summary) + len(verified) <= 500:
+            result.position_assessment.summary += verified
+        else:
+            result.comparison.main_difference += verified
+    return _trim_profile_max(result, level)
+
+
+def _trim_profile_max(analysis: ProfessionalAnalysis, level: str) -> ProfessionalAnalysis:
+    """Trim only redundant prose when a deterministic profile is slightly over its band."""
+    result = analysis.model_copy(deep=True)
+    maximum = LENGTH_RANGES[level][1]
+
+    def length() -> int:
+        return _narrative_length(result.model_dump(by_alias=True))
+
+    fields = [
+        (result.comparison, "main_difference"),
+        (result.comparison, "why_first_line_is_best"),
+        (result.position_assessment, "summary"),
+        (result.played_move_analysis, "evaluation_reason"),
+        (result.position_assessment.material, "description"),
+        (result.position_assessment.king_safety.white, "description"),
+        (result.position_assessment.king_safety.black, "description"),
+        (result.position_assessment.piece_activity, "description"),
+        (result.position_assessment.pawn_structure, "description"),
+        (result.main_danger, "description"),
+        (result.main_danger, "consequence"),
+        (result.played_move_analysis, "intention"),
+        (result.played_move_analysis, "resulting_position"),
+    ]
+    for piece in result.key_pieces:
+        fields.extend([(piece, "role"), (piece, "future_task")])
+    for plan in [*result.plans.white, *result.plans.black]:
+        fields.extend([(plan, "description"), (plan, "required_preparation")])
+    for weakness in [*result.weaknesses.white, *result.weaknesses.black]:
+        fields.extend([(weakness, "description"), (weakness, "exploitation")])
+    for threat in result.threats:
+        fields.append((threat, "description"))
+    for phase in result.played_move_analysis.continuation_phases:
+        fields.append((phase, "explanation"))
+    for line in result.candidate_lines:
+        fields.extend(
+            [
+                (line, "direct_purpose"),
+                (line, "resulting_position"),
+                (line, "why_this_rank"),
+            ]
+        )
+        for phase in line.continuation_phases:
+            fields.append((phase, "explanation"))
+    for target, attribute in fields:
+        while length() > maximum:
+            value = getattr(target, attribute)
+            if any(phrase in value for phrase in VAGUE_PHRASES):
+                break
+            if len(value) <= 8:
+                break
+            excess = length() - maximum
+            remove = min(excess + 1, len(value) - 8)
+            shortened = value[:-remove].rstrip(" ，；：,.!?！？") + "。"
+            if len(shortened) >= len(value):
+                shortened = value[:-2].rstrip(" ，；：,.!?！？") + "。"
+            setattr(target, attribute, shortened)
+        if length() <= maximum:
+            break
+    list_fields = [
+        result.played_move_analysis.positive_effects,
+        result.played_move_analysis.problems,
+        *[line.advantages for line in result.candidate_lines],
+        *[line.risks for line in result.candidate_lines],
+    ]
+    for values in list_fields:
+        for index, value in enumerate(values):
+            while length() > maximum and len(value) > 8:
+                if any(phrase in value for phrase in VAGUE_PHRASES):
+                    break
+                excess = length() - maximum
+                remove = min(excess + 1, len(value) - 8)
+                shortened = value[:-remove].rstrip(" ，；：,.!?！？") + "。"
+                if len(shortened) >= len(value):
+                    shortened = value[:-2].rstrip(" ，；：,.!?！？") + "。"
+                values[index] = shortened
+                value = shortened
+            if length() <= maximum:
+                break
+        if length() <= maximum:
+            break
     return result
 
 
@@ -845,6 +922,8 @@ def _fit_complex_safe_length(
             excess = length() - maximum
             remove = min(excess + 1, len(text) - 8)
             shortened = text[:-remove].rstrip(" ，；：,.!?！？") + "。"
+            if len(shortened) >= len(text):
+                shortened = text[:-2].rstrip(" ，；：,.!?！？") + "。"
             setattr(target, attribute, shortened)
         if length() <= maximum:
             return result
@@ -917,8 +996,8 @@ def _result_position_text(line: Any) -> str:
     facts = line.resulting_position_facts
     if facts:
         difference = facts.material.get("valueDifferenceWhiteMinusBlack", 0)
-        return f"参考路线结束FEN为{line.resulting_fen}；白方减黑方的子力价值差为{difference}。"
-    return f"参考路线结束FEN为{line.resulting_fen}。"
+        return f"参考路线结束时轮到{facts.side_to_move}方行棋；白方减黑方的子力价值差为{difference}。"
+    return "参考路线已结束；没有额外的结果局面事实可供引用。"
 
 
 def _joined_fact_text(facts: list[Any], side: str) -> str:
@@ -969,7 +1048,12 @@ def _mover_score(centipawn: int | None, mate_in: int | None, side: str) -> int |
     return value if side == "white" else -value
 
 
-def _usage(results: list[ChatResult]) -> ProfessionalAnalysisUsage:
+def _usage(
+    results: list[ChatResult],
+    *,
+    validation_ms: int = 0,
+    postprocess_ms: int = 0,
+) -> ProfessionalAnalysisUsage:
     def total(field: str) -> int | None:
         values = [getattr(result, field) for result in results]
         return sum(value for value in values if value is not None) if any(value is not None for value in values) else None
@@ -980,7 +1064,20 @@ def _usage(results: list[ChatResult]) -> ProfessionalAnalysisUsage:
         total_tokens=total("total_tokens"),
         elapsed_ms=sum(result.elapsed_ms for result in results),
         attempts=len(results),
+        network_ms=sum(result.elapsed_ms for result in results),
+        validation_ms=validation_ms,
+        postprocess_ms=postprocess_ms,
     )
+
+
+def _resolved_validation_issue(error: str) -> DraftValidationIssue:
+    path, separator, message = error.partition(": ")
+    if separator and re.fullmatch(
+        r"\$?(?:[A-Za-z_][A-Za-z0-9_]*)(?:\.[A-Za-z_][A-Za-z0-9_]*|\[\d+\])*",
+        path,
+    ):
+        return DraftValidationIssue(path, "其他原因", message)
+    return DraftValidationIssue("resolvedAnalysis", "其他原因", error)
 
 
 def _compact_validation_errors(errors: list[str]) -> list[str]:

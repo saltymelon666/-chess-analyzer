@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 
 class ReviewRequest(BaseModel):
@@ -419,12 +419,167 @@ class ProfessionalAnalysis(BaseModel):
     comparison: ProfessionalComparison
 
 
+class ProfessionalDraftEvidenceText(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    explanation: str = Field(min_length=4, max_length=500)
+    evidence_refs: list[str] = Field(alias="evidenceRefs", min_length=1, max_length=100)
+
+
+class ProfessionalDraftKingSafety(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    white: ProfessionalDraftEvidenceText
+    black: ProfessionalDraftEvidenceText
+
+
+class ProfessionalDraftPositionAssessment(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    summary: str = Field(min_length=4, max_length=500)
+    material: ProfessionalDraftEvidenceText
+    king_safety: ProfessionalDraftKingSafety = Field(alias="kingSafety")
+    piece_activity: ProfessionalDraftEvidenceText = Field(alias="pieceActivity")
+    pawn_structure: ProfessionalDraftEvidenceText = Field(alias="pawnStructure")
+
+
+class ProfessionalDraftMainDanger(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    level: Literal["immediate", "short_term", "medium_term", "long_term", "none"]
+    danger_ref: str | None = Field(alias="dangerRef", default=None)
+    explanation: str = Field(min_length=4, max_length=500)
+    consequence: str = Field(default="", max_length=500)
+    evidence_refs: list[str] = Field(alias="evidenceRefs", default_factory=list, max_length=100)
+
+
+class ProfessionalDraftKeyPiece(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    piece_ref: str = Field(alias="pieceRef")
+    role: str = Field(min_length=4, max_length=400)
+    future_task: str = Field(alias="futureTask", min_length=4, max_length=400)
+    evidence_refs: list[str] = Field(alias="evidenceRefs", default_factory=list, max_length=100)
+
+
+class ProfessionalDraftKeyPieces(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    white: ProfessionalDraftKeyPiece
+    black: ProfessionalDraftKeyPiece
+
+
+class ProfessionalDraftPlan(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    strategy_tag: StrategyTag = Field(alias="strategyTag")
+    explanation: str = Field(
+        min_length=4,
+        max_length=500,
+        validation_alias=AliasChoices("explanation", "description"),
+        serialization_alias="explanation",
+    )
+    required_preparation: str = Field(alias="requiredPreparation", min_length=1, max_length=400)
+    evidence_refs: list[str] = Field(alias="evidenceRefs", min_length=1, max_length=100)
+
+
+class ProfessionalDraftPlans(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    white: list[ProfessionalDraftPlan] = Field(min_length=1, max_length=2)
+    black: list[ProfessionalDraftPlan] = Field(min_length=1, max_length=2)
+
+
+class ProfessionalDraftWeakness(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    explanation: str = Field(min_length=4, max_length=500)
+    exploitation: str = Field(min_length=4, max_length=400)
+    evidence_refs: list[str] = Field(alias="evidenceRefs", min_length=1, max_length=100)
+
+
+class ProfessionalDraftWeaknesses(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    white: list[ProfessionalDraftWeakness] = Field(default_factory=list, max_length=1)
+    black: list[ProfessionalDraftWeakness] = Field(default_factory=list, max_length=1)
+
+
+class ProfessionalDraftThreat(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    side: Literal["white", "black"]
+    level: Literal["immediate", "short_term", "medium_term", "long_term"]
+    target_ref: str = Field(alias="targetRef")
+    explanation: str = Field(min_length=4, max_length=500)
+    evidence_refs: list[str] = Field(alias="evidenceRefs", min_length=1, max_length=100)
+
+
+class ProfessionalDraftContinuationPhase(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    phase: str = Field(min_length=1, max_length=80)
+    ply_refs: list[str] = Field(alias="plyRefs", min_length=1, max_length=10)
+    explanation: str = Field(min_length=4, max_length=500)
+
+
+class ProfessionalDraftPlayedMoveAnalysis(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    move_ref: str = Field(alias="moveRef")
+    intention: str = Field(min_length=4, max_length=500)
+    positive_effects: list[str] = Field(alias="positiveEffects", default_factory=list, max_length=3)
+    problems: list[str] = Field(default_factory=list, max_length=3)
+    strongest_reply_ref: str = Field(alias="strongestReplyRef")
+    ply_refs: list[str] = Field(alias="plyRefs", min_length=1, max_length=10)
+    continuation_explanation: str = Field(alias="continuationExplanation", min_length=4, max_length=500)
+    error_type: Literal["tactical", "strategic", "both", "none"] = Field(alias="errorType")
+    evidence_refs: list[str] = Field(alias="evidenceRefs", min_length=1, max_length=100)
+
+
+class ProfessionalDraftCandidateLine(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    line_ref: str = Field(alias="lineRef")
+    strategy_tags: list[StrategyTag] = Field(alias="strategyTags", default_factory=list, max_length=3)
+    direct_purpose: str = Field(alias="directPurpose", min_length=4, max_length=500)
+    ply_refs: list[str] = Field(alias="plyRefs", min_length=1, max_length=10)
+    continuation_explanation: str = Field(alias="continuationExplanation", min_length=4, max_length=500)
+    advantages: list[str] = Field(default_factory=list, max_length=3)
+    risks: list[str] = Field(default_factory=list, max_length=3)
+    evidence_refs: list[str] = Field(alias="evidenceRefs", default_factory=list, max_length=100)
+
+
+class ProfessionalDraftComparison(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    main_difference: str = Field(alias="mainDifference", min_length=4, max_length=500)
+    why_first_line_is_best: str = Field(alias="whyFirstLineIsBest", min_length=4, max_length=500)
+    evidence_refs: list[str] = Field(alias="evidenceRefs", min_length=1, max_length=100)
+
+
+class ProfessionalAnalysisDraft(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    complexity: Literal["simple", "normal", "complex"]
+    position_assessment: ProfessionalDraftPositionAssessment = Field(alias="positionAssessment")
+    main_danger: ProfessionalDraftMainDanger = Field(alias="mainDanger")
+    key_pieces: ProfessionalDraftKeyPieces = Field(alias="keyPieces")
+    plans: ProfessionalDraftPlans
+    played_move_analysis: ProfessionalDraftPlayedMoveAnalysis = Field(alias="playedMoveAnalysis")
+    candidate_lines: list[ProfessionalDraftCandidateLine] = Field(alias="candidateLines", min_length=1, max_length=3)
+    comparison: ProfessionalDraftComparison
+
+
 class ProfessionalAnalysisUsage(BaseModel):
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
     total_tokens: int | None = None
     elapsed_ms: int
     attempts: int
+    network_ms: int = 0
+    validation_ms: int = 0
+    postprocess_ms: int = 0
 
 
 class GeneratedProfessionalAnalysis(BaseModel):
