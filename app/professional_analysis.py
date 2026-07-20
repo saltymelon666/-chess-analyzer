@@ -24,6 +24,7 @@ from .professional_validation import (
     build_validation_context,
     validate_professional_analysis,
 )
+from .analysis_focus import select_analysis_focus
 from .professional_refs import (
     REFERENCE_OUTPUT_CONTRACT,
     DraftValidationIssue,
@@ -36,7 +37,7 @@ from .professional_refs import (
 
 
 logger = logging.getLogger(__name__)
-PROFESSIONAL_PROMPT_VERSION = "professional-v5-refs"
+PROFESSIONAL_PROMPT_VERSION = "professional-v6-focus"
 PROFESSIONAL_TOKEN_LIMITS = {"simple": 1500, "normal": 2600, "complex": 3400}
 STRATEGY_TAGS = [
     "king_attack",
@@ -365,11 +366,15 @@ def _compact_prompt_value(value: Any) -> Any:
 def professional_system_prompt() -> str:
     return (
         "你只负责解释后端提供的国际象棋事实引用，不负责重新抄写或计算棋盘。"
+        "你的首要任务不是填满所有栏目，而是抓住当前局面中最影响决策的一至三个重点。"
+        "不要把所有棋盘事实都写进分析，只有focus.selectedFacts允许进入最终结论。"
         "所有棋子必须用pieceRef，候选路线必须用lineRef，PV必须用plyRefs，事实必须用evidenceRefs。"
         "自由解释文本只能使用中文、中文标点和常用百分数，禁止任何拉丁字母、棋盘格、SAN或UCI；"
         "自由解释文本也禁止自行写吃子、将军、将杀或绝杀，这些事件由后端从ply事实填充；"
         "需要指代具体对象时只能写‘该棋子’‘该路线’‘该阶段’，后端会从引用ID回填真实棋子、格子和走法。"
-        "不能引用输入目录之外的ID，不能把白方与黑方说反。证据不足时明确说明，不能编造战略结论。"
+        "不能引用输入目录之外的ID，不能把白方与黑方说反。证据不足时返回空数组、null或isRelevant为false。"
+        "没有保护不等于弱点，王前兵较少不等于存在攻王，没有易位权不等于王不安全。"
+        "单条Stockfish路线中的普通吃子不等于全局潜在威胁，物质数量不作为固定栏目。"
         "PV只是参考变化，不是必然发生。"
     )
 
@@ -378,19 +383,31 @@ def professional_user_prompt(payload: dict[str, Any], complexity: str) -> str:
     length = {"simple": "180—300", "normal": "320—500", "complex": "550—800"}[complexity]
     compact_payload = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     compact_contract = json.dumps(PROFESSIONAL_OUTPUT_CONTRACT, ensure_ascii=False, separators=(",", ":"))
+    line_skeleton = json.dumps(
+        [
+            {
+                "lineRef": line["id"],
+                "plyRefs": [item["id"] for item in line.get("plies", [])],
+            }
+            for line in payload.get("lines", [])
+        ],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
     strategy_tags = ",".join(STRATEGY_TAGS)
     return f"""请根据以下引用目录生成分析草稿：
 {compact_payload}
 
 严格规则：
 1. pieceRef只能来自pos.pieces[].id；不得输出piece、square或自造棋子名称。
-2. lineRef必须按lines顺序逐条引用；每条路线只返回一个plyRefs数组，必须按顺序完整覆盖该路线plies[].id，不能串线。
+2. candidateLines必须恰好返回{len(payload.get('lines', []))}项，lineRef按lines顺序逐条引用；每条路线只返回一个plyRefs数组，必须按顺序完整覆盖该路线plies[].id，不能串线。本次不可改动的引用骨架为：{line_skeleton}
 3. playedMoveAnalysis.moveRef必须等于played.ref；strongestReplyRef及唯一的plyRefs数组只能来自并完整覆盖actual.plies。
 4. evidenceRefs、dangerRef只能引用输入中出现的ID。每组evidenceRefs只选1—4个最相关ID，不要枚举整份事实目录。每个危险、计划和因果结论必须有证据。
 5. 自由文本只能使用中文和中文标点，禁止拉丁字母、数字、棋盘格、SAN和UCI。不得自行写“吃子、将军、将杀、绝杀”等事件词，这些事件由后端根据ply填充。错误示例：“控制d4”“走Qe2”；正确示例：“控制该中心格”“该路线首着完成协调”。
 6. mainDanger有具体危险时用dangerRef引用一个已有ply；无可靠直接危险时dangerRef写null且level写none。危险一方由后端从ply推导，不要输出sideInDanger。
-7. 为避免重复，白方与黑方计划各1—2条且保持简短；keyPieces.white只能引用白方棋子，keyPieces.black只能引用黑方棋子；弱点和威胁由后端事实生成，不要输出weaknesses或threats；不要自行拆分PV阶段。strategyTags只能使用：{strategy_tags}。
-8. 草稿解释文字目标为{length}个中文字符；后端会追加事实标签并回填真实走法。complexity必须是{complexity}。
+7. positionAssessment只允许输出summary，不得输出material、kingSafety、pieceActivity或pawnStructure；这些动态栏目全部由后端重点选择器按selectedFacts回填。
+8. 为避免重复，白方与黑方计划各1—2条且保持简短；keyPieces.white只能引用白方棋子，keyPieces.black只能引用黑方棋子；弱点、王安全、子力活动、兵形、全局威胁与路线内部事件由后端重点选择器生成，不要输出这些字段；不要自行拆分PV阶段。strategyTags只能使用：{strategy_tags}。
+9. 草稿解释文字目标为{length}个中文字符；后端会追加事实标签并回填真实走法。complexity必须是{complexity}。
 
 只返回与以下契约完全一致的JSON，不要Markdown或额外字段。数组对象表示元素结构：
 {compact_contract}"""
@@ -433,45 +450,57 @@ def build_safe_professional_analysis(
     move: MoveReview,
     complexity: ProfessionalComplexity,
 ) -> ProfessionalAnalysis:
-    material_ref = str(move.position_facts.material.get("id"))
-    king_refs = {
-        side: [fact.id for fact in move.position_facts.king_safety if fact.side == side][:3]
-        for side in ("white", "black")
+    focus = select_analysis_focus(move)
+    played_ref = move.played_move.id or f"move:played:{move.index}"
+    raw_by_id = {
+        fact.id: fact
+        for group in (
+            move.position_facts.piece_activity,
+            move.position_facts.king_safety,
+            move.position_facts.pawn_structure,
+            move.position_facts.threats,
+            move.position_facts.key_pieces,
+        )
+        for fact in group
     }
-    activity_refs = [fact.id for fact in move.position_facts.piece_activity[:4]] or [material_ref]
-    pawn_refs = [fact.id for fact in move.position_facts.pawn_structure[:4]] or [material_ref]
-    material = move.position_facts.material
-    difference = material.get("valueDifferenceWhiteMinusBlack", 0)
 
     danger_side = "none"
     danger_level = "long_term"
     danger_description = "结构化事实没有确认需要立即处理的单一危险，证据不足，无法可靠判断更具体的威胁。"
     danger_consequence = "继续比较棋规库列出的强制走法和Stockfish第一路线，不补写未验证后果。"
-    danger_refs = [material_ref]
-    threat_source = next((item for item in move.actual_move_line.moves if item.check or item.capture) if move.actual_move_line else (), None)
-    if threat_source:
-        danger_side = "black" if threat_source.side == "white" else "white"
+    danger_refs = [played_ref]
+    top_threat = focus.global_threats[0] if focus.global_threats else None
+    threat_source = next(
+        (
+            item
+            for item in (*move.position_facts.immediate_checks, *move.position_facts.immediate_captures)
+            if top_threat and item.id in top_threat.evidence_refs
+        ),
+        None,
+    )
+    if top_threat and threat_source:
+        danger_side = "black" if top_threat.side == "white" else "white"
         danger_level = "immediate"
         danger_description = (
-            f"{danger_side}的直接危险来自{threat_source.side}_{threat_source.piece.split('_')[-1]}从"
+            f"{danger_side}的直接危险来自{top_threat.side}_{threat_source.piece.split('_')[-1]}从"
             f"{threat_source.from_square}走到{threat_source.to_square}的参考着{threat_source.san}。"
         )
-        verified_events = []
-        if threat_source.capture:
-            verified_events.append("吃子")
-        if threat_source.checkmate:
-            verified_events.append("将杀")
-        elif threat_source.check:
-            verified_events.append("将军")
-        danger_consequence = (
-            "若进入这条参考变化，将发生已由棋规库确认的" + "、".join(verified_events) + "事件。"
-        )
-        danger_refs = [threat_source.id]
+        danger_consequence = top_threat.decision_impact
+        danger_refs = list(top_threat.evidence_refs)
 
     key_pieces = []
     pieces = move.position_facts.pieces
     for side in ("white", "black"):
-        preferred = next((piece for piece in pieces if piece["side"] == side and piece["piece"] != "pawn"), None)
+        selected_squares = [square for fact in focus.key_piece_facts[side] for square in fact.squares]
+        preferred = next(
+            (
+                piece
+                for square in selected_squares
+                for piece in pieces
+                if piece["side"] == side and piece["square"] == square
+            ),
+            None,
+        ) or next((piece for piece in pieces if piece["side"] == side and piece["piece"] != "pawn"), None)
         if preferred:
             key_pieces.append(
                 {
@@ -502,27 +531,29 @@ def build_safe_professional_analysis(
             )
 
     weaknesses = {"white": [], "black": []}
-    for fact in [*move.position_facts.piece_activity, *move.position_facts.pawn_structure]:
-        if fact.side in weaknesses and fact.category in {
-            "undefended_piece", "underprotected", "isolated_pawn", "doubled_pawns", "vulnerable_pawn"
-        }:
-            weaknesses[fact.side].append(
+    for side, items in focus.weaknesses.items():
+        for fact in items:
+            weaknesses[side].append(
                 {
                     "description": fact.description,
-                    "exploitation": "对手如何长期利用仍需以候选路线为准，当前不补写路线外走法。",
-                    "evidenceRefs": [fact.id],
+                    "exploitation": fact.decision_impact,
+                    "evidenceRefs": list(fact.evidence_refs),
                 }
             )
     threats = []
-    for fact in move.position_facts.threats[:4]:
+    for fact in focus.global_threats:
         if fact.side in {"white", "black"}:
             threats.append(
                 {
                     "side": fact.side,
-                    "level": "immediate" if fact.category.startswith("immediate") else "short_term",
+                    "level": "immediate" if fact.importance_score >= 4 else "short_term",
+                    "scope": "current_position",
                     "description": fact.description,
                     "target": "、".join(fact.squares) or "证据不足，无法可靠判断具体目标",
-                    "evidenceRefs": [fact.id],
+                    "attacker": fact.squares[0] if fact.squares else "证据中的攻击棋子",
+                    "preparation": "当前局面已经具备执行条件。",
+                    "consequence": fact.decision_impact,
+                    "evidenceRefs": list(fact.evidence_refs),
                 }
             )
 
@@ -532,6 +563,15 @@ def build_safe_professional_analysis(
     candidate_analyses = []
     for line in move.candidate_lines:
         first = line.moves[0] if line.moves else None
+        events = [
+            {
+                "scope": event.scope,
+                "description": event.description,
+                "significance": event.decision_impact,
+                "evidenceRefs": list(event.evidence_refs),
+            }
+            for event in focus.line_events.get(line.rank, ())
+        ]
         candidate_analyses.append(
             {
                 "rank": line.rank,
@@ -546,39 +586,46 @@ def build_safe_professional_analysis(
                 "resultingPosition": _result_position_text(line),
                 "advantages": ["这是Stockfish给出的合法候选路线。"],
                 "risks": ["路线以外的发展证据不足，不能视为必然发生。"],
+                "events": events,
                 "whyThisRank": f"排名和评价直接来自Stockfish：rank={line.rank}。",
                 "evidenceRefs": [line.id, *([first.id] if first else [])],
             }
         )
 
     first_line = move.candidate_lines[0] if move.candidate_lines else None
-    comparison_refs = [line.id for line in move.candidate_lines] or [material_ref]
+    comparison_refs = [line.id for line in move.candidate_lines] or [played_ref]
+    activity_ids = {item.id for item in move.position_facts.piece_activity}
+    pawn_ids = {item.id for item in move.position_facts.pawn_structure}
+    activity_focus = next(
+        (item for item in focus.selected_facts if item.id in activity_ids and item.display_section == "positionAssessment"),
+        None,
+    )
+    pawn_focus = next(
+        (item for item in focus.selected_facts if item.id in pawn_ids and item.display_section == "positionAssessment"),
+        None,
+    )
+    activity = raw_by_id.get(activity_focus.id) if activity_focus else None
+    pawn = raw_by_id.get(pawn_focus.id) if pawn_focus else None
+    king_payload: dict[str, Any] = {"isRelevant": bool(focus.king_safety_relevant_sides)}
+    for side in ("white", "black"):
+        selected = [
+            item for item in focus.selected_facts
+            if item.display_section == "kingSafety" and item.side == side
+        ]
+        king_payload[side] = (
+            {
+                "description": "；".join(item.description for item in selected),
+                "evidenceRefs": [item.id for item in selected],
+            }
+            if selected else None
+        )
     safe_payload = {
         "complexity": complexity.level,
         "positionAssessment": {
-            "summary": f"当前由{move.side}行棋；所有判断仅来自FEN、棋规事实和Stockfish参考路线。",
-            "material": {
-                "description": f"白方减黑方的结构化子力价值差为{difference}。",
-                "evidenceRefs": [material_ref],
-            },
-            "kingSafety": {
-                "white": {
-                    "description": _joined_fact_text(move.position_facts.king_safety, "white"),
-                    "evidenceRefs": king_refs["white"] or [material_ref],
-                },
-                "black": {
-                    "description": _joined_fact_text(move.position_facts.king_safety, "black"),
-                    "evidenceRefs": king_refs["black"] or [material_ref],
-                },
-            },
-            "pieceActivity": {
-                "description": "；".join(fact.description for fact in move.position_facts.piece_activity[:4]) or "没有更多可靠活动度事实。",
-                "evidenceRefs": activity_refs,
-            },
-            "pawnStructure": {
-                "description": "；".join(fact.description for fact in move.position_facts.pawn_structure[:4]) or "没有更多可靠兵结构事实。",
-                "evidenceRefs": pawn_refs,
-            },
+            "summary": f"当前由{move.side}行棋；只展示会影响本回合决策的事实和Stockfish参考路线。",
+            "kingSafety": king_payload,
+            "pieceActivity": ({"description": activity.description, "evidenceRefs": [activity.id]} if activity else None),
+            "pawnStructure": ({"description": pawn.description, "evidenceRefs": [pawn.id]} if pawn else None),
         },
         "mainDanger": {
             "sideInDanger": danger_side,
@@ -635,17 +682,19 @@ def _apply_safe_length_profile(
         ("white", result.position_assessment.king_safety.white),
         ("black", result.position_assessment.king_safety.black),
     ):
+        if target is None:
+            continue
         facts = [fact for fact in move.position_facts.king_safety if fact.side == side][:fact_limit]
         if facts:
             target.description = "；".join(fact.description for fact in facts)
             target.evidence_refs = [fact.id for fact in facts]
 
     activity = move.position_facts.piece_activity[:fact_limit]
-    if activity:
+    if activity and result.position_assessment.piece_activity is not None:
         result.position_assessment.piece_activity.description = "；".join(fact.description for fact in activity)
         result.position_assessment.piece_activity.evidence_refs = [fact.id for fact in activity]
     pawns = move.position_facts.pawn_structure[:fact_limit]
-    if pawns:
+    if pawns and result.position_assessment.pawn_structure is not None:
         result.position_assessment.pawn_structure.description = "；".join(fact.description for fact in pawns)
         result.position_assessment.pawn_structure.evidence_refs = [fact.id for fact in pawns]
 
@@ -677,9 +726,6 @@ def _apply_safe_length_profile(
     if level == "normal":
         return _trim_profile_max(result, level)
 
-    result.position_assessment.material.description = (
-        f"白减黑子力差{move.position_facts.material.get('valueDifferenceWhiteMinusBlack', 0)}。"
-    )
     if result.main_danger.side_in_danger == "none":
         result.main_danger.description = "未确认单一直接危险，证据不足。"
         result.main_danger.consequence = "继续比较合法强制着与第一参考线。"
@@ -755,16 +801,17 @@ def _trim_profile_max(analysis: ProfessionalAnalysis, level: str) -> Professiona
         (result.comparison, "why_first_line_is_best"),
         (result.position_assessment, "summary"),
         (result.played_move_analysis, "evaluation_reason"),
-        (result.position_assessment.material, "description"),
-        (result.position_assessment.king_safety.white, "description"),
-        (result.position_assessment.king_safety.black, "description"),
-        (result.position_assessment.piece_activity, "description"),
-        (result.position_assessment.pawn_structure, "description"),
-        (result.main_danger, "description"),
-        (result.main_danger, "consequence"),
         (result.played_move_analysis, "intention"),
         (result.played_move_analysis, "resulting_position"),
     ]
+    for optional in (
+        result.position_assessment.king_safety.white,
+        result.position_assessment.king_safety.black,
+        result.position_assessment.piece_activity,
+        result.position_assessment.pawn_structure,
+    ):
+        if optional is not None:
+            fields.append((optional, "description"))
     for piece in result.key_pieces:
         fields.extend([(piece, "role"), (piece, "future_task")])
     for plan in [*result.plans.white, *result.plans.black]:
@@ -940,17 +987,14 @@ def _model_phases(moves: list[Any], count: int) -> list[Any]:
 def _short_result_position(line: Any) -> str:
     if line is None:
         return "没有可用续算终点。"
-    facts = line.resulting_position_facts
-    difference = facts.material.get("valueDifferenceWhiteMinusBlack", 0) if facts else "未知"
-    return f"参考线终点已验证，白减黑子力差{difference}。"
+    consequence = _important_material_consequence(line)
+    return consequence or "参考线终点已验证；没有需要单独强调的重大子力后果。"
 
 
 def _very_short_result_position(line: Any) -> str:
     if line is None:
         return "无续算终点。"
-    facts = line.resulting_position_facts
-    difference = facts.material.get("valueDifferenceWhiteMinusBlack", 0) if facts else "未知"
-    return f"终点子力差{difference}。"
+    return _important_material_consequence(line) or "终点没有重大子力后果。"
 
 
 def _safe_phases(moves: list[Any], count: int) -> list[dict[str, Any]]:
@@ -994,10 +1038,20 @@ def _result_position_text(line: Any) -> str:
     if line is None:
         return "没有结果局面。"
     facts = line.resulting_position_facts
+    consequence = _important_material_consequence(line)
+    if facts and consequence:
+        return f"参考路线结束时轮到{facts.side_to_move}方行棋；{consequence}"
     if facts:
-        difference = facts.material.get("valueDifferenceWhiteMinusBlack", 0)
-        return f"参考路线结束时轮到{facts.side_to_move}方行棋；白方减黑方的子力价值差为{difference}。"
+        return f"参考路线结束时轮到{facts.side_to_move}方行棋；没有需要单独强调的重大子力变化。"
     return "参考路线已结束；没有额外的结果局面事实可供引用。"
+
+
+def _important_material_consequence(line: Any) -> str:
+    for item in line.moves:
+        captured = (item.captured_piece or "").split("_", 1)[-1]
+        if captured in {"knight", "bishop", "rook", "queen"}:
+            return f"路线中的{item.san}会直接造成重要棋子得失。"
+    return ""
 
 
 def _joined_fact_text(facts: list[Any], side: str) -> str:

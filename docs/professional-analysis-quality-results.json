@@ -4,32 +4,77 @@
     "category": "simple_opening",
     "complexity": "normal",
     "httpEquivalent": 200,
+    "beforeWeaknessCount": 2,
+    "afterWeaknessCount": 0,
+    "filteredUndefendedOnly": 4,
+    "filteredKingSafety": 8,
+    "movedToCandidateLine": 2,
+    "filteredOrdinaryPvCaptures": 7,
+    "fixedMaterialSectionRemoved": true,
+    "displayedSections": [
+      "positionAssessment",
+      "keyPieces",
+      "plans",
+      "playedMoveAnalysis",
+      "candidateLines",
+      "comparison"
+    ],
+    "beforeWeaknesses": {
+      "white": [
+        "白车(h1)当前没有本方棋子保护"
+      ],
+      "black": [
+        "黑车(h8)当前没有本方棋子保护"
+      ]
+    },
+    "afterWeaknesses": {
+      "white": [],
+      "black": []
+    },
+    "beforeKingSafety": [
+      "白王位于e1",
+      "仅凭当前FEN不能可靠判断是否已经完成过易位",
+      "白方仍有王翼、后翼易位权",
+      "e1王前相邻一排有2枚本方兵",
+      "黑王位于e8",
+      "仅凭当前FEN不能可靠判断是否已经完成过易位",
+      "黑方仍有王翼、后翼易位权",
+      "e8王前相邻一排有1枚本方兵"
+    ],
+    "afterKingSafety": [],
+    "beforeGlobalThreats": [
+      "候选路线1第5个半回合cxd5包含吃子"
+    ],
+    "afterGlobalThreats": [],
+    "candidateLineEvents": {
+      "1": [
+        "候选路线1第7个半回合Qa4+包含将军"
+      ],
+      "2": [
+        "候选路线2中的Nxd4直接吃掉价值至少3分的棋子"
+      ],
+      "3": []
+    },
+    "meaninglessWeaknessStillDisplayed": false,
     "firstPass": true,
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 5752,
-    "outputTokens": 2052,
-    "totalTokens": 7804,
-    "firstLatencyMs": 19999,
-    "totalLatencyMs": 20016,
-    "networkMs": 19999,
+    "inputTokens": 5159,
+    "outputTokens": 1416,
+    "totalTokens": 6575,
+    "firstLatencyMs": 14243,
+    "totalLatencyMs": 14256,
+    "networkMs": 14243,
     "validationMs": 6,
-    "postprocessMs": 8,
-    "chineseChars": 817,
+    "postprocessMs": 4,
+    "chineseChars": 713,
     "keyPiecesCorrect": true,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
     "threeRoutesValid": true,
     "issues": [],
-    "normalizations": [
-      {
-        "attempt": 1,
-        "path": "plans.black[1].explanation",
-        "category": "不存在的格子",
-        "message": "已移除事实包外格子：a6"
-      }
-    ],
+    "normalizations": [],
     "finalErrors": []
   },
   {
@@ -37,19 +82,67 @@
     "category": "simple_opening",
     "complexity": "normal",
     "httpEquivalent": 200,
+    "beforeWeaknessCount": 2,
+    "afterWeaknessCount": 0,
+    "filteredUndefendedOnly": 5,
+    "filteredKingSafety": 8,
+    "movedToCandidateLine": 0,
+    "filteredOrdinaryPvCaptures": 6,
+    "fixedMaterialSectionRemoved": true,
+    "displayedSections": [
+      "positionAssessment",
+      "keyPieces",
+      "plans",
+      "playedMoveAnalysis",
+      "candidateLines",
+      "comparison"
+    ],
+    "beforeWeaknesses": {
+      "white": [
+        "白兵(c4)当前没有本方棋子保护"
+      ],
+      "black": [
+        "黑车(h8)当前没有本方棋子保护"
+      ]
+    },
+    "afterWeaknesses": {
+      "white": [],
+      "black": []
+    },
+    "beforeKingSafety": [
+      "白王位于e1",
+      "仅凭当前FEN不能可靠判断是否已经完成过易位",
+      "白方仍有王翼、后翼易位权",
+      "e1王前相邻一排有3枚本方兵",
+      "黑王位于e8",
+      "仅凭当前FEN不能可靠判断是否已经完成过易位",
+      "黑方仍有王翼、后翼易位权",
+      "e8王前相邻一排有2枚本方兵"
+    ],
+    "afterKingSafety": [],
+    "beforeGlobalThreats": [
+      "候选路线1第5个半回合dxc5包含吃子"
+    ],
+    "afterGlobalThreats": [],
+    "candidateLineEvents": {
+      "1": [],
+      "2": [],
+      "3": []
+    },
+    "meaninglessWeaknessStillDisplayed": false,
     "firstPass": true,
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 5525,
-    "outputTokens": 2094,
-    "totalTokens": 7619,
-    "firstLatencyMs": 20540,
-    "totalLatencyMs": 20555,
-    "networkMs": 20540,
-    "validationMs": 5,
-    "postprocessMs": 7,
-    "chineseChars": 779,
+    "inputTokens": 4526,
+    "outputTokens": 1452,
+    "totalTokens": 5978,
+    "firstLatencyMs": 13547,
+    "totalLatencyMs": 13556,
+    "networkMs": 13547,
+    "validationMs": 3,
+    "postprocessMs": 3,
+    "chineseChars": 758,
     "keyPiecesCorrect": true,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
@@ -63,19 +156,76 @@
     "category": "simple_opening",
     "complexity": "normal",
     "httpEquivalent": 200,
+    "beforeWeaknessCount": 2,
+    "afterWeaknessCount": 0,
+    "filteredUndefendedOnly": 5,
+    "filteredKingSafety": 8,
+    "movedToCandidateLine": 6,
+    "filteredOrdinaryPvCaptures": 2,
+    "fixedMaterialSectionRemoved": true,
+    "displayedSections": [
+      "positionAssessment",
+      "keyPieces",
+      "plans",
+      "playedMoveAnalysis",
+      "candidateLines",
+      "comparison"
+    ],
+    "beforeWeaknesses": {
+      "white": [
+        "白兵(e4)当前没有本方棋子保护"
+      ],
+      "black": [
+        "黑车(h8)当前没有本方棋子保护"
+      ]
+    },
+    "afterWeaknesses": {
+      "white": [],
+      "black": []
+    },
+    "beforeKingSafety": [
+      "白王位于e1",
+      "仅凭当前FEN不能可靠判断是否已经完成过易位",
+      "白方仍有王翼、后翼易位权",
+      "e1王前相邻一排有2枚本方兵",
+      "黑王位于e8",
+      "仅凭当前FEN不能可靠判断是否已经完成过易位",
+      "黑方仍有王翼、后翼易位权",
+      "e8王前相邻一排有2枚本方兵"
+    ],
+    "afterKingSafety": [],
+    "beforeGlobalThreats": [
+      "Bxc6 后，黑兵在 d7 被钉在王前。"
+    ],
+    "afterGlobalThreats": [],
+    "candidateLineEvents": {
+      "1": [
+        "候选路线1中的Nxc6直接吃掉价值至少3分的棋子",
+        "候选路线1中的bxc6直接吃掉价值至少3分的棋子"
+      ],
+      "2": [
+        "候选路线2中的Bxc6直接吃掉价值至少3分的棋子",
+        "候选路线2中的dxc6直接吃掉价值至少3分的棋子"
+      ],
+      "3": [
+        "候选路线3中的exd5直接吃掉价值至少3分的棋子",
+        "候选路线3中的Nxd4直接吃掉价值至少3分的棋子"
+      ]
+    },
+    "meaninglessWeaknessStillDisplayed": false,
     "firstPass": true,
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 6467,
-    "outputTokens": 2032,
-    "totalTokens": 8499,
-    "firstLatencyMs": 21205,
-    "totalLatencyMs": 21220,
-    "networkMs": 21205,
-    "validationMs": 6,
-    "postprocessMs": 7,
-    "chineseChars": 713,
+    "inputTokens": 6009,
+    "outputTokens": 1440,
+    "totalTokens": 7449,
+    "firstLatencyMs": 11416,
+    "totalLatencyMs": 11435,
+    "networkMs": 11416,
+    "validationMs": 4,
+    "postprocessMs": 10,
+    "chineseChars": 696,
     "keyPiecesCorrect": true,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
@@ -89,25 +239,95 @@
     "category": "direct_tactics",
     "complexity": "complex",
     "httpEquivalent": 200,
+    "beforeWeaknessCount": 2,
+    "afterWeaknessCount": 1,
+    "filteredUndefendedOnly": 3,
+    "filteredKingSafety": 8,
+    "movedToCandidateLine": 6,
+    "filteredOrdinaryPvCaptures": 7,
+    "fixedMaterialSectionRemoved": true,
+    "displayedSections": [
+      "positionAssessment",
+      "threats",
+      "weaknesses",
+      "keyPieces",
+      "plans",
+      "playedMoveAnalysis",
+      "candidateLines",
+      "comparison"
+    ],
+    "beforeWeaknesses": {
+      "white": [
+        "白兵(d4)当前没有本方棋子保护"
+      ],
+      "black": [
+        "黑象(b7)当前没有本方棋子保护"
+      ]
+    },
+    "afterWeaknesses": {
+      "white": [],
+      "black": [
+        "黑兵(c6)受攻，攻击者2个，保护者1个"
+      ]
+    },
+    "beforeKingSafety": [
+      "白王位于g1",
+      "仅凭当前FEN不能可靠判断是否已经完成过易位",
+      "白方没有易位权",
+      "g1王前相邻一排有2枚本方兵",
+      "黑王位于g8",
+      "仅凭当前FEN不能可靠判断是否已经完成过易位",
+      "黑方没有易位权",
+      "g8王前相邻一排有3枚本方兵"
+    ],
+    "afterKingSafety": [],
+    "beforeGlobalThreats": [
+      "Nxc6 后，白马同时攻击 黑象（e7）、黑后（d8）。"
+    ],
+    "afterGlobalThreats": [
+      "white方当前可以走Nxd7"
+    ],
+    "candidateLineEvents": {
+      "1": [
+        "候选路线1中的Qxc6直接吃掉价值至少3分的棋子",
+        "候选路线1中的Bxc6直接吃掉价值至少3分的棋子"
+      ],
+      "2": [
+        "候选路线2中的Qxc6直接吃掉价值至少3分的棋子",
+        "候选路线2中的Bxc6直接吃掉价值至少3分的棋子"
+      ],
+      "3": [
+        "候选路线3中的Nxd7直接吃掉价值至少3分的棋子",
+        "候选路线3中的Qxd7直接吃掉价值至少3分的棋子"
+      ]
+    },
+    "meaninglessWeaknessStillDisplayed": false,
     "firstPass": true,
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 7812,
-    "outputTokens": 2150,
-    "totalTokens": 9962,
-    "firstLatencyMs": 19913,
-    "totalLatencyMs": 19924,
-    "networkMs": 19913,
-    "validationMs": 6,
-    "postprocessMs": 3,
-    "chineseChars": 997,
+    "inputTokens": 6264,
+    "outputTokens": 1648,
+    "totalTokens": 7912,
+    "firstLatencyMs": 15092,
+    "totalLatencyMs": 15105,
+    "networkMs": 15092,
+    "validationMs": 5,
+    "postprocessMs": 4,
+    "chineseChars": 1143,
     "keyPiecesCorrect": true,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
     "threeRoutesValid": true,
     "issues": [],
-    "normalizations": [],
+    "normalizations": [
+      {
+        "attempt": 1,
+        "path": "plans.white[0].evidenceRefs",
+        "category": "黑白说反",
+        "message": "已移除不支持white方计划的引用：f:18"
+      }
+    ],
     "finalErrors": []
   },
   {
@@ -115,19 +335,84 @@
     "category": "direct_tactics",
     "complexity": "complex",
     "httpEquivalent": 200,
+    "beforeWeaknessCount": 2,
+    "afterWeaknessCount": 0,
+    "filteredUndefendedOnly": 3,
+    "filteredKingSafety": 7,
+    "movedToCandidateLine": 5,
+    "filteredOrdinaryPvCaptures": 2,
+    "fixedMaterialSectionRemoved": true,
+    "displayedSections": [
+      "positionAssessment",
+      "threats",
+      "kingSafety",
+      "keyPieces",
+      "plans",
+      "playedMoveAnalysis",
+      "candidateLines",
+      "comparison"
+    ],
+    "beforeWeaknesses": {
+      "white": [
+        "白马(g5)当前没有本方棋子保护"
+      ],
+      "black": [
+        "黑兵(a7)当前没有本方棋子保护"
+      ]
+    },
+    "afterWeaknesses": {
+      "white": [],
+      "black": []
+    },
+    "beforeKingSafety": [
+      "白王位于g1",
+      "仅凭当前FEN不能可靠判断是否已经完成过易位",
+      "白方没有易位权",
+      "g1王前相邻一排有2枚本方兵",
+      "黑王位于g7",
+      "仅凭当前FEN不能可靠判断是否已经完成过易位",
+      "黑方没有易位权",
+      "g7王前相邻一排有1枚本方兵",
+      "g7附近两格范围内有2枚对方棋子"
+    ],
+    "afterKingSafety": [
+      "黑王位于g7",
+      "g7附近两格范围内有2枚对方棋子"
+    ],
+    "beforeGlobalThreats": [
+      "候选路线1第1个半回合Rxf7+包含吃子、将军"
+    ],
+    "afterGlobalThreats": [
+      "white方当前可以走Rxf7+",
+      "white方当前可以走Rg8+"
+    ],
+    "candidateLineEvents": {
+      "1": [
+        "候选路线1中的Nxf7直接吃掉价值至少3分的棋子",
+        "候选路线1中的Qxf7直接吃掉价值至少3分的棋子"
+      ],
+      "2": [
+        "候选路线2第2个半回合Qc1+包含将军"
+      ],
+      "3": [
+        "候选路线3中的Nxd8直接吃掉价值至少3分的棋子",
+        "候选路线3中的Nxf7直接吃掉价值至少3分的棋子"
+      ]
+    },
+    "meaninglessWeaknessStillDisplayed": false,
     "firstPass": true,
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 6679,
-    "outputTokens": 1885,
-    "totalTokens": 8564,
-    "firstLatencyMs": 19506,
-    "totalLatencyMs": 19515,
-    "networkMs": 19506,
+    "inputTokens": 6217,
+    "outputTokens": 1459,
+    "totalTokens": 7676,
+    "firstLatencyMs": 13641,
+    "totalLatencyMs": 13654,
+    "networkMs": 13641,
     "validationMs": 6,
-    "postprocessMs": 3,
-    "chineseChars": 1099,
+    "postprocessMs": 4,
+    "chineseChars": 1207,
     "keyPiecesCorrect": true,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
@@ -141,19 +426,87 @@
     "category": "direct_tactics",
     "complexity": "complex",
     "httpEquivalent": 200,
+    "beforeWeaknessCount": 2,
+    "afterWeaknessCount": 0,
+    "filteredUndefendedOnly": 7,
+    "filteredKingSafety": 8,
+    "movedToCandidateLine": 5,
+    "filteredOrdinaryPvCaptures": 1,
+    "fixedMaterialSectionRemoved": true,
+    "displayedSections": [
+      "positionAssessment",
+      "threats",
+      "kingSafety",
+      "keyPieces",
+      "plans",
+      "playedMoveAnalysis",
+      "candidateLines",
+      "comparison"
+    ],
+    "beforeWeaknesses": {
+      "white": [
+        "白兵(e5)当前没有本方棋子保护"
+      ],
+      "black": [
+        "黑车(a8)当前没有本方棋子保护"
+      ]
+    },
+    "afterWeaknesses": {
+      "white": [],
+      "black": []
+    },
+    "beforeKingSafety": [
+      "白王位于f2",
+      "仅凭当前FEN不能可靠判断是否已经完成过易位",
+      "白方没有易位权",
+      "f2王前相邻一排有1枚本方兵",
+      "f2附近两格范围内有1枚对方棋子",
+      "黑王位于g7",
+      "仅凭当前FEN不能可靠判断是否已经完成过易位",
+      "黑方没有易位权",
+      "g7王前相邻一排有0枚本方兵",
+      "g7附近两格范围内有1枚对方棋子",
+      "g7附近有开放或对本方半开放的线路"
+    ],
+    "afterKingSafety": [
+      "黑王位于g7",
+      "g7附近两格范围内有1枚对方棋子",
+      "g7附近有开放或对本方半开放的线路"
+    ],
+    "beforeGlobalThreats": [
+      "Rh7+ 形成王在前、黑车在后的串击。"
+    ],
+    "afterGlobalThreats": [
+      "white方当前可以走Bh6+",
+      "white方当前可以走exf6+"
+    ],
+    "candidateLineEvents": {
+      "1": [
+        "候选路线1第5个半回合Bc5+包含将军",
+        "候选路线1第9个半回合R1h7+包含将军"
+      ],
+      "2": [
+        "候选路线2第7个半回合Re5+包含将军",
+        "候选路线2第3个半回合Bd4+包含将军"
+      ],
+      "3": [
+        "候选路线3第5个半回合Rf6+包含将军"
+      ]
+    },
+    "meaninglessWeaknessStillDisplayed": false,
     "firstPass": true,
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 6617,
-    "outputTokens": 2383,
-    "totalTokens": 9000,
-    "firstLatencyMs": 22744,
-    "totalLatencyMs": 22755,
-    "networkMs": 22744,
-    "validationMs": 6,
-    "postprocessMs": 3,
-    "chineseChars": 1240,
+    "inputTokens": 6726,
+    "outputTokens": 1671,
+    "totalTokens": 8397,
+    "firstLatencyMs": 21144,
+    "totalLatencyMs": 21155,
+    "networkMs": 21144,
+    "validationMs": 5,
+    "postprocessMs": 4,
+    "chineseChars": 1223,
     "keyPiecesCorrect": true,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
@@ -167,19 +520,89 @@
     "category": "king_attack",
     "complexity": "complex",
     "httpEquivalent": 200,
+    "beforeWeaknessCount": 2,
+    "afterWeaknessCount": 1,
+    "filteredUndefendedOnly": 7,
+    "filteredKingSafety": 9,
+    "movedToCandidateLine": 3,
+    "filteredOrdinaryPvCaptures": 2,
+    "fixedMaterialSectionRemoved": true,
+    "displayedSections": [
+      "positionAssessment",
+      "threats",
+      "kingSafety",
+      "weaknesses",
+      "keyPieces",
+      "plans",
+      "playedMoveAnalysis",
+      "candidateLines",
+      "comparison"
+    ],
+    "beforeWeaknesses": {
+      "white": [
+        "白象(c4)当前没有本方棋子保护"
+      ],
+      "black": [
+        "黑车(c8)当前没有本方棋子保护"
+      ]
+    },
+    "afterWeaknesses": {
+      "white": [],
+      "black": [
+        "黑马(d4)受攻，攻击者2个，保护者1个"
+      ]
+    },
+    "beforeKingSafety": [
+      "白王位于e4",
+      "仅凭当前FEN不能可靠判断是否已经完成过易位",
+      "白方没有易位权",
+      "e4王前相邻一排有2枚本方兵",
+      "e4附近两格范围内有3枚对方棋子",
+      "e4附近有开放或对本方半开放的线路",
+      "黑王位于e7",
+      "仅凭当前FEN不能可靠判断是否已经完成过易位",
+      "黑方没有易位权",
+      "e7王前相邻一排有0枚本方兵",
+      "e7附近两格范围内有2枚对方棋子",
+      "e7附近有开放或对本方半开放的线路"
+    ],
+    "afterKingSafety": [
+      "黑王位于e7",
+      "e7附近两格范围内有2枚对方棋子",
+      "e7附近有开放或对本方半开放的线路"
+    ],
+    "beforeGlobalThreats": [
+      "Re8 后，白兵在 e5 被钉在王前。"
+    ],
+    "afterGlobalThreats": [
+      "white方当前可以走Rxd4",
+      "white方当前可以走f6+"
+    ],
+    "candidateLineEvents": {
+      "1": [
+        "候选路线1第1个半回合f6+包含将军"
+      ],
+      "2": [
+        "候选路线2第3个半回合f6+包含将军"
+      ],
+      "3": [
+        "候选路线3第3个半回合f6+包含将军"
+      ]
+    },
+    "meaninglessWeaknessStillDisplayed": false,
     "firstPass": true,
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 5183,
-    "outputTokens": 1649,
-    "totalTokens": 6832,
-    "firstLatencyMs": 15713,
-    "totalLatencyMs": 15721,
-    "networkMs": 15713,
+    "inputTokens": 5802,
+    "outputTokens": 1465,
+    "totalTokens": 7267,
+    "firstLatencyMs": 12900,
+    "totalLatencyMs": 12909,
+    "networkMs": 12900,
     "validationMs": 4,
-    "postprocessMs": 2,
-    "chineseChars": 897,
+    "postprocessMs": 3,
+    "chineseChars": 1060,
     "keyPiecesCorrect": true,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
@@ -193,32 +616,88 @@
     "category": "king_attack",
     "complexity": "complex",
     "httpEquivalent": 200,
+    "beforeWeaknessCount": 2,
+    "afterWeaknessCount": 0,
+    "filteredUndefendedOnly": 2,
+    "filteredKingSafety": 7,
+    "movedToCandidateLine": 4,
+    "filteredOrdinaryPvCaptures": 3,
+    "fixedMaterialSectionRemoved": true,
+    "displayedSections": [
+      "positionAssessment",
+      "threats",
+      "kingSafety",
+      "keyPieces",
+      "plans",
+      "playedMoveAnalysis",
+      "candidateLines",
+      "comparison"
+    ],
+    "beforeWeaknesses": {
+      "white": [
+        "白兵(b2)当前没有本方棋子保护"
+      ],
+      "black": [
+        "黑兵(a7)当前没有本方棋子保护"
+      ]
+    },
+    "afterWeaknesses": {
+      "white": [],
+      "black": []
+    },
+    "beforeKingSafety": [
+      "白王位于g1",
+      "仅凭当前FEN不能可靠判断是否已经完成过易位",
+      "白方没有易位权",
+      "g1王前相邻一排有2枚本方兵",
+      "黑王位于g7",
+      "仅凭当前FEN不能可靠判断是否已经完成过易位",
+      "黑方没有易位权",
+      "g7王前相邻一排有1枚本方兵",
+      "g7附近两格范围内有1枚对方棋子"
+    ],
+    "afterKingSafety": [
+      "黑王位于g7",
+      "g7附近两格范围内有1枚对方棋子"
+    ],
+    "beforeGlobalThreats": [
+      "Ng5 后，白马同时攻击 黑象（e4）、黑后（e6）。"
+    ],
+    "afterGlobalThreats": [
+      "white方当前可以走Rxf7+",
+      "white方当前可以走Rg8+"
+    ],
+    "candidateLineEvents": {
+      "1": [
+        "候选路线1中的Nxf7直接吃掉价值至少3分的棋子",
+        "候选路线1中的Qxf7直接吃掉价值至少3分的棋子"
+      ],
+      "2": [
+        "候选路线2中的gxf3直接吃掉价值至少3分的棋子",
+        "候选路线2中的Bxf3直接吃掉价值至少3分的棋子"
+      ],
+      "3": []
+    },
+    "meaninglessWeaknessStillDisplayed": false,
     "firstPass": true,
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 6643,
-    "outputTokens": 1941,
-    "totalTokens": 8584,
-    "firstLatencyMs": 17415,
-    "totalLatencyMs": 17425,
-    "networkMs": 17415,
-    "validationMs": 5,
+    "inputTokens": 6009,
+    "outputTokens": 1388,
+    "totalTokens": 7397,
+    "firstLatencyMs": 14040,
+    "totalLatencyMs": 14051,
+    "networkMs": 14040,
+    "validationMs": 4,
     "postprocessMs": 3,
-    "chineseChars": 952,
+    "chineseChars": 1110,
     "keyPiecesCorrect": true,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
     "threeRoutesValid": true,
     "issues": [],
-    "normalizations": [
-      {
-        "attempt": 1,
-        "path": "plans.black[1].evidenceRefs",
-        "category": "黑白说反",
-        "message": "已移除不支持black方计划的引用：f:50"
-      }
-    ],
+    "normalizations": [],
     "finalErrors": []
   },
   {
@@ -226,19 +705,73 @@
     "category": "king_attack",
     "complexity": "complex",
     "httpEquivalent": 200,
+    "beforeWeaknessCount": 2,
+    "afterWeaknessCount": 0,
+    "filteredUndefendedOnly": 4,
+    "filteredKingSafety": 7,
+    "movedToCandidateLine": 0,
+    "filteredOrdinaryPvCaptures": 2,
+    "fixedMaterialSectionRemoved": true,
+    "displayedSections": [
+      "positionAssessment",
+      "threats",
+      "kingSafety",
+      "keyPieces",
+      "plans",
+      "playedMoveAnalysis",
+      "candidateLines",
+      "comparison"
+    ],
+    "beforeWeaknesses": {
+      "white": [
+        "白马(c6)当前没有本方棋子保护"
+      ],
+      "black": [
+        "黑车(a8)当前没有本方棋子保护"
+      ]
+    },
+    "afterWeaknesses": {
+      "white": [],
+      "black": []
+    },
+    "beforeKingSafety": [
+      "白王位于g1",
+      "仅凭当前FEN不能可靠判断是否已经完成过易位",
+      "白方没有易位权",
+      "g1王前相邻一排有2枚本方兵",
+      "黑王位于g8",
+      "仅凭当前FEN不能可靠判断是否已经完成过易位",
+      "黑方没有易位权",
+      "g8王前相邻一排有1枚本方兵"
+    ],
+    "afterKingSafety": [
+      "黑王位于g8"
+    ],
+    "beforeGlobalThreats": [
+      "Nd8 后，白马同时攻击 黑象（e6）、黑车（b7）。"
+    ],
+    "afterGlobalThreats": [
+      "white方当前可以走Ne7+"
+    ],
+    "candidateLineEvents": {
+      "1": [],
+      "2": [],
+      "3": []
+    },
+    "meaninglessWeaknessStillDisplayed": false,
     "firstPass": true,
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 5349,
-    "outputTokens": 1988,
-    "totalTokens": 7337,
-    "firstLatencyMs": 18423,
-    "totalLatencyMs": 18433,
-    "networkMs": 18423,
-    "validationMs": 5,
-    "postprocessMs": 2,
-    "chineseChars": 963,
+    "inputTokens": 4457,
+    "outputTokens": 1646,
+    "totalTokens": 6103,
+    "firstLatencyMs": 17170,
+    "totalLatencyMs": 17179,
+    "networkMs": 17170,
+    "validationMs": 4,
+    "postprocessMs": 3,
+    "chineseChars": 979,
     "keyPiecesCorrect": true,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
@@ -252,19 +785,82 @@
     "category": "center_counter",
     "complexity": "complex",
     "httpEquivalent": 200,
+    "beforeWeaknessCount": 2,
+    "afterWeaknessCount": 0,
+    "filteredUndefendedOnly": 3,
+    "filteredKingSafety": 7,
+    "movedToCandidateLine": 6,
+    "filteredOrdinaryPvCaptures": 8,
+    "fixedMaterialSectionRemoved": true,
+    "displayedSections": [
+      "positionAssessment",
+      "threats",
+      "kingSafety",
+      "keyPieces",
+      "plans",
+      "playedMoveAnalysis",
+      "candidateLines",
+      "comparison"
+    ],
+    "beforeWeaknesses": {
+      "white": [
+        "白象(d3)当前没有本方棋子保护"
+      ],
+      "black": [
+        "黑车(a8)当前没有本方棋子保护"
+      ]
+    },
+    "afterWeaknesses": {
+      "white": [],
+      "black": []
+    },
+    "beforeKingSafety": [
+      "白王位于g1",
+      "仅凭当前FEN不能可靠判断是否已经完成过易位",
+      "白方没有易位权",
+      "g1王前相邻一排有3枚本方兵",
+      "黑王位于g8",
+      "仅凭当前FEN不能可靠判断是否已经完成过易位",
+      "黑方没有易位权",
+      "g8王前相邻一排有3枚本方兵"
+    ],
+    "afterKingSafety": [
+      "黑王位于g8"
+    ],
+    "beforeGlobalThreats": [
+      "dxe4 后，黑兵同时攻击 白象（d3）、白马（f3）。"
+    ],
+    "afterGlobalThreats": [
+      "white方当前可以走Bxh7+"
+    ],
+    "candidateLineEvents": {
+      "1": [
+        "候选路线1中的Rxe4直接吃掉价值至少3分的棋子",
+        "候选路线1中的Nxe4直接吃掉价值至少3分的棋子"
+      ],
+      "2": [
+        "候选路线2中的Nxe4直接吃掉价值至少3分的棋子",
+        "候选路线2中的Bxb7直接吃掉价值至少3分的棋子"
+      ],
+      "3": [
+        "候选路线3中的Rxe4直接吃掉价值至少3分的棋子",
+        "候选路线3中的Nxe4直接吃掉价值至少3分的棋子"
+      ]
+    },
+    "meaninglessWeaknessStillDisplayed": false,
     "firstPass": true,
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 6983,
-    "outputTokens": 2101,
-    "totalTokens": 9084,
-    "firstLatencyMs": 19748,
-    "totalLatencyMs": 19760,
-    "networkMs": 19748,
-    "validationMs": 6,
-    "postprocessMs": 3,
-    "chineseChars": 900,
+    "inputTokens": 6224,
+    "outputTokens": 1648,
+    "totalTokens": 7872,
+    "firstLatencyMs": 29139,
+    "totalLatencyMs": 29152,
+    "networkMs": 29139,
+    "validationMs": 5,
+    "postprocessMs": 4,
+    "chineseChars": 1236,
     "keyPiecesCorrect": true,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
@@ -273,21 +869,9 @@
     "normalizations": [
       {
         "attempt": 1,
-        "path": "keyPieces.white.futureTask",
+        "path": "candidateLines[1].directPurpose",
         "category": "不属于Stockfish的走法",
-        "message": "已移除路线外SAN：Bxh7+"
-      },
-      {
-        "attempt": 1,
-        "path": "plans.white[1].explanation",
-        "category": "不属于Stockfish的走法",
-        "message": "已移除路线外SAN：Bxh7+"
-      },
-      {
-        "attempt": 1,
-        "path": "candidateLines[2].risks[0]",
-        "category": "不存在的格子",
-        "message": "已移除事实包外格子：b4"
+        "message": "已移除路线外SAN：Bg4"
       }
     ],
     "finalErrors": []
@@ -297,104 +881,74 @@
     "category": "center_counter",
     "complexity": "complex",
     "httpEquivalent": 200,
+    "beforeWeaknessCount": 1,
+    "afterWeaknessCount": 0,
+    "filteredUndefendedOnly": 1,
+    "filteredKingSafety": 8,
+    "movedToCandidateLine": 6,
+    "filteredOrdinaryPvCaptures": 6,
+    "fixedMaterialSectionRemoved": true,
+    "displayedSections": [
+      "positionAssessment",
+      "keyPieces",
+      "plans",
+      "playedMoveAnalysis",
+      "candidateLines",
+      "comparison"
+    ],
+    "beforeWeaknesses": {
+      "white": [
+        "白兵(b2)当前没有本方棋子保护"
+      ],
+      "black": []
+    },
+    "afterWeaknesses": {
+      "white": [],
+      "black": []
+    },
+    "beforeKingSafety": [
+      "白王位于g1",
+      "仅凭当前FEN不能可靠判断是否已经完成过易位",
+      "白方没有易位权",
+      "g1王前相邻一排有3枚本方兵",
+      "黑王位于g8",
+      "仅凭当前FEN不能可靠判断是否已经完成过易位",
+      "黑方没有易位权",
+      "g8王前相邻一排有3枚本方兵"
+    ],
+    "afterKingSafety": [],
+    "beforeGlobalThreats": [
+      "Bxc3 后，黑象同时攻击 白象（e1）、白马（d4）。"
+    ],
+    "afterGlobalThreats": [],
+    "candidateLineEvents": {
+      "1": [
+        "候选路线1中的Bxb7直接吃掉价值至少3分的棋子",
+        "候选路线1中的Bxd2直接吃掉价值至少3分的棋子"
+      ],
+      "2": [
+        "候选路线2中的Rxd8+直接吃掉价值至少3分的棋子",
+        "候选路线2中的Nxc6直接吃掉价值至少3分的棋子"
+      ],
+      "3": [
+        "候选路线3中的bxc3直接吃掉价值至少3分的棋子",
+        "候选路线3中的Bxc3直接吃掉价值至少3分的棋子"
+      ]
+    },
+    "meaninglessWeaknessStillDisplayed": false,
     "firstPass": true,
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 7253,
-    "outputTokens": 2316,
-    "totalTokens": 9569,
-    "firstLatencyMs": 22956,
-    "totalLatencyMs": 22967,
-    "networkMs": 22956,
-    "validationMs": 6,
-    "postprocessMs": 3,
-    "chineseChars": 1120,
-    "keyPiecesCorrect": true,
-    "dangerHasEvidence": true,
-    "plansHaveEvidence": true,
-    "threeRoutesValid": true,
-    "issues": [],
-    "normalizations": [
-      {
-        "attempt": 1,
-        "path": "candidateLines[2].directPurpose",
-        "category": "不存在的格子",
-        "message": "已移除事实包外格子：e4"
-      }
-    ],
-    "finalErrors": []
-  },
-  {
-    "id": "closed-1",
-    "category": "closed_center_wing_attack",
-    "complexity": "normal",
-    "httpEquivalent": 200,
-    "firstPass": false,
-    "retried": true,
-    "fallback": false,
-    "finalValid": true,
-    "inputTokens": 6049,
-    "outputTokens": 3578,
-    "totalTokens": 15741,
-    "firstLatencyMs": 16603,
-    "totalLatencyMs": 32874,
-    "networkMs": 32849,
-    "validationMs": 9,
-    "postprocessMs": 15,
-    "chineseChars": 815,
-    "keyPiecesCorrect": true,
-    "dangerHasEvidence": true,
-    "plansHaveEvidence": true,
-    "threeRoutesValid": true,
-    "issues": [
-      {
-        "attempt": 1,
-        "path": "mainDanger.description",
-        "category": "其他原因",
-        "message": "没有同时指出具体棋子和格子"
-      },
-      {
-        "attempt": 1,
-        "path": "mainDanger.description",
-        "category": "其他原因",
-        "message": "没有同时指出来源格和目标格"
-      }
-    ],
-    "normalizations": [
-      {
-        "attempt": 2,
-        "path": "plans.black[0].evidenceRefs",
-        "category": "黑白说反",
-        "message": "已移除不支持black方计划的引用：f:49"
-      },
-      {
-        "attempt": 2,
-        "path": "plans.black[0].evidenceRefs",
-        "category": "黑白说反",
-        "message": "已补入支持black方计划的引用：p:b:1"
-      }
-    ],
-    "finalErrors": []
-  },
-  {
-    "id": "closed-2",
-    "category": "closed_center_wing_attack",
-    "complexity": "complex",
-    "httpEquivalent": 200,
-    "firstPass": true,
-    "retried": false,
-    "fallback": false,
-    "finalValid": true,
-    "inputTokens": 5683,
-    "outputTokens": 1900,
-    "totalTokens": 7583,
-    "firstLatencyMs": 15109,
-    "totalLatencyMs": 15118,
-    "networkMs": 15109,
+    "inputTokens": 5943,
+    "outputTokens": 1530,
+    "totalTokens": 7473,
+    "firstLatencyMs": 15340,
+    "totalLatencyMs": 15352,
+    "networkMs": 15340,
     "validationMs": 5,
-    "postprocessMs": 2,
-    "chineseChars": 1005,
+    "postprocessMs": 4,
+    "chineseChars": 1153,
     "keyPiecesCorrect": true,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
@@ -404,23 +958,151 @@
     "finalErrors": []
   },
   {
-    "id": "simplify-1",
-    "category": "simplification_endgame",
-    "complexity": "complex",
+    "id": "closed-1",
+    "category": "closed_center_wing_attack",
+    "complexity": "normal",
     "httpEquivalent": 200,
+    "beforeWeaknessCount": 2,
+    "afterWeaknessCount": 0,
+    "filteredUndefendedOnly": 4,
+    "filteredKingSafety": 8,
+    "movedToCandidateLine": 0,
+    "filteredOrdinaryPvCaptures": 4,
+    "fixedMaterialSectionRemoved": true,
+    "displayedSections": [
+      "positionAssessment",
+      "keyPieces",
+      "plans",
+      "playedMoveAnalysis",
+      "candidateLines",
+      "comparison"
+    ],
+    "beforeWeaknesses": {
+      "white": [
+        "白兵(e5)受攻，攻击者2个，保护者1个"
+      ],
+      "black": [
+        "黑车(h8)当前没有本方棋子保护"
+      ]
+    },
+    "afterWeaknesses": {
+      "white": [],
+      "black": []
+    },
+    "beforeKingSafety": [
+      "白王位于g1",
+      "仅凭当前FEN不能可靠判断是否已经完成过易位",
+      "白方没有易位权",
+      "g1王前相邻一排有3枚本方兵",
+      "黑王位于e8",
+      "仅凭当前FEN不能可靠判断是否已经完成过易位",
+      "黑方仍有王翼、后翼易位权",
+      "e8王前相邻一排有1枚本方兵"
+    ],
+    "afterKingSafety": [],
+    "beforeGlobalThreats": [
+      "Be4 后，黑象同时攻击 白象（d3）、白马（f3）。"
+    ],
+    "afterGlobalThreats": [],
+    "candidateLineEvents": {
+      "1": [],
+      "2": [],
+      "3": []
+    },
+    "meaninglessWeaknessStillDisplayed": false,
     "firstPass": true,
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 6870,
-    "outputTokens": 2055,
-    "totalTokens": 8925,
-    "firstLatencyMs": 16431,
-    "totalLatencyMs": 16442,
-    "networkMs": 16431,
-    "validationMs": 6,
+    "inputTokens": 4595,
+    "outputTokens": 1343,
+    "totalTokens": 5938,
+    "firstLatencyMs": 11876,
+    "totalLatencyMs": 11885,
+    "networkMs": 11876,
+    "validationMs": 4,
     "postprocessMs": 3,
-    "chineseChars": 1016,
+    "chineseChars": 602,
+    "keyPiecesCorrect": true,
+    "dangerHasEvidence": true,
+    "plansHaveEvidence": true,
+    "threeRoutesValid": true,
+    "issues": [],
+    "normalizations": [],
+    "finalErrors": []
+  },
+  {
+    "id": "closed-2",
+    "category": "closed_center_wing_attack",
+    "complexity": "complex",
+    "httpEquivalent": 200,
+    "beforeWeaknessCount": 2,
+    "afterWeaknessCount": 0,
+    "filteredUndefendedOnly": 4,
+    "filteredKingSafety": 8,
+    "movedToCandidateLine": 2,
+    "filteredOrdinaryPvCaptures": 2,
+    "fixedMaterialSectionRemoved": true,
+    "displayedSections": [
+      "positionAssessment",
+      "threats",
+      "keyPieces",
+      "plans",
+      "playedMoveAnalysis",
+      "candidateLines",
+      "comparison"
+    ],
+    "beforeWeaknesses": {
+      "white": [
+        "白象(h4)当前没有本方棋子保护"
+      ],
+      "black": [
+        "黑象(b7)当前没有本方棋子保护"
+      ]
+    },
+    "afterWeaknesses": {
+      "white": [],
+      "black": []
+    },
+    "beforeKingSafety": [
+      "白王位于g1",
+      "仅凭当前FEN不能可靠判断是否已经完成过易位",
+      "白方没有易位权",
+      "g1王前相邻一排有3枚本方兵",
+      "黑王位于g8",
+      "仅凭当前FEN不能可靠判断是否已经完成过易位",
+      "黑方没有易位权",
+      "g8王前相邻一排有1枚本方兵"
+    ],
+    "afterKingSafety": [],
+    "beforeGlobalThreats": [
+      "候选路线1第4个半回合gxh4包含吃子"
+    ],
+    "afterGlobalThreats": [
+      "white方当前可以走Bxe7"
+    ],
+    "candidateLineEvents": {
+      "1": [
+        "候选路线1中的Nxb7直接吃掉价值至少3分的棋子",
+        "候选路线1中的gxh4直接吃掉价值至少3分的棋子"
+      ],
+      "2": [],
+      "3": []
+    },
+    "meaninglessWeaknessStillDisplayed": false,
+    "firstPass": true,
+    "retried": false,
+    "fallback": false,
+    "finalValid": true,
+    "inputTokens": 5045,
+    "outputTokens": 1650,
+    "totalTokens": 6695,
+    "firstLatencyMs": 14271,
+    "totalLatencyMs": 14281,
+    "networkMs": 14271,
+    "validationMs": 4,
+    "postprocessMs": 3,
+    "chineseChars": 985,
     "keyPiecesCorrect": true,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
@@ -429,17 +1111,110 @@
     "normalizations": [
       {
         "attempt": 1,
-        "path": "plans.white[0].evidenceRefs",
-        "category": "黑白说反",
-        "message": "已移除不支持white方计划的引用：f:56"
+        "path": "plans.white[1].explanation",
+        "category": "不存在的格子",
+        "message": "已移除事实包外格子：d5"
       },
       {
         "attempt": 1,
-        "path": "plans.white[1].evidenceRefs",
-        "category": "黑白说反",
-        "message": "已移除不支持white方计划的引用：f:60"
+        "path": "plans.white[1].explanation",
+        "category": "不存在的格子",
+        "message": "已移除事实包外格子：e5"
+      },
+      {
+        "attempt": 1,
+        "path": "playedMoveAnalysis.positiveEffects[1]",
+        "category": "不存在的格子",
+        "message": "已移除事实包外格子：c4"
       }
     ],
+    "finalErrors": []
+  },
+  {
+    "id": "simplify-1",
+    "category": "simplification_endgame",
+    "complexity": "complex",
+    "httpEquivalent": 200,
+    "beforeWeaknessCount": 2,
+    "afterWeaknessCount": 0,
+    "filteredUndefendedOnly": 4,
+    "filteredKingSafety": 8,
+    "movedToCandidateLine": 6,
+    "filteredOrdinaryPvCaptures": 5,
+    "fixedMaterialSectionRemoved": true,
+    "displayedSections": [
+      "positionAssessment",
+      "threats",
+      "keyPieces",
+      "plans",
+      "playedMoveAnalysis",
+      "candidateLines",
+      "comparison"
+    ],
+    "beforeWeaknesses": {
+      "white": [
+        "白后(a7)当前没有本方棋子保护"
+      ],
+      "black": [
+        "黑象(e7)当前没有本方棋子保护"
+      ]
+    },
+    "afterWeaknesses": {
+      "white": [],
+      "black": []
+    },
+    "beforeKingSafety": [
+      "白王位于g1",
+      "仅凭当前FEN不能可靠判断是否已经完成过易位",
+      "白方没有易位权",
+      "g1王前相邻一排有2枚本方兵",
+      "黑王位于g8",
+      "仅凭当前FEN不能可靠判断是否已经完成过易位",
+      "黑方没有易位权",
+      "g8王前相邻一排有3枚本方兵"
+    ],
+    "afterKingSafety": [],
+    "beforeGlobalThreats": [
+      "Qxb8 后，黑车在 f8 被钉在王前。"
+    ],
+    "afterGlobalThreats": [
+      "white方当前可以走Qxb8",
+      "white方当前可以走Qxd7"
+    ],
+    "candidateLineEvents": {
+      "1": [
+        "候选路线1中的Qxb8直接吃掉价值至少3分的棋子",
+        "候选路线1中的Rxb8直接吃掉价值至少3分的棋子"
+      ],
+      "2": [
+        "候选路线2中的Qxb8直接吃掉价值至少3分的棋子",
+        "候选路线2中的Rxb8直接吃掉价值至少3分的棋子"
+      ],
+      "3": [
+        "候选路线3中的Nxe4直接吃掉价值至少3分的棋子",
+        "候选路线3中的Nxe4直接吃掉价值至少3分的棋子"
+      ]
+    },
+    "meaninglessWeaknessStillDisplayed": false,
+    "firstPass": true,
+    "retried": false,
+    "fallback": false,
+    "finalValid": true,
+    "inputTokens": 6199,
+    "outputTokens": 1421,
+    "totalTokens": 7620,
+    "firstLatencyMs": 17289,
+    "totalLatencyMs": 17301,
+    "networkMs": 17289,
+    "validationMs": 6,
+    "postprocessMs": 4,
+    "chineseChars": 1171,
+    "keyPiecesCorrect": true,
+    "dangerHasEvidence": true,
+    "plansHaveEvidence": true,
+    "threeRoutesValid": true,
+    "issues": [],
+    "normalizations": [],
     "finalErrors": []
   },
   {
@@ -447,32 +1222,78 @@
     "category": "simplification_endgame",
     "complexity": "complex",
     "httpEquivalent": 200,
+    "beforeWeaknessCount": 2,
+    "afterWeaknessCount": 0,
+    "filteredUndefendedOnly": 6,
+    "filteredKingSafety": 8,
+    "movedToCandidateLine": 3,
+    "filteredOrdinaryPvCaptures": 6,
+    "fixedMaterialSectionRemoved": true,
+    "displayedSections": [
+      "positionAssessment",
+      "keyPieces",
+      "plans",
+      "playedMoveAnalysis",
+      "candidateLines",
+      "comparison"
+    ],
+    "beforeWeaknesses": {
+      "white": [
+        "白兵(c3)当前没有本方棋子保护"
+      ],
+      "black": [
+        "黑兵(a7)当前没有本方棋子保护"
+      ]
+    },
+    "afterWeaknesses": {
+      "white": [],
+      "black": []
+    },
+    "beforeKingSafety": [
+      "白王位于g1",
+      "仅凭当前FEN不能可靠判断是否已经完成过易位",
+      "白方没有易位权",
+      "g1王前相邻一排有2枚本方兵",
+      "黑王位于h7",
+      "仅凭当前FEN不能可靠判断是否已经完成过易位",
+      "黑方没有易位权",
+      "h7王前相邻一排有1枚本方兵"
+    ],
+    "afterKingSafety": [],
+    "beforeGlobalThreats": [
+      "Qe4 后，黑后在 f5 被钉在王前。"
+    ],
+    "afterGlobalThreats": [],
+    "candidateLineEvents": {
+      "1": [
+        "候选路线1中的Qxe4+直接吃掉价值至少3分的棋子",
+        "候选路线1中的Nxe4直接吃掉价值至少3分的棋子"
+      ],
+      "2": [
+        "候选路线2中的Qxd2直接吃掉价值至少3分的棋子"
+      ],
+      "3": []
+    },
+    "meaninglessWeaknessStillDisplayed": false,
     "firstPass": true,
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 5675,
-    "outputTokens": 2064,
-    "totalTokens": 7739,
-    "firstLatencyMs": 16802,
-    "totalLatencyMs": 16811,
-    "networkMs": 16802,
-    "validationMs": 5,
+    "inputTokens": 4979,
+    "outputTokens": 1287,
+    "totalTokens": 6266,
+    "firstLatencyMs": 11301,
+    "totalLatencyMs": 11311,
+    "networkMs": 11301,
+    "validationMs": 4,
     "postprocessMs": 3,
-    "chineseChars": 1086,
+    "chineseChars": 876,
     "keyPiecesCorrect": true,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
     "threeRoutesValid": true,
     "issues": [],
-    "normalizations": [
-      {
-        "attempt": 1,
-        "path": "plans.white[1].evidenceRefs",
-        "category": "黑白说反",
-        "message": "已移除不支持white方计划的引用：f:13"
-      }
-    ],
+    "normalizations": [],
     "finalErrors": []
   }
 ]
