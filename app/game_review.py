@@ -59,14 +59,13 @@ async def analyze_pgn(
         assert isinstance(played, MoveFacts)
 
         before_board = chess.Board(str(facts["before_fen"]))
-        best_result = before_result.top_moves[0] if before_result.top_moves else None
-        best_move = _verified_best_move(before_board, best_result)
-        pv_facts = _verified_principal_variation(before_board, best_result, best_move)
+        best_result, best_move, pv_facts = _first_verified_engine_route(before_board, before_result)
         principal_variation = [fact.san for fact in pv_facts]
         after_board = chess.Board(str(facts["after_fen"]))
-        opponent_result = after_result.top_moves[0] if after_result.top_moves else None
-        opponent_reply = _verified_best_move(after_board, opponent_result)
-        opponent_pv_facts = _verified_principal_variation(after_board, opponent_result, opponent_reply)
+        opponent_result, opponent_reply, opponent_pv_facts = _first_verified_engine_route(
+            after_board,
+            after_result,
+        )
         opponent_variation = [fact.san for fact in opponent_pv_facts]
         verified_tactics = _detect_tactical_motifs(before_board, played)
         if opponent_reply:
@@ -298,6 +297,8 @@ def _move_facts(board: chess.Board, move: chess.Move) -> MoveFacts:
 def _verified_best_move(board: chess.Board, result: MoveResult | None) -> MoveFacts | None:
     if result is None:
         return None
+    if not result.verified:
+        raise RuntimeError("Stockfish 路线已标记为未通过验证")
     try:
         move = chess.Move.from_uci(result.move)
     except ValueError as exc:
@@ -314,6 +315,8 @@ def _verified_principal_variation(
 ) -> list[MoveFacts]:
     if result is None or best is None:
         return []
+    if not result.verified:
+        raise RuntimeError("Stockfish 路线已标记为未通过验证")
     current = board.copy(stack=False)
     facts: list[MoveFacts] = []
     uci_line = [item.uci for item in result.line] if result.line else []
@@ -324,29 +327,51 @@ def _verified_principal_variation(
         for san in result.pv:
             try:
                 parsed = replay.parse_san(san)
-            except ValueError:
-                break
+            except ValueError as exc:
+                raise RuntimeError(f"Stockfish PV 包含非法 SAN：{san}") from exc
             uci_line.append(parsed.uci())
             replay.push(parsed)
     for uci in uci_line[:10]:
         try:
             move = chess.Move.from_uci(uci)
-        except ValueError:
-            break
+        except ValueError as exc:
+            raise RuntimeError(f"Stockfish PV 包含无效 UCI：{uci}") from exc
         if move not in current.legal_moves:
-            break
+            raise RuntimeError(f"Stockfish PV 包含非法走法：{uci}")
         facts.append(_move_facts(current, move))
         current.push(move)
+    if len(facts) != len(uci_line[:10]):
+        raise RuntimeError("Stockfish PV 未通过整条路线验证")
+    if result.resulting_fen and current.fen() != chess.Board(result.resulting_fen).fen():
+        raise RuntimeError("Stockfish PV 最终局面与验证重放结果不一致")
     return facts
+
+
+def _first_verified_engine_route(
+    board: chess.Board,
+    result: EngineResult,
+) -> tuple[MoveResult | None, MoveFacts | None, list[MoveFacts]]:
+    for candidate in result.top_moves:
+        try:
+            best = _verified_best_move(board, candidate)
+            facts = _verified_principal_variation(board, candidate, best)
+        except RuntimeError:
+            continue
+        return candidate, best, facts
+    return None, None, []
 
 
 def _candidate_lines(board: chess.Board, result: EngineResult) -> list[CandidateLine]:
     lines: list[CandidateLine] = []
-    for rank, candidate in enumerate(result.top_moves[:3], start=1):
-        best = _verified_best_move(board, candidate)
-        if best is None:
+    for candidate in result.top_moves[:3]:
+        try:
+            best = _verified_best_move(board, candidate)
+            if best is None:
+                continue
+            facts = _verified_principal_variation(board, candidate, best)
+        except RuntimeError:
             continue
-        facts = _verified_principal_variation(board, candidate, best)
+        rank = candidate.rank or len(lines) + 1
         moves, resulting_fen = _variation_moves(board, facts)
         line = CandidateLine(
                 id=f"line:{rank}",
@@ -357,6 +382,7 @@ def _candidate_lines(board: chess.Board, result: EngineResult) -> list[Candidate
                 first_move=best,
                 moves=moves,
                 resulting_fen=candidate.resulting_fen or resulting_fen,
+                verified=True,
             )
         for item in line.moves:
             item.id = f"line:{rank}:ply:{item.ply}"
@@ -372,22 +398,21 @@ def _candidate_lines(board: chess.Board, result: EngineResult) -> list[Candidate
 
 
 def _actual_move_line(board: chess.Board, after_result: EngineResult) -> CandidateLine | None:
-    if not after_result.top_moves:
+    candidate, reply, facts = _first_verified_engine_route(board, after_result)
+    if candidate is None or reply is None:
         return None
-    reply = _verified_best_move(board, after_result.top_moves[0])
-    if reply is None:
-        return None
-    facts = _verified_principal_variation(board, after_result.top_moves[0], reply)[:10]
+    facts = facts[:10]
     moves, resulting_fen = _variation_moves(board, facts)
     line = CandidateLine(
         id="line:played",
         rank=1,
-        depth=after_result.depth,
-        centipawn=after_result.centipawn,
-        mate_in=after_result.mate_in,
+        depth=candidate.depth,
+        centipawn=candidate.centipawn,
+        mate_in=candidate.mate_in,
         first_move=reply,
         moves=moves,
         resulting_fen=resulting_fen,
+        verified=True,
     )
     for item in line.moves:
         item.id = f"line:played:ply:{item.ply}"

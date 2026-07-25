@@ -1,9 +1,15 @@
 import asyncio
 
+import chess
 import pytest
 from fastapi.testclient import TestClient
 
 from app import api
+from app.analysis_report import (
+    AnalysisReportUsage,
+    GeneratedAnalysisReport,
+    build_fallback_report,
+)
 from app.models import (
     ComplexityFactors,
     EngineResult,
@@ -69,7 +75,21 @@ class FakeExplainer:
         )
 
 
+class FakeNarrativeGenerator:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def generate(self, package) -> GeneratedAnalysisReport:
+        self.calls += 1
+        return GeneratedAnalysisReport(
+            report=build_fallback_report(package),
+            usage=AnalysisReportUsage(attempts=1, used_fallback=False),
+        )
+
+
 def sample_move_review() -> MoveReview:
+    after = chess.Board()
+    after.push_uci("e2e4")
     played = MoveFacts(
         san="e4",
         uci="e2e4",
@@ -90,8 +110,8 @@ def sample_move_review() -> MoveReview:
         uci="e2e4",
         from_square="e2",
         to_square="e4",
-        before_fen="start",
-        after_fen="after",
+        before_fen=chess.STARTING_FEN,
+        after_fen=after.fen(),
         before=EvaluationSnapshot(evaluation="+0.20", centipawn=20),
         after=EvaluationSnapshot(evaluation="+0.10", centipawn=10),
         played_move=played,
@@ -138,7 +158,12 @@ def test_health_and_review(monkeypatch) -> None:
     body = response.json()
     assert body["position"]["side_to_move"] == "white"
     assert body["engine"]["top_moves"][0]["san"] == "e4"
+    assert body["engine"]["perspective"] == "white"
+    assert body["engine"]["evaluation_pawns"] == 0.25
+    assert body["engine"]["top_moves"][0]["verified"] is True
     assert body["explanation"].startswith("局面接近均势")
+    assert body["threats"] == []
+    assert body["plans"] == []
 
 
 def test_request_validation(monkeypatch) -> None:
@@ -218,3 +243,53 @@ async def test_simultaneous_move_explanation_requests_share_one_call(monkeypatch
 
     assert first.explanation == second.explanation
     assert fake_explainer.move_calls == 1
+
+
+def test_analysis_report_endpoint_is_independent_and_cached(monkeypatch) -> None:
+    class ForbiddenProfessionalService:
+        async def analyze(self, move: MoveReview):
+            raise AssertionError("新报告接口不得调用旧professional-analysis")
+
+    narrative = FakeNarrativeGenerator()
+    monkeypatch.setattr(api, "narrative_generator", narrative)
+    monkeypatch.setattr(api, "professional_service", ForbiddenProfessionalService())
+    api.game_cache.clear()
+    api.analysis_report_cache.clear()
+    api.analysis_report_tasks.clear()
+    analysis_id = "analysis-report-cache-test"
+    api.game_cache[analysis_id] = [sample_move_review()]
+    client = TestClient(api.app)
+
+    first = client.post(
+        "/api/analysis-report",
+        json={"analysis_id": analysis_id, "move_index": 1},
+    )
+    second = client.post(
+        "/api/analysis-report",
+        json={"analysis_id": analysis_id, "move_index": 1},
+    )
+
+    assert first.status_code == 200
+    assert first.json()["cached"] is False
+    assert first.json()["report"]["version"] == "1.0"
+    assert first.json()["report"]["summary_section"]["source_refs"]
+    assert "analysis" not in first.json()
+    assert second.status_code == 200
+    assert second.json()["cached"] is True
+    assert narrative.calls == 1
+
+
+def test_analysis_report_endpoint_preserves_existing_cache_errors(monkeypatch) -> None:
+    monkeypatch.setattr(api, "narrative_generator", FakeNarrativeGenerator())
+    api.game_cache.clear()
+    api.analysis_report_cache.clear()
+    api.analysis_report_tasks.clear()
+    client = TestClient(api.app)
+
+    missing = client.post(
+        "/api/analysis-report",
+        json={"analysis_id": "missing-analysis", "move_index": 1},
+    )
+
+    assert missing.status_code == 404
+    assert "缓存已过期" in missing.json()["detail"]

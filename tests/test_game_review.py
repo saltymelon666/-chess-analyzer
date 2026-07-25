@@ -19,7 +19,7 @@ def engine_result(centipawn: int, best_move: str, best_san: str) -> EngineResult
                 san=best_san,
                 centipawn=centipawn,
                 mate_in=None,
-                pv=[best_san],
+                pv=[],
                 depth=10,
             )
         ],

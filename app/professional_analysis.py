@@ -10,6 +10,11 @@ from typing import Any
 
 import httpx
 
+from .chess_facts import (
+    CHESS_FACT_PACKAGE_VERSION,
+    ChessFactPackage,
+    build_move_fact_package,
+)
 from .models import (
     GeneratedProfessionalAnalysis,
     MoveReview,
@@ -24,6 +29,11 @@ from .professional_validation import (
     build_validation_context,
     validate_professional_analysis,
 )
+from .strategic_plans import (
+    STRATEGIC_PLAN_PACKAGE_VERSION,
+    StrategicPlanAnalyzer,
+)
+from .threat_analysis import THREAT_PACKAGE_VERSION, ThreatAnalyzer
 from .analysis_focus import select_analysis_focus
 from .professional_refs import (
     REFERENCE_OUTPUT_CONTRACT,
@@ -37,7 +47,7 @@ from .professional_refs import (
 
 
 logger = logging.getLogger(__name__)
-PROFESSIONAL_PROMPT_VERSION = "professional-v6-focus"
+PROFESSIONAL_PROMPT_VERSION = "professional-v9-strategic-plan-package"
 PROFESSIONAL_TOKEN_LIMITS = {"simple": 1500, "normal": 2600, "complex": 3400}
 STRATEGY_TAGS = [
     "king_attack",
@@ -104,11 +114,33 @@ class ProfessionalAnalysisService:
         move: MoveReview,
         diagnostics: list[ProfessionalAttemptDiagnostic] | None = None,
     ) -> GeneratedProfessionalAnalysis:
-        if not self.configured:
-            raise RuntimeError("服务端尚未配置 DeepSeek API Key")
         complexity = compute_professional_complexity(move)
         context = build_validation_context(move, complexity.level)
-        payload = build_professional_payload(move, complexity, context.allowed_evidence_ids)
+        if not self.configured:
+            safe = build_safe_professional_analysis(move, complexity)
+            errors = validate_professional_analysis(safe, context)
+            if errors:
+                raise RuntimeError("安全专业分析未通过事实校验")
+            return GeneratedProfessionalAnalysis(
+                analysis=safe,
+                complexity_reasons=complexity.reasons,
+                validation_warnings=["服务端尚未配置DeepSeek，已使用统一事实包生成安全结果。"],
+                usage=_usage([]),
+            )
+        fact_package = build_move_fact_package(move)
+        if not fact_package.threats:
+            fact_package.threats = ThreatAnalyzer().detect(fact_package)
+        strategic_plan_package = StrategicPlanAnalyzer().analyze(
+            fact_package,
+            position_facts=move.position_facts,
+        )
+        fact_package.plans = strategic_plan_package.plans
+        payload = build_professional_payload(
+            move,
+            complexity,
+            context.allowed_evidence_ids,
+            fact_package=fact_package,
+        )
         system = professional_system_prompt()
         prompt = professional_user_prompt(payload, complexity.level)
         usage_results: list[ChatResult] = []
@@ -117,6 +149,7 @@ class ProfessionalAnalysisService:
         parsed: ProfessionalAnalysis | None = None
         validation_ms = 0
         postprocess_ms = 0
+        transport_error: str | None = None
 
         for attempt in range(2):
             current_prompt = prompt
@@ -126,26 +159,41 @@ class ProfessionalAnalysisService:
                     + "\n- ".join(_compact_validation_errors([issue.render() for issue in last_issues]))
                     + "\n请只修正这些引用或字段，不要重新输入棋子、格子、SAN或UCI。"
                 )
-            result = await self._chat(
-                system=system,
-                prompt=current_prompt,
-                max_tokens=PROFESSIONAL_TOKEN_LIMITS[complexity.level],
-                temperature=0.0,
-            )
+            try:
+                result = await self._chat(
+                    system=system,
+                    prompt=current_prompt,
+                    max_tokens=PROFESSIONAL_TOKEN_LIMITS[complexity.level],
+                    temperature=0.0,
+                )
+            except (httpx.HTTPError, RuntimeError) as exc:
+                transport_error = str(exc)
+                logger.warning("Professional DeepSeek unavailable; using safe fallback: %s", exc)
+                break
             usage_results.append(result)
             validation_started = time.perf_counter()
             draft, last_issues = parse_professional_draft(result.content)
             normalizations: list[DraftValidationIssue] = []
             if draft is not None:
                 draft, normalizations = normalize_professional_draft_literals(draft, move, context)
-                last_issues.extend(validate_professional_draft(draft, move, context))
+                last_issues.extend(validate_professional_draft(
+                    draft,
+                    move,
+                    context,
+                    strategic_plan_package=strategic_plan_package,
+                ))
             attempt_validation_ms = round((time.perf_counter() - validation_started) * 1000)
             validation_ms += attempt_validation_ms
 
             attempt_postprocess_ms = 0
             if draft is not None and not last_issues:
                 postprocess_started = time.perf_counter()
-                parsed = resolve_professional_draft(draft, move, context)
+                parsed = resolve_professional_draft(
+                    draft,
+                    move,
+                    context,
+                    strategic_plan_package=strategic_plan_package,
+                )
                 parsed = _fit_resolved_analysis_length(parsed, move, complexity.level)
                 attempt_postprocess_ms = round((time.perf_counter() - postprocess_started) * 1000)
                 postprocess_ms += attempt_postprocess_ms
@@ -195,10 +243,12 @@ class ProfessionalAnalysisService:
         if safe_errors:
             logger.error("Safe professional analysis failed validation: %s", safe_errors)
             raise RuntimeError("安全专业分析未通过事实校验")
-        warnings = [
-            "DeepSeek两次返回均未通过校验，已删除不可信内容并使用结构化事实生成安全结果。",
-            *[issue.render() for issue in all_issues],
-        ]
+        warnings = (
+            ["DeepSeek暂不可用，已直接使用统一事实包生成安全结果。"]
+            if transport_error is not None
+            else ["DeepSeek两次返回均未通过校验，已删除不可信内容并使用结构化事实生成安全结果。"]
+        )
+        warnings.extend(issue.render() for issue in all_issues)
         return GeneratedProfessionalAnalysis(
             analysis=safe,
             complexity_reasons=complexity.reasons,
@@ -343,11 +393,24 @@ def build_professional_payload(
     move: MoveReview,
     complexity: ProfessionalComplexity,
     allowed_evidence_ids: set[str],
+    *,
+    fact_package: ChessFactPackage | None = None,
 ) -> dict[str, Any]:
     # The context still owns the complete allow-list for server-side validation.
     # DeepSeek receives each current-position fact once and refers to it by ID.
     del allowed_evidence_ids
-    return build_reference_payload(move, complexity.level, complexity.reasons)
+    package = fact_package or build_move_fact_package(move)
+    if not package.threats:
+        package.threats = ThreatAnalyzer().detect(package)
+    if not package.plans:
+        package.plans = StrategicPlanAnalyzer().analyze(
+            package,
+            position_facts=move.position_facts,
+        ).plans
+    payload = build_reference_payload(move, complexity.level, complexity.reasons)
+    payload.get("pos", {}).pop("fen", None)
+    payload["chessFacts"] = package.protocol_manifest()
+    return payload
 
 
 def _compact_prompt_value(value: Any) -> Any:
@@ -376,6 +439,12 @@ def professional_system_prompt() -> str:
         "没有保护不等于弱点，王前兵较少不等于存在攻王，没有易位权不等于王不安全。"
         "单条Stockfish路线中的普通吃子不等于全局潜在威胁，物质数量不作为固定栏目。"
         "PV只是参考变化，不是必然发生。"
+        "所有解释必须是完整、自然、可直接展示给用户的中文棋理句子。"
+        "禁止在解释中出现事实依据、判断依据、根据某事实可以判断、证据数量、内部变量名或引用ID。"
+        "不要输出white、black、pawn、knight、bishop、rook、queen、king等程序化名称。"
+        "输入中的战略计划由程序确认。禁止创建计划、修改计划类型或扩展计划；"
+        "只能通过planId解释已有计划，plans.white和plans.black必须保持空数组。"
+        "不要使用只有几个字的模板短语，例如‘巩固中心，准备’或‘暂时减缓发展’，必须说明具体作用、后续准备和局面影响。"
     )
 
 
@@ -406,8 +475,13 @@ def professional_user_prompt(payload: dict[str, Any], complexity: str) -> str:
 5. 自由文本只能使用中文和中文标点，禁止拉丁字母、数字、棋盘格、SAN和UCI。不得自行写“吃子、将军、将杀、绝杀”等事件词，这些事件由后端根据ply填充。错误示例：“控制d4”“走Qe2”；正确示例：“控制该中心格”“该路线首着完成协调”。
 6. mainDanger有具体危险时用dangerRef引用一个已有ply；无可靠直接危险时dangerRef写null且level写none。危险一方由后端从ply推导，不要输出sideInDanger。
 7. positionAssessment只允许输出summary，不得输出material、kingSafety、pieceActivity或pawnStructure；这些动态栏目全部由后端重点选择器按selectedFacts回填。
-8. 为避免重复，白方与黑方计划各1—2条且保持简短；keyPieces.white只能引用白方棋子，keyPieces.black只能引用黑方棋子；弱点、王安全、子力活动、兵形、全局威胁与路线内部事件由后端重点选择器生成，不要输出这些字段；不要自行拆分PV阶段。strategyTags只能使用：{strategy_tags}。
-9. 草稿解释文字目标为{length}个中文字符；后端会追加事实标签并回填真实走法。complexity必须是{complexity}。
+8. positionAssessment.summary必须用完整段落具体说明双方子力状态、活跃与受限棋子、中心和两翼局势，不能只写“当前局面某方子”之类残句。
+9. keyPieces的role只说明棋子当前位置、控制线路、活跃或受限状态及实际影响；不要写“下一项任务”。futureTask字段仍按契约返回，但只作内部数据，不要在role中重复。
+10. plans.white和plans.black必须返回空数组。战略计划只能通过planExplanations按chessFacts.plans中的plan_id解释；没有程序计划时planExplanations返回空数组。禁止创建planId、修改计划类型或增加棋步。
+11. playedMoveAnalysis的intention、positiveEffects和problems都必须是完整句子，分别说明直接解决的问题、后续准备、局面影响与具体风险。禁止使用“依据”“可以判断”“根据”开头。
+12. 每条candidateLines的directPurpose、continuationExplanation、advantages和risks必须使用完整具体中文；优点和风险要说明对子力、空间、兵形或线路的实际影响，不能只写标签。
+13. 为避免重复，keyPieces.white只能引用白方棋子，keyPieces.black只能引用黑方棋子；弱点、王安全、子力活动、兵形、全局威胁与路线内部事件由后端重点选择器生成，不要输出这些字段；不要自行拆分PV阶段。strategyTags只能使用：{strategy_tags}。
+14. 草稿解释文字目标为{length}个中文字符；后端会追加结构化事实并回填真实走法。complexity必须是{complexity}。
 
 只返回与以下契约完全一致的JSON，不要Markdown或额外字段。数组对象表示元素结构：
 {compact_contract}"""
@@ -438,6 +512,9 @@ def professional_cache_key(
             "multiPv": len(move.candidate_lines),
             "routes": route_summary,
             "promptVersion": PROFESSIONAL_PROMPT_VERSION,
+            "factPackageVersion": CHESS_FACT_PACKAGE_VERSION,
+            "threatPackageVersion": THREAT_PACKAGE_VERSION,
+            "strategicPlanPackageVersion": STRATEGIC_PLAN_PACKAGE_VERSION,
         },
         ensure_ascii=False,
         sort_keys=True,
@@ -514,21 +591,24 @@ def build_safe_professional_analysis(
             )
 
     plans = {"white": [], "black": []}
-    route_moves = [item for line in move.candidate_lines for item in line.moves]
-    if move.actual_move_line:
-        route_moves.extend(move.actual_move_line.moves)
-    for side in ("white", "black"):
-        item = next((route_move for route_move in route_moves if route_move.side == side), None)
-        if item:
-            tag = _safe_strategy_tag(item)
-            plans[side].append(
-                {
-                    "strategyTag": tag,
-                    "description": f"参考路线只确认{item.piece}从{item.from_square}走到{item.to_square}（{item.san}）。",
-                    "requiredPreparation": "路线之外的准备步骤证据不足，无法可靠判断。",
-                    "evidenceRefs": [item.id],
-                }
-            )
+    fact_package = build_move_fact_package(move)
+    if not fact_package.threats:
+        fact_package.threats = ThreatAnalyzer().detect(fact_package)
+    strategic_package = StrategicPlanAnalyzer().analyze(
+        fact_package,
+        position_facts=move.position_facts,
+    )
+    for plan in strategic_package.plans:
+        if plan.confidence != "high":
+            continue
+        plans[plan.side].append(
+            {
+                "strategyTag": _safe_strategic_plan_tag(plan.type),
+                "description": plan.goal,
+                "requiredPreparation": "；".join(plan.structural_evidence),
+                "evidenceRefs": list(plan.evidence_route_ids),
+            }
+        )
 
     weaknesses = {"white": [], "black": []}
     for side, items in focus.weaknesses.items():
@@ -840,10 +920,12 @@ def _trim_profile_max(analysis: ProfessionalAnalysis, level: str) -> Professiona
             if len(value) <= 8:
                 break
             excess = length() - maximum
-            remove = min(excess + 1, len(value) - 8)
-            shortened = value[:-remove].rstrip(" ，；：,.!?！？") + "。"
+            keep = max(8, len(value) - min(excess + 1, len(value) - 8))
+            shortened = _trim_to_complete_sentence(value, keep)
             if len(shortened) >= len(value):
-                shortened = value[:-2].rstrip(" ，；：,.!?！？") + "。"
+                shortened = _trim_to_complete_sentence(value, max(8, keep - 2))
+            if not shortened or len(shortened) >= len(value):
+                break
             setattr(target, attribute, shortened)
         if length() <= maximum:
             break
@@ -859,16 +941,47 @@ def _trim_profile_max(analysis: ProfessionalAnalysis, level: str) -> Professiona
                 if any(phrase in value for phrase in VAGUE_PHRASES):
                     break
                 excess = length() - maximum
-                remove = min(excess + 1, len(value) - 8)
-                shortened = value[:-remove].rstrip(" ，；：,.!?！？") + "。"
+                keep = max(8, len(value) - min(excess + 1, len(value) - 8))
+                shortened = _trim_to_complete_sentence(value, keep)
                 if len(shortened) >= len(value):
-                    shortened = value[:-2].rstrip(" ，；：,.!?！？") + "。"
+                    shortened = _trim_to_complete_sentence(value, max(8, keep - 2))
+                if not shortened or len(shortened) >= len(value):
+                    break
                 values[index] = shortened
                 value = shortened
             if length() <= maximum:
                 break
         if length() <= maximum:
             break
+    if length() > maximum:
+        # Optional prose is removed as a whole item; never shave characters from a sentence.
+        for values in reversed(list_fields):
+            while values and length() > maximum:
+                values.pop()
+            if length() <= maximum:
+                break
+    if length() > maximum:
+        # Replace non-display metadata with short, complete sentences before touching user-facing prose.
+        atomic_replacements = [
+            (piece, "future_task", "")
+            for piece in result.key_pieces
+        ] + [
+            (result.comparison, "main_difference", ""),
+            (result.comparison, "why_first_line_is_best", ""),
+            (result.played_move_analysis, "evaluation_reason", ""),
+            (result.played_move_analysis, "resulting_position", ""),
+        ] + [
+            item
+            for line in result.candidate_lines
+            for item in (
+                (line, "why_this_rank", ""),
+                (line, "resulting_position", ""),
+            )
+        ]
+        for target, attribute, replacement in atomic_replacements:
+            if length() <= maximum:
+                break
+            setattr(target, attribute, replacement)
     return result
 
 
@@ -967,15 +1080,36 @@ def _fit_complex_safe_length(
             if len(text) <= 8:
                 break
             excess = length() - maximum
-            remove = min(excess + 1, len(text) - 8)
-            shortened = text[:-remove].rstrip(" ，；：,.!?！？") + "。"
+            keep = max(8, len(text) - min(excess + 1, len(text) - 8))
+            shortened = _trim_to_complete_sentence(text, keep)
             if len(shortened) >= len(text):
-                shortened = text[:-2].rstrip(" ，；：,.!?！？") + "。"
+                shortened = _trim_to_complete_sentence(text, max(8, keep - 2))
+            if not shortened or len(shortened) >= len(text):
+                break
             setattr(target, attribute, shortened)
         if length() <= maximum:
             return result
 
     return result
+
+
+def _trim_to_complete_sentence(text: str, maximum: int) -> str:
+    """Trim prose only at a sentence boundary so length fitting cannot create residue."""
+    if len(text) <= maximum:
+        return text
+    prefix = text[:maximum]
+    boundaries = [prefix.rfind(mark) for mark in "。！？；.!?"]
+    boundary = max(boundaries)
+    if boundary >= 7:
+        return prefix[:boundary + 1].strip()
+    clause_boundary = max(prefix.rfind(mark) for mark in "，、：,:")
+    if clause_boundary < 7:
+        return ""
+    clause = prefix[:clause_boundary].rstrip(" ，、；：,.!?！？")
+    incomplete_endings = ("正在", "准备", "为了", "通过", "因为", "因此", "意大", "可以让", "正", "的")
+    if any(clause.endswith(ending) for ending in incomplete_endings):
+        return ""
+    return f"{clause}。"
 
 
 def _model_phases(moves: list[Any], count: int) -> list[Any]:
@@ -1032,6 +1166,19 @@ def _safe_strategy_tag(item: Any) -> str:
             return "kingside_expansion"
         return "center_control"
     return "improve_worst_piece"
+
+
+def _safe_strategic_plan_tag(plan_type: str) -> str:
+    return {
+        "improve_worst_piece": "improve_worst_piece",
+        "prepare_center_break": "center_break",
+        "occupy_open_file": "control_open_file",
+        "activate_rook": "control_open_file",
+        "improve_king_safety": "improve_king_safety",
+        "attack_weak_pawn": "occupy_weak_square",
+        "create_passed_pawn": "create_passed_pawn",
+        "simplify_endgame": "exchange_and_simplify",
+    }[plan_type]
 
 
 def _result_position_text(line: Any) -> str:

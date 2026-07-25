@@ -127,7 +127,12 @@ class StockfishService:
             white_score = score.pov(chess.WHITE)
             mate_in = white_score.mate()
             centipawn = None if mate_in is not None else white_score.score()
-            line, resulting_fen = self._pv_details(board, pv[:MAX_PV_PLIES])
+            try:
+                line, resulting_fen = self._pv_details(board, pv[:MAX_PV_PLIES])
+            except ValueError:
+                # A partially valid PV is not a trustworthy route. Discard the
+                # complete line instead of exposing a verified-looking prefix.
+                continue
             san_line = [item.san for item in line]
             info_depth = int(info.get("depth", 0))
             max_depth = max(max_depth, info_depth)
@@ -144,6 +149,7 @@ class StockfishService:
                     rank=rank,
                     line=line,
                     resulting_fen=resulting_fen,
+                    verified=True,
                 )
             )
 
@@ -201,7 +207,7 @@ class StockfishService:
         line: list[VariationMove] = []
         for ply, move in enumerate(pv[:MAX_PV_PLIES], start=1):
             if move not in current.legal_moves:
-                break
+                raise ValueError(f"Stockfish PV contains illegal move at ply {ply}: {move.uci()}")
             piece = current.piece_at(move.from_square)
             captured_piece = None
             if current.is_capture(move):
@@ -235,6 +241,8 @@ class StockfishService:
                 )
             )
             current = next_board
+        if len(line) != len(pv[:MAX_PV_PLIES]):
+            raise ValueError("Stockfish PV validation did not cover the complete route")
         return line, current.fen()
 
     @staticmethod

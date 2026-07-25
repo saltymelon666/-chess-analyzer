@@ -28,9 +28,24 @@ from .models import (
     ProfessionalWeaknesses,
 )
 from .professional_validation import ProfessionalValidationContext
+from .strategic_plans import StrategicPlanPackage
 
 
 VAGUE_CLAIMS = ("加强中心", "注意防守", "改善子力", "形成压力", "准备进攻", "局面复杂")
+
+SIDE_NAMES = {"white": "白方", "black": "黑方"}
+PIECE_NAMES = {
+    "pawn": "兵",
+    "knight": "马",
+    "bishop": "象",
+    "rook": "车",
+    "queen": "后",
+    "king": "王",
+}
+INCOMPLETE_ENDINGS = (
+    "正在", "准备", "为了", "通过", "因为", "因此", "意大", "可以让", "正",
+    "需要", "能够", "可以", "以及", "同时", "并", "从", "向", "的",
+)
 
 REFERENCE_OUTPUT_CONTRACT = {
     "complexity": "simple|normal|complex",
@@ -59,19 +74,13 @@ REFERENCE_OUTPUT_CONTRACT = {
         },
     },
     "plans": {
-        "white": [{
-            "strategyTag": "allowed-tag",
-            "explanation": "strategic meaning",
-            "requiredPreparation": "preparation",
-            "evidenceRefs": ["existing-id"],
-        }],
-        "black": [{
-            "strategyTag": "allowed-tag",
-            "explanation": "strategic meaning",
-            "requiredPreparation": "preparation",
-            "evidenceRefs": ["existing-id"],
-        }],
+        "white": [],
+        "black": [],
     },
+    "planExplanations": [{
+        "planId": "existing-plan-id",
+        "explanation": "explain this confirmed plan without chess notation",
+    }],
     "playedMoveAnalysis": {
         "moveRef": "played-move-id",
         "intention": "idea without notation",
@@ -221,7 +230,7 @@ def normalize_professional_draft_literals(
     issues: list[DraftValidationIssue] = []
     reference_keys = {
         "evidenceRefs", "pieceRef", "dangerRef", "targetRef", "moveRef",
-        "strongestReplyRef", "lineRef", "plyRefs",
+        "strongestReplyRef", "lineRef", "plyRefs", "planId",
     }
     san_pattern = re.compile(
         r"(?<![A-Za-z0-9])(?:O-O(?:-O)?|[KQRBN][a-h1-8]?x?[a-h][1-8](?:=[QRBN])?|"
@@ -319,6 +328,8 @@ def validate_professional_draft(
     draft: ProfessionalAnalysisDraft,
     move: MoveReview,
     context: ProfessionalValidationContext,
+    *,
+    strategic_plan_package: StrategicPlanPackage | None = None,
 ) -> list[DraftValidationIssue]:
     issues: list[DraftValidationIssue] = []
     source_by_alias, aliases_by_source = _reference_maps(move)
@@ -379,6 +390,28 @@ def validate_professional_draft(
                 issues,
                 allow_neutral=True,
             )
+    if strategic_plan_package is not None:
+        if draft.plans.white or draft.plans.black:
+            issues.append(DraftValidationIssue(
+                "plans",
+                "其他原因",
+                "DeepSeek不得生成战略计划；plans.white和plans.black必须为空数组",
+            ))
+        allowed_plan_ids = {plan.plan_id for plan in strategic_plan_package.plans}
+        returned_plan_ids = [item.plan_id for item in draft.plan_explanations]
+        invalid_plan_ids = sorted(set(returned_plan_ids) - allowed_plan_ids)
+        if invalid_plan_ids:
+            issues.append(DraftValidationIssue(
+                "planExplanations",
+                "其他原因",
+                "引用的planId不存在：" + "、".join(invalid_plan_ids),
+            ))
+        if len(returned_plan_ids) != len(set(returned_plan_ids)):
+            issues.append(DraftValidationIssue(
+                "planExplanations",
+                "其他原因",
+                "planId重复",
+            ))
     played_ref = aliases_by_source[move.played_move.id or f"move:played:{move.index}"]
     if draft.played_move_analysis.move_ref != played_ref:
         issues.append(DraftValidationIssue("playedMoveAnalysis.moveRef", "不属于Stockfish的走法", "必须引用实战走法ID"))
@@ -429,6 +462,8 @@ def resolve_professional_draft(
     draft: ProfessionalAnalysisDraft,
     move: MoveReview,
     context: ProfessionalValidationContext,
+    *,
+    strategic_plan_package: StrategicPlanPackage | None = None,
 ) -> ProfessionalAnalysis:
     focus = select_analysis_focus(move)
     draft = ProfessionalAnalysisDraft.model_validate(
@@ -456,30 +491,61 @@ def resolve_professional_draft(
     key_pieces = []
     for item in (draft.key_pieces.white, draft.key_pieces.black):
         piece = pieces_by_id[item.piece_ref]
+        piece_name = f"{SIDE_NAMES.get(piece['side'], '')}{piece['square']}{PIECE_NAMES.get(piece['piece'], '棋子')}"
+        verified_position = f"{piece_name}目前位于{piece['square']}。"
+        role = _complete_display_sentence(item.role)
         key_pieces.append(ProfessionalKeyPiece(
             side=piece["side"],
             piece=piece["piece"],
             square=piece["square"],
-            role=f"{piece['side']}_{piece['piece']}位于{piece['square']}；{item.role}",
-            futureTask=item.future_task,
+            role=(
+                f"{verified_position}{role}"
+                if role and piece_name not in role
+                else role or verified_position
+            ),
+            futureTask=_complete_display_sentence(item.future_task) or "",
             evidenceRefs=refs(item.evidence_refs, item.piece_ref),
         ))
 
-    plans = {}
-    for side, items in (("white", draft.plans.white), ("black", draft.plans.black)):
-        plans[side] = []
-        for item in items:
-            evidence = refs(item.evidence_refs)
-            plans[side].append(ProfessionalPlan(
-                strategyTag=item.strategy_tag,
-                description=_explanation_with_evidence(item.explanation, evidence, descriptions),
-                requiredPreparation=(
-                    item.required_preparation
-                    if len(item.required_preparation.strip()) >= 4
-                    else "按照对应证据完成必要准备。"
-                ),
+    plans = {"white": [], "black": []}
+    if strategic_plan_package is not None:
+        explanations = {
+            item.plan_id: item.explanation
+            for item in draft.plan_explanations
+        }
+        for plan in strategic_plan_package.plans:
+            if plan.confidence != "high":
+                continue
+            evidence = refs(plan.evidence_route_ids)
+            if not evidence:
+                continue
+            explanation = _complete_display_sentence(
+                explanations.get(plan.plan_id, "")
+            )
+            description = explanation or _complete_display_sentence(plan.goal)
+            preparation = _complete_display_sentence(
+                "；".join(plan.structural_evidence[:2])
+            )
+            plans[plan.side].append(ProfessionalPlan(
+                strategyTag=_strategic_plan_tag(plan.type),
+                description=description,
+                requiredPreparation=preparation or "按照程序确认的结构条件逐步实施。",
                 evidenceRefs=evidence,
             ))
+    else:
+        for side, items in (("white", draft.plans.white), ("black", draft.plans.black)):
+            for item in items:
+                evidence = refs(item.evidence_refs)
+                plans[side].append(ProfessionalPlan(
+                    strategyTag=item.strategy_tag,
+                    description=_explanation_with_evidence(item.explanation, evidence, descriptions),
+                    requiredPreparation=(
+                        item.required_preparation
+                        if len(item.required_preparation.strip()) >= 4
+                        else "按照对应证据完成必要准备。"
+                    ),
+                    evidenceRefs=evidence,
+                ))
 
     weaknesses = {"white": [], "black": []}
     for side, items in focus.weaknesses.items():
@@ -626,10 +692,22 @@ def resolve_professional_draft(
         if item.display_section == "positionAssessment" and item.id in pawn_ids
     ][:1])
 
+    verified_summary = _complete_display_sentence(draft.position_assessment.summary)
+    if not verified_summary:
+        named_pieces = "和".join(
+            f"{SIDE_NAMES.get(item.side, '')}{item.square}{PIECE_NAMES.get(item.piece, '棋子')}"
+            for item in key_pieces[:2]
+        )
+        verified_summary = (
+            f"当前由{SIDE_NAMES.get(move.side, move.side)}行棋。{named_pieces}是系统选出的关键棋子。"
+            if named_pieces
+            else f"当前由{SIDE_NAMES.get(move.side, move.side)}行棋。"
+        )
+
     analysis = ProfessionalAnalysis(
         complexity=draft.complexity,
         positionAssessment=ProfessionalPositionAssessment(
-            summary=draft.position_assessment.summary,
+            summary=verified_summary,
             kingSafety={
                 "isRelevant": bool(focus.king_safety_relevant_sides),
                 "white": king_evidence["white"],
@@ -657,6 +735,19 @@ def resolve_professional_draft(
         default_ref=move.played_move.id or f"move:played:{move.index}",
     )
     return ProfessionalAnalysis.model_validate(grounded)
+
+
+def _complete_display_sentence(value: str) -> str:
+    """Keep display prose sentence-atomic; never expose a fragment after sanitising."""
+    text = re.sub(r"\s+", " ", str(value or "")).strip()
+    if not text:
+        return ""
+    plain = text.rstrip("。！？；.!? ")
+    if len(plain) < 5 or any(plain.endswith(ending) for ending in INCOMPLETE_ENDINGS):
+        return ""
+    if re.fullmatch(r"(?:白方|黑方)?(?:[a-h][1-8])?(?:兵|马|象|车|后|王)(?:\([a-h][1-8]\))?", plain):
+        return ""
+    return text if text.endswith(("。", "！", "？", "；", ".", "!", "?")) else f"{text}。"
 
 
 def _evidence_descriptions(move: MoveReview) -> dict[str, str]:
@@ -743,7 +834,7 @@ def _ground_vague_claims(
             descriptions.get(default_ref, candidates[0] if candidates else ""),
         )
         if evidence:
-            grounded = value[:380]
+            grounded = value
             for phrase in VAGUE_CLAIMS:
                 if phrase in grounded:
                     grounded = grounded.replace(phrase, f"依据{evidence[:90]}可判断{phrase}")
@@ -769,7 +860,7 @@ def _normalized_level(value: str) -> str:
 def _sanitize_draft_event_words(value: Any, key: str = "") -> Any:
     reference_keys = {
         "evidenceRefs", "pieceRef", "dangerRef", "targetRef", "moveRef",
-        "strongestReplyRef", "lineRef", "plyRefs",
+        "strongestReplyRef", "lineRef", "plyRefs", "planId",
     }
     if key in reference_keys:
         return value
@@ -821,6 +912,19 @@ def _sanitize_grounding_description(value: str, context: ProfessionalValidationC
     if not context.allows_capture:
         value = value.replace("吃子", "子力收益").replace("吃掉", "赢得")
     return value
+
+
+def _strategic_plan_tag(plan_type: str) -> str:
+    return {
+        "improve_worst_piece": "improve_worst_piece",
+        "prepare_center_break": "center_break",
+        "occupy_open_file": "control_open_file",
+        "activate_rook": "control_open_file",
+        "improve_king_safety": "improve_king_safety",
+        "attack_weak_pawn": "occupy_weak_square",
+        "create_passed_pawn": "create_passed_pawn",
+        "simplify_endgame": "exchange_and_simplify",
+    }[plan_type]
 
 
 def _target_text(ref: str, context: ProfessionalValidationContext, descriptions: dict[str, str]) -> str:
@@ -883,7 +987,7 @@ def _walk_refs(value: Any, path: str = "") -> Iterable[tuple[str, str]]:
 def _walk_free_text(value: Any, path: str = "", key: str = "") -> Iterable[tuple[str, str]]:
     reference_keys = {
         "evidenceRefs", "pieceRef", "dangerRef", "targetRef", "moveRef",
-        "strongestReplyRef", "lineRef", "plyRefs",
+        "strongestReplyRef", "lineRef", "plyRefs", "planId",
     }
     if key in reference_keys:
         return

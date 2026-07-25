@@ -1,5 +1,6 @@
 from unittest.mock import AsyncMock
 
+import chess
 import pytest
 
 from app.ai_explainer import (
@@ -13,6 +14,8 @@ from app.models import ComplexityFactors, EvaluationSnapshot, MoveFacts, MoveRev
 
 
 def review(complexity: str = "simple") -> MoveReview:
+    after = chess.Board()
+    after.push_uci("e2e4")
     played = MoveFacts(
         san="e4",
         uci="e2e4",
@@ -44,8 +47,8 @@ def review(complexity: str = "simple") -> MoveReview:
         uci="e2e4",
         from_square="e2",
         to_square="e4",
-        before_fen="start",
-        after_fen="after",
+        before_fen=chess.STARTING_FEN,
+        after_fen=after.fen(),
         before=EvaluationSnapshot(evaluation="+0.20", centipawn=20),
         after=EvaluationSnapshot(evaluation="-0.20", centipawn=-20),
         played_move=played,
@@ -117,6 +120,9 @@ async def test_first_validation_failure_retries_once() -> None:
     assert result.explanation == valid
     assert result.details.complexity == "simple"
     assert explainer._chat.await_count == 2
+    first_prompt = explainer._chat.await_args_list[0].kwargs["prompt"]
+    assert move.before_fen not in first_prompt
+    assert '"version": "1.0"' in first_prompt
 
 
 @pytest.mark.asyncio

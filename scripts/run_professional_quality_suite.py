@@ -86,7 +86,7 @@ def valid_key_pieces(move: Any, analysis: Any) -> bool:
 
 def valid_plans(analysis: Any, allowed_refs: set[str]) -> bool:
     plans = [*analysis.plans.white, *analysis.plans.black]
-    return bool(analysis.plans.white and analysis.plans.black) and all(
+    return all(
         item.evidence_refs and set(item.evidence_refs) <= allowed_refs for item in plans
     )
 
@@ -373,7 +373,7 @@ def render_report(results: list[dict[str, Any]], cache_ms: int | None, model: st
 
 - 棋子改用固定的 `keyPieces.white.pieceRef` / `keyPieces.black.pieceRef`。
 - 候选路线只返回 `lineRef`；完整 PV 只返回已有 `plyRefs`，SAN、UCI、格子、棋子与结果局面由后端填充。
-- 提示词仅发送一个当前 FEN、去重棋子/事实目录、实战走法和三条最多 10 半回合的路线；不发送 legalMoves、positionAfter、重复 evidence 字典、调试字段或整盘历史。
+- 提示词不发送 FEN；仅发送 ChessFactPackage 版本/来源清单、去重棋子与事实引用、实战走法引用和三条最多 10 半回合的已验证路线；不发送 legalMoves、positionAfter、重复 evidence 字典、调试字段或整盘历史。
 - 保持严格校验：未知 ID、事实包外格子、路线外 SAN、任何 UCI、黑白颠倒、缺证据结论仍会拒绝。
 - 分别记录 DeepSeek 网络、校验和后处理耗时；保留缓存。
 

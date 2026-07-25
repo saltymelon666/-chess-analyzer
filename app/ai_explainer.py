@@ -6,8 +6,21 @@ import re
 import httpx
 from pydantic import ValidationError
 
+from .chess_facts import (
+    ChessFactPackage,
+    FactExplanationDraft,
+    PlanExplanation,
+    ThreatExplanation,
+    build_engine_fact_package,
+    build_move_fact_package,
+    render_fact_explanation,
+    safe_fact_explanation,
+    validate_fact_explanation,
+)
 from .complexity import EXPLANATION_PROFILES
 from .models import EngineResult, GeneratedMoveExplanation, MoveExplanationDetails, MoveReview
+from .strategic_plans import StrategicPlanAnalyzer
+from .threat_analysis import ThreatAnalyzer
 
 
 class DeepSeekExplainer:
@@ -29,81 +42,90 @@ class DeepSeekExplainer:
         return bool(self.api_key)
 
     async def explain(self, fen: str, result: EngineResult) -> str:
+        package = build_engine_fact_package(fen, result)
+        package.threats = ThreatAnalyzer().detect(package)
+        package.plans = StrategicPlanAnalyzer().analyze(package).plans
+        return await self.explain_fact_package(package)
+
+    async def explain_fact_package(self, package: ChessFactPackage) -> str:
         if not self.configured:
-            raise RuntimeError("服务端尚未配置 DeepSeek API Key")
+            return safe_fact_explanation(package)
 
-        moves_info = "\n".join(
-            f"#{index}: {move.san} ({self._score_text(move.centipawn, move.mate_in)}) "
-            f"后续: {' '.join(move.pv[:5]) or '-'}"
-            for index, move in enumerate(result.top_moves, start=1)
-        )
-        prompt = f"""你是一个国际象棋分析助手。请用简洁的中文分析以下局面：
-
-局面 FEN: {fen}
-引擎评估（统一为白方视角）: {result.evaluation}
-搜索深度: {result.depth} 层
-最佳着法及后续变化:
-{moves_info}
-
-请用 2-4 句话说明：
-1. 当前局面的整体评价，以及谁占优；
-2. 最佳着法的主要意图；
-3. 给当前行棋方的简短建议。
-
-直接给出中文分析，不要添加标题。不得补充候选走法和 PV 中没有出现的具体走法或格子；证据不足时只描述引擎分数。"""
-
-        async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-            response = await client.post(
-                f"{self.base_url}/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": self.model,
-                    "messages": [
-                        {
-                            "role": "system",
-                            "content": (
-                                "你不是国际象棋引擎，不得自行计算或猜测棋局。"
-                                "只能用输入中的 FEN、评价、候选走法和主要变化做保守解释。"
-                            ),
-                        },
-                        {"role": "user", "content": prompt},
-                    ],
-                    "max_tokens": 500,
-                    "temperature": 0.3,
-                },
-            )
-            response.raise_for_status()
-            data = response.json()
-
-        content = data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
-        if not content:
-            raise RuntimeError("DeepSeek 返回了空内容")
-        return content
+        system = self._fact_system_prompt()
+        prompt = self._fact_prompt(package)
+        last_errors: list[str] = []
+        for attempt in range(2):
+            current_prompt = prompt
+            if attempt:
+                current_prompt += (
+                    "\n\n上一次输出未通过程序校验："
+                    + "；".join(last_errors)
+                    + "。请只修正引用和解释，不要返回任何棋步、格子、威胁类型或新事实。"
+                )
+            try:
+                content = await self._chat(
+                    system=system,
+                    prompt=current_prompt,
+                    max_tokens=600,
+                    temperature=0.0,
+                    json_mode=True,
+                )
+            except (httpx.HTTPError, RuntimeError):
+                return safe_fact_explanation(package)
+            draft, parse_errors = parse_fact_explanation(content)
+            last_errors = list(parse_errors)
+            if draft is not None:
+                last_errors.extend(validate_fact_explanation(draft, package))
+                rendered = render_fact_explanation(draft)
+                if not last_errors and rendered:
+                    return rendered
+            if draft is not None and draft.information_insufficient:
+                return safe_fact_explanation(package)
+        return safe_fact_explanation(package)
 
     async def explain_move(self, move: MoveReview) -> GeneratedMoveExplanation:
         if not self.configured:
-            raise RuntimeError("服务端尚未配置 DeepSeek API Key")
+            fallback_details = conservative_move_details(move)
+            return GeneratedMoveExplanation(
+                explanation=render_move_explanation(fallback_details),
+                details=fallback_details,
+            )
 
+        package = build_move_fact_package(move)
+        package.threats = ThreatAnalyzer().detect(package)
+        package.plans = StrategicPlanAnalyzer().analyze(
+            package,
+            position_facts=move.position_facts,
+        ).plans
         profile = EXPLANATION_PROFILES[move.complexity]
-        prompt = self._move_prompt(move, profile)
+        prompt = self._move_prompt(move, profile, package)
         system = (
-            "你是一位耐心的儿童国际象棋教练。你不是国际象棋引擎，不得自行计算或猜测棋局。"
-            "你只能根据输入中已经确认的结构化棋局事实进行解释。不得提及输入中不存在的棋子、格子、"
-            "走法、吃子、将军和战术。如果证据不足，请使用保守表达，不能编造原因。"
+            self._fact_system_prompt()
+            + "你是一位耐心的儿童国际象棋讲解员。不要责怪孩子。"
         )
-        content = await self._chat(
-            system=system,
-            prompt=prompt,
-            max_tokens=int(profile["max_tokens"]),
-            temperature=0.2,
-            json_mode=True,
-        )
-        details, parse_errors = parse_move_explanation_details(content, move)
+        try:
+            content = await self._chat(
+                system=system,
+                prompt=prompt,
+                max_tokens=int(profile["max_tokens"]),
+                temperature=0.2,
+                json_mode=True,
+            )
+        except (httpx.HTTPError, RuntimeError):
+            fallback_details = conservative_move_details(move)
+            return GeneratedMoveExplanation(
+                explanation=render_move_explanation(fallback_details),
+                details=fallback_details,
+            )
+        details, parse_errors = parse_move_explanation_details(content, move, package)
+        if details is not None and not parse_errors:
+            _apply_threat_explanations(details)
         rendered = render_move_explanation(details) if details else ""
-        errors = [*parse_errors, *validate_move_explanation(rendered, move)]
+        grounding = (
+            validate_fact_explanation(_move_fact_draft(rendered, details), package)
+            if rendered else []
+        )
+        errors = [*parse_errors, *validate_move_explanation(rendered, move), *grounding]
         if not errors:
             return GeneratedMoveExplanation(explanation=rendered, details=details)
 
@@ -113,16 +135,40 @@ class DeepSeekExplainer:
             + "；".join(errors)
             + f"\n上一次回答：{content}\n请只用允许的数据重写一次。"
         )
-        corrected = await self._chat(
-            system=system,
-            prompt=correction,
-            max_tokens=int(profile["max_tokens"]),
-            temperature=0.1,
-            json_mode=True,
+        try:
+            corrected = await self._chat(
+                system=system,
+                prompt=correction,
+                max_tokens=int(profile["max_tokens"]),
+                temperature=0.1,
+                json_mode=True,
+            )
+        except (httpx.HTTPError, RuntimeError):
+            fallback_details = conservative_move_details(move)
+            return GeneratedMoveExplanation(
+                explanation=render_move_explanation(fallback_details),
+                details=fallback_details,
+            )
+        corrected_details, parse_errors = parse_move_explanation_details(
+            corrected,
+            move,
+            package,
         )
-        corrected_details, parse_errors = parse_move_explanation_details(corrected, move)
+        if corrected_details is not None and not parse_errors:
+            _apply_threat_explanations(corrected_details)
         corrected_rendered = render_move_explanation(corrected_details) if corrected_details else ""
-        if not parse_errors and not validate_move_explanation(corrected_rendered, move):
+        corrected_grounding = (
+            validate_fact_explanation(
+                _move_fact_draft(corrected_rendered, corrected_details),
+                package,
+            )
+            if corrected_rendered else []
+        )
+        if (
+            not parse_errors
+            and not validate_move_explanation(corrected_rendered, move)
+            and not corrected_grounding
+        ):
             return GeneratedMoveExplanation(explanation=corrected_rendered, details=corrected_details)
         fallback_details = conservative_move_details(move)
         return GeneratedMoveExplanation(
@@ -131,71 +177,96 @@ class DeepSeekExplainer:
         )
 
     @staticmethod
-    def _move_prompt(move: MoveReview, profile: dict[str, int]) -> str:
-        payload = {
-            "fullMoveNumber": move.move_number,
-            "side": move.side,
-            "fenBefore": move.before_fen,
-            "fenAfter": move.after_fen,
-            "playedMove": move.played_move.model_dump(by_alias=True),
-            "bestMove": move.best_move.model_dump(by_alias=True) if move.best_move else None,
-            "opponentReplyAfterPlayedMove": move.opponent_reply.model_dump(by_alias=True) if move.opponent_reply else None,
-            "evaluationBefore": move.before.model_dump(),
-            "evaluationAfter": move.after.model_dump(),
-            "centipawnLoss": move.centipawn_loss,
-            "quality": {
-                "symbol": move.quality_symbol,
-                "label": move.quality_label,
-            },
-            "principalVariation": move.principal_variation,
-            "principalVariationFacts": [fact.model_dump() for fact in move.principal_variation_facts],
-            "opponentVariation": move.opponent_variation,
-            "opponentVariationFacts": [fact.model_dump() for fact in move.opponent_variation_facts],
-            "complexity": move.complexity,
-            "complexityFactors": move.complexity_factors.model_dump(),
-            "verifiedFacts": move.verified_facts,
-            "verifiedTactics": [tactic.model_dump() for tactic in move.verified_tactics],
-            "allowedSquares": move.allowed_squares,
-            "allowedMoves": move.allowed_moves,
-            "piecesBefore": move.pieces_before,
-        }
+    def _move_prompt(
+        move: MoveReview,
+        profile: dict[str, int],
+        package: ChessFactPackage,
+    ) -> str:
+        payload = package.prompt_payload()
         format_rule = {
             "simple": (
                 "conclusion、problem、betterMove、childTip 必须有内容；其他字段可以是空字符串或空数组。"
                 "直接说明好坏，不展开长变化。"
             ),
             "normal": (
-                "currentSituation、opponentThreat、problem、betterMove 必须有内容；"
+                "currentSituation、problem、betterMove 必须有内容；"
+                "opponentThreat必须为空，只能通过threatExplanations按threatId解释程序确认的威胁；"
                 "variationExplanation 可包含 0—2 个已验证步骤。"
             ),
             "complex": (
-                "所有字段必须有内容。currentSituation 要说明为什么难；opponentThreat 只能依据 opponentReplyAfterPlayedMove、"
-                "opponentVariationFacts 和 verifiedTactics；playedMoveIdea 要说明实战着看起来合理的已验证表面作用；"
+                "除opponentThreat外的文字字段必须有内容。opponentThreat必须为空，"
+                "只能通过threatExplanations按threatId解释程序确认的威胁；"
+                "currentSituation 要说明为什么难；playedMoveIdea 要说明实战着看起来合理的已验证表面作用；"
                 "problem 要分步骤说明忽略的事实；betterMove 要说明推荐着首先处理什么；"
                 "variationExplanation 必须按已验证 PV 顺序写 2—4 项，每项只解释对应一步。"
             ),
         }[move.complexity]
-        return f"""请把下面已经由 python-chess 和 Stockfish 确认的数据，改写成适合 4—12 岁孩子的中文。
+        return f"""请把下面的ChessFactPackage改写成适合4—12岁孩子的中文。
 
 结构化事实：
 {json.dumps(payload, ensure_ascii=False, indent=2)}
 
 本局面复杂度是 {move.complexity}。所有字段值合计必须为 {profile['min_chars']}—{profile['max_chars']} 个非空白字符。
 {format_rule}childTip 必须以“记住：”开头。
-只有 verifiedFacts 可以作为具体棋理原因。PV 只能按原样介绍为“可能的主要变化”，不能把它扩写成未提供的威胁。
-不得输出 allowedSquares 之外的格子，不得输出 allowedMoves 之外的具体走法。不要责怪孩子。
+不得输出任何SAN、UCI、棋盘格或具体棋步。需要指代时只写“实战走法”“最佳走法”“该路线”，
+真实棋步由后端根据route_id插入。不得把路线扩写成输入中没有的威胁或战术。
 
 只返回一个 JSON 对象，不要使用 Markdown，不要添加 JSON 之外的文字。字段必须严格为：
 {{
   "complexity": "{move.complexity}",
   "conclusion": "总体评价",
   "currentSituation": "核心局面与难点",
-  "opponentThreat": "经过验证的对手回复或保守说明",
+  "opponentThreat": "",
   "playedMoveIdea": "实战走法的表面作用",
   "problem": "实战走法的问题",
   "betterMove": "Stockfish推荐及作用",
   "variationExplanation": ["按PV顺序的第一步", "第二步"],
+  "threatExplanations": [
+    {{"threatId": "必须来自threats", "explanation": "只解释该威胁，不写棋步或新类型"}}
+  ],
+  "planExplanations": [
+    {{"planId": "必须来自plans", "explanation": "只解释程序确认的计划，不写棋步或新计划"}}
+  ],
   "childTip": "记住：儿童提示"
+}}"""
+
+    @staticmethod
+    def _fact_system_prompt() -> str:
+        return (
+            "你是国际象棋讲解员，不是国际象棋引擎。所有棋局事实必须来自输入JSON。"
+            "禁止自己计算最佳走法、生成棋步、修改路线、判断棋子位置、推测攻击关系、"
+            "推测评价变化或添加输入中不存在的信息。"
+            "输入中的threat已由程序确认；你不能发现、创建或修改威胁。"
+            "输入中的战略计划已经由程序确认；你不能创建、修改或扩展计划。"
+            "你只能解释已有route_id、event_id、threat_id和plan_id。"
+            "不得在解释文字中写SAN、UCI、棋盘格、数值评价或输入中不存在的威胁类型。"
+            "输入不足时返回information_insufficient为true，不要猜测。"
+        )
+
+    @staticmethod
+    def _fact_prompt(package: ChessFactPackage) -> str:
+        payload = json.dumps(package.prompt_payload(), ensure_ascii=False, separators=(",", ":"))
+        return f"""请只根据下面的ChessFactPackage生成简洁中文解释：
+{payload}
+
+只返回JSON，不要Markdown或额外字段：
+{{
+  "information_insufficient": false,
+  "summary": "只解释程序已经给出的评价方向",
+  "actual_move_explanation": "",
+  "best_move_explanation": "只解释第一候选的作用，不写棋步",
+  "route_explanations": [
+    {{"route_id": "必须来自candidate_routes", "explanation": "不含棋步的路线解释"}}
+  ],
+  "event_explanations": [
+    {{"event_id": "必须来自events", "explanation": "不扩展事件的解释"}}
+  ],
+  "threat_explanations": [
+    {{"threat_id": "必须来自threats", "explanation": "只解释该程序确认威胁为何需要注意及一般应对原则，不写棋步"}}
+  ],
+  "plan_explanations": [
+    {{"plan_id": "必须来自plans", "explanation": "只解释该程序确认计划为什么合理，不增加棋步或战略判断"}}
+  ]
 }}"""
 
     async def _chat(
@@ -239,9 +310,23 @@ class DeepSeekExplainer:
         return f"{(centipawn or 0) / 100:+.2f}"
 
 
+def parse_fact_explanation(
+    content: str,
+) -> tuple[FactExplanationDraft | None, list[str]]:
+    cleaned = content.strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", cleaned, flags=re.IGNORECASE)
+    try:
+        payload = json.loads(cleaned)
+        return FactExplanationDraft.model_validate(payload), []
+    except (json.JSONDecodeError, ValidationError, TypeError) as exc:
+        return None, [f"返回内容不是规定的事实解释JSON：{exc}"]
+
+
 def parse_move_explanation_details(
     content: str,
     move: MoveReview,
+    package: ChessFactPackage | None = None,
 ) -> tuple[MoveExplanationDetails | None, list[str]]:
     cleaned = content.strip()
     if cleaned.startswith("```"):
@@ -268,6 +353,22 @@ def parse_move_explanation_details(
             "child_tip",
         ],
     }[move.complexity]
+    if package is not None:
+        required = [field for field in required if field != "opponent_threat"]
+        if details.opponent_threat.strip():
+            errors.append("opponent_threat 必须为空；威胁只能通过threatExplanations引用")
+        threat_ids = [item.threat_id for item in details.threat_explanations]
+        invalid_threats = sorted(set(threat_ids) - package.threat_ids)
+        if invalid_threats:
+            errors.append("出现不存在的threat_id：" + "、".join(invalid_threats))
+        if len(threat_ids) != len(set(threat_ids)):
+            errors.append("threat_id重复")
+        plan_ids = [item.plan_id for item in details.plan_explanations]
+        invalid_plans = sorted(set(plan_ids) - package.plan_ids)
+        if invalid_plans:
+            errors.append("出现不存在的plan_id：" + "、".join(invalid_plans))
+        if len(plan_ids) != len(set(plan_ids)):
+            errors.append("plan_id重复")
     for field in required:
         if not getattr(details, field).strip():
             errors.append(f"{field} 不能为空")
@@ -283,11 +384,43 @@ def parse_move_explanation_details(
     return details, errors
 
 
+def _apply_threat_explanations(details: MoveExplanationDetails) -> None:
+    details.opponent_threat = " ".join(
+        item.explanation.strip()
+        for item in details.threat_explanations
+        if item.explanation.strip()
+    )
+
+
+def _move_fact_draft(
+    rendered: str,
+    details: MoveExplanationDetails | None,
+) -> FactExplanationDraft:
+    return FactExplanationDraft(
+        summary=rendered,
+        threat_explanations=[
+            ThreatExplanation(
+                threat_id=item.threat_id,
+                explanation=item.explanation,
+            )
+            for item in (details.threat_explanations if details else [])
+        ],
+        plan_explanations=[
+            PlanExplanation(
+                plan_id=item.plan_id,
+                explanation=item.explanation,
+            )
+            for item in (details.plan_explanations if details else [])
+        ],
+    )
+
+
 def render_move_explanation(details: MoveExplanationDetails) -> str:
     parts = [
         details.conclusion,
         details.current_situation,
         details.opponent_threat,
+        *[item.explanation for item in details.plan_explanations],
         details.played_move_idea,
         details.problem,
         details.better_move,
