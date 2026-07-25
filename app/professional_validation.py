@@ -389,8 +389,6 @@ def validate_professional_analysis(
         errors.append("候选路线数量或排名与Stockfish不一致")
 
     for side, plans in (("white", analysis.plans.white), ("black", analysis.plans.black)):
-        if not plans:
-            errors.append(f"{side}没有给出带证据的计划或明确的证据不足说明")
         for plan in plans:
             if not plan.evidence_refs:
                 errors.append(f"{side}的战略方向没有证据")

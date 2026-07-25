@@ -45,3 +45,11 @@ async def test_invalid_fen_is_rejected() -> None:
     with pytest.raises(ValueError, match="无效的 FEN"):
         await service.analyze("not-a-fen")
 
+
+def test_illegal_move_invalidates_complete_engine_pv() -> None:
+    board = chess.Board()
+    legal = chess.Move.from_uci("e2e4")
+    illegal_after_legal = chess.Move.from_uci("e1e3")
+
+    with pytest.raises(ValueError, match="illegal move at ply 2"):
+        StockfishService._pv_details(board, [legal, illegal_after_legal])

@@ -4,6 +4,9 @@ from typing import Literal
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
+from .strategic_plans import StrategicPlanFact
+from .threat_analysis import ThreatFact
+
 
 class ReviewRequest(BaseModel):
     fen: str = Field(min_length=15, max_length=120)
@@ -24,6 +27,8 @@ class MoveResult(BaseModel):
     rank: int = 1
     line: list["VariationMove"] = Field(default_factory=list)
     resulting_fen: str | None = None
+    verified: bool = True
+    verification_error: str | None = None
 
 
 class VariationMove(BaseModel):
@@ -48,12 +53,18 @@ class VariationMove(BaseModel):
 
 class EngineResult(BaseModel):
     evaluation: str
+    perspective: Literal["white"] = "white"
     centipawn: int | None = None
+    evaluation_pawns: float | None = None
     mate_in: int | None = None
     depth: int
     nodes: int
     time_ms: int
     top_moves: list[MoveResult]
+
+    def model_post_init(self, __context: object) -> None:
+        if self.evaluation_pawns is None and self.centipawn is not None:
+            self.evaluation_pawns = round(self.centipawn / 100, 2)
 
 
 class ReviewResponse(BaseModel):
@@ -61,6 +72,8 @@ class ReviewResponse(BaseModel):
     engine: EngineResult
     explanation: str | None = None
     warning: str | None = None
+    threats: list[ThreatFact] = Field(default_factory=list)
+    plans: list[StrategicPlanFact] = Field(default_factory=list)
 
 
 class HealthResponse(BaseModel):
@@ -87,8 +100,14 @@ class GameReviewRequest(BaseModel):
 
 class EvaluationSnapshot(BaseModel):
     evaluation: str
+    perspective: Literal["white"] = "white"
     centipawn: int | None = None
+    evaluation_pawns: float | None = None
     mate_in: int | None = None
+
+    def model_post_init(self, __context: object) -> None:
+        if self.evaluation_pawns is None and self.centipawn is not None:
+            self.evaluation_pawns = round(self.centipawn / 100, 2)
 
 
 class MoveFacts(BaseModel):
@@ -169,6 +188,8 @@ class CandidateLine(BaseModel):
     moves: list[VariationMove] = Field(alias="pv", default_factory=list)
     resulting_fen: str = Field(alias="resultingFen")
     resulting_position_facts: PositionFacts | None = Field(alias="resultingPositionFacts", default=None)
+    verified: bool = True
+    verification_error: str | None = Field(alias="verificationError", default=None)
 
 
 class MoveReview(BaseModel):
@@ -484,8 +505,15 @@ class ProfessionalDraftPlan(BaseModel):
 class ProfessionalDraftPlans(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    white: list[ProfessionalDraftPlan] = Field(min_length=1, max_length=2)
-    black: list[ProfessionalDraftPlan] = Field(min_length=1, max_length=2)
+    white: list[ProfessionalDraftPlan] = Field(default_factory=list, max_length=2)
+    black: list[ProfessionalDraftPlan] = Field(default_factory=list, max_length=2)
+
+
+class ProfessionalDraftPlanExplanation(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    plan_id: str = Field(alias="planId")
+    explanation: str = Field(min_length=4, max_length=500)
 
 
 class ProfessionalDraftWeakness(BaseModel):
@@ -563,7 +591,12 @@ class ProfessionalAnalysisDraft(BaseModel):
     position_assessment: ProfessionalDraftPositionAssessment = Field(alias="positionAssessment")
     main_danger: ProfessionalDraftMainDanger = Field(alias="mainDanger")
     key_pieces: ProfessionalDraftKeyPieces = Field(alias="keyPieces")
-    plans: ProfessionalDraftPlans
+    plans: ProfessionalDraftPlans = Field(default_factory=ProfessionalDraftPlans)
+    plan_explanations: list[ProfessionalDraftPlanExplanation] = Field(
+        alias="planExplanations",
+        default_factory=list,
+        max_length=8,
+    )
     played_move_analysis: ProfessionalDraftPlayedMoveAnalysis = Field(alias="playedMoveAnalysis")
     candidate_lines: list[ProfessionalDraftCandidateLine] = Field(alias="candidateLines", min_length=1, max_length=3)
     comparison: ProfessionalDraftComparison
@@ -596,6 +629,20 @@ class ProfessionalAnalysisResponse(BaseModel):
     cached: bool = False
 
 
+class MoveThreatExplanation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    threat_id: str = Field(alias="threatId")
+    explanation: str = Field(min_length=1, max_length=500)
+
+
+class MovePlanExplanation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    plan_id: str = Field(alias="planId")
+    explanation: str = Field(min_length=1, max_length=500)
+
+
 class MoveExplanationDetails(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -607,6 +654,16 @@ class MoveExplanationDetails(BaseModel):
     problem: str
     better_move: str = Field(alias="betterMove")
     variation_explanation: list[str] = Field(alias="variationExplanation", default_factory=list)
+    threat_explanations: list[MoveThreatExplanation] = Field(
+        alias="threatExplanations",
+        default_factory=list,
+        max_length=5,
+    )
+    plan_explanations: list[MovePlanExplanation] = Field(
+        alias="planExplanations",
+        default_factory=list,
+        max_length=8,
+    )
     child_tip: str = Field(alias="childTip")
 
 

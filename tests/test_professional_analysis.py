@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock
 
 import chess
 from fastapi.testclient import TestClient
+import httpx
 import pytest
 
 from app import api
@@ -22,6 +23,7 @@ from app.models import (
 )
 from app.position_facts import extract_position_facts
 from app.analysis_focus import select_analysis_focus
+from app.chess_facts import build_move_fact_package
 from app.professional_analysis import (
     ChatResult,
     PROFESSIONAL_PROMPT_VERSION,
@@ -32,6 +34,7 @@ from app.professional_analysis import (
     compute_professional_complexity,
     professional_cache_key,
     professional_user_prompt,
+    _trim_to_complete_sentence,
 )
 from app.professional_validation import (
     LENGTH_RANGES,
@@ -41,11 +44,13 @@ from app.professional_validation import (
     validate_professional_analysis,
 )
 from app.professional_refs import (
+    _complete_display_sentence,
     build_reference_payload,
     normalize_professional_draft_literals,
     resolve_professional_draft,
     validate_professional_draft,
 )
+from app.strategic_plans import StrategicPlanAnalyzer
 
 
 def _line(board: chess.Board, rank: int, uci_moves: list[str], line_id: str) -> CandidateLine:
@@ -164,6 +169,26 @@ def test_stable_evidence_ids_and_cache_key_cover_routes_and_prompt_version() -> 
     assert PROFESSIONAL_PROMPT_VERSION
     move.candidate_lines[0].moves[0].uci = "a2a3"
     assert professional_cache_key(move, stockfish_version="Stockfish 18", stockfish_depth=18) != first
+
+
+def test_production_professional_draft_cannot_generate_strategic_plans() -> None:
+    move = professional_review()
+    context = build_validation_context(move, "normal")
+    draft = _valid_reference_draft(move)
+    facts = build_move_fact_package(move)
+    strategic = StrategicPlanAnalyzer().analyze(
+        facts,
+        position_facts=move.position_facts,
+    )
+
+    issues = validate_professional_draft(
+        draft,
+        move,
+        context,
+        strategic_plan_package=strategic,
+    )
+
+    assert any(issue.path == "plans" for issue in issues)
 
 
 def test_validator_rejects_hallucinated_evidence_square_piece_and_route() -> None:
@@ -301,7 +326,10 @@ def test_compact_prompt_keeps_complete_contract_without_full_pydantic_schema() -
     assert '"positionAfter"' not in prompt
     assert '"allowedEvidenceIds"' not in prompt
     assert '"allowedMoves"' not in prompt
+    assert '"chessFacts"' in prompt
+    assert '"verified":true' in prompt
     assert '"uci"' not in prompt
+    assert move.before_fen not in prompt
     assert "$defs" not in prompt
 
 
@@ -428,6 +456,35 @@ def test_reference_draft_resolves_ids_without_model_generated_board_literals() -
     assert resolved.candidate_lines[0].first_move == move.candidate_lines[0].first_move.san
 
 
+def test_incomplete_display_text_is_dropped_instead_of_kept_as_residue() -> None:
+    assert _complete_display_sentence("当前局面为意大。") == ""
+    assert _complete_display_sentence("黑象(e7)正。") == ""
+    assert _complete_display_sentence("黑象目前位于e7。") == "黑象目前位于e7。"
+
+
+def test_length_fitting_only_trims_at_complete_sentence_boundary() -> None:
+    text = "第一句内容完整。第二句正在继续说明，但还没有结束。"
+    shortened = _trim_to_complete_sentence(text, 18)
+    assert shortened == "第一句内容完整。"
+    assert not shortened.endswith(("正在", "准备", "意大", "正"))
+
+
+def test_reference_resolver_rebuilds_incomplete_summary_and_piece_role() -> None:
+    move = professional_review()
+    payload = _valid_reference_draft(move).model_dump(by_alias=True)
+    payload["positionAssessment"]["summary"] = "当前局面为意大。"
+    payload["keyPieces"]["white"]["role"] = "棋子正在"
+    payload["keyPieces"]["black"]["role"] = "黑象正。"
+    draft = ProfessionalAnalysisDraft.model_validate(payload)
+
+    resolved = resolve_professional_draft(draft, move, build_validation_context(move, "normal"))
+
+    assert "意大" not in resolved.position_assessment.summary
+    assert all("_" not in item.role for item in resolved.key_pieces)
+    assert all(item.square in item.role for item in resolved.key_pieces)
+    assert all(item.role.endswith("。") for item in resolved.key_pieces)
+
+
 def test_reference_resolver_removes_unverified_event_words_before_final_validation() -> None:
     move = professional_review()
     payload = _valid_reference_draft(move).model_dump(by_alias=True)
@@ -538,6 +595,22 @@ async def test_retry_reports_compact_errors_without_echoing_untrusted_output() -
     assert marker not in retry_prompt
     assert "上一次返回未通过程序校验" in retry_prompt
     assert result.validation_warnings
+
+
+@pytest.mark.asyncio
+async def test_professional_network_failure_uses_validated_safe_fallback() -> None:
+    move = professional_review()
+    service = ProfessionalAnalysisService(
+        api_key="test", base_url="https://example.invalid", model="test", timeout_seconds=1
+    )
+    service._chat = AsyncMock(side_effect=httpx.ConnectError("offline"))
+
+    result = await service.analyze(move)
+
+    complexity = compute_professional_complexity(move)
+    context = build_validation_context(move, complexity.level)
+    assert validate_professional_analysis(result.analysis, context) == []
+    assert any("暂不可用" in warning for warning in result.validation_warnings)
 
 
 @pytest.mark.asyncio

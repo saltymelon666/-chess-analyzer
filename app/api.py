@@ -10,12 +10,22 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from .ai_explainer import DeepSeekExplainer
+from .analysis_report import (
+    AnalysisReportResponse,
+    GeneratedAnalysisReport,
+    build_analysis_report,
+)
+from .chess_facts import build_engine_fact_package, build_move_fact_package
 from .config import load_settings
 from .config import OFFICIAL_DEEPSEEK_BASE_URL
 from .deepseek_connection import check_deepseek_connection
 from .engine import StockfishService
 from .game_review import analyze_pgn
+from .narrative_generator import NarrativeGenerator
+from .position_facts import extract_position_facts
 from .professional_analysis import ProfessionalAnalysisService, professional_cache_key
+from .strategic_plans import StrategicPlanAnalyzer
+from .threat_analysis import ThreatAnalyzer, ThreatPackage, position_id
 from .models import (
     GameReviewRequest,
     GameReviewResponse,
@@ -67,13 +77,27 @@ professional_service = ProfessionalAnalysisService(
     model=settings.deepseek_model,
     timeout_seconds=settings.deepseek_timeout_seconds,
 )
+narrative_generator = NarrativeGenerator(
+    api_key=settings.deepseek_api_key,
+    base_url=settings.deepseek_base_url,
+    model=settings.deepseek_model,
+    timeout_seconds=settings.deepseek_timeout_seconds,
+)
+threat_analyzer = ThreatAnalyzer()
+strategic_plan_analyzer = StrategicPlanAnalyzer()
 game_cache: OrderedDict[str, list[MoveReview]] = OrderedDict()
 explanation_cache: dict[tuple[str, int], GeneratedMoveExplanation | str] = {}
 explanation_tasks: dict[tuple[str, int], asyncio.Task[GeneratedMoveExplanation | str]] = {}
 professional_cache: OrderedDict[str, GeneratedProfessionalAnalysis] = OrderedDict()
 professional_tasks: dict[str, asyncio.Task[GeneratedProfessionalAnalysis]] = {}
+analysis_report_cache: OrderedDict[tuple[str, int], GeneratedAnalysisReport] = OrderedDict()
+analysis_report_tasks: dict[
+    tuple[str, int],
+    asyncio.Task[GeneratedAnalysisReport],
+] = {}
 MAX_CACHED_GAMES = 20
 MAX_CACHED_PROFESSIONAL_ANALYSES = 100
+MAX_CACHED_ANALYSIS_REPORTS = 100
 
 app = FastAPI(
     title="AI Chess Review API",
@@ -130,10 +154,41 @@ async def review(request: ReviewRequest) -> ReviewResponse:
         logger.exception("Stockfish analysis failed")
         raise HTTPException(status_code=503, detail="Stockfish 分析服务暂不可用") from exc
 
+    fact_package = build_engine_fact_package(request.fen, engine_result)
+    threat_package = None
+    try:
+        threat_package = await threat_analyzer.analyze(
+            fact_package,
+            stockfish=stockfish,
+        )
+        fact_package.threats = threat_package.threats
+    except Exception:
+        logger.exception("Threat analysis failed; continuing with an empty package")
+    try:
+        position_facts = extract_position_facts(
+            request.fen,
+            candidate_lines=[],
+            actual_move_line=None,
+            tactics=[],
+            namespace="review-position",
+        )
+        plan_package = strategic_plan_analyzer.analyze(
+            fact_package,
+            position_facts=position_facts,
+            threat_package=threat_package,
+        )
+        fact_package.plans = plan_package.plans
+    except Exception:
+        logger.exception("Strategic plan analysis failed; continuing with an empty package")
+
     explanation: str | None = None
     warning: str | None = None
     try:
-        explanation = await explainer.explain(request.fen, engine_result)
+        explain_facts = getattr(explainer, "explain_fact_package", None)
+        if callable(explain_facts):
+            explanation = await explain_facts(fact_package)
+        else:
+            explanation = await explainer.explain(request.fen, engine_result)
     except (httpx.HTTPError, RuntimeError) as exc:
         logger.warning("DeepSeek explanation unavailable: %s", exc)
         warning = f"Stockfish 分析已完成，但 AI 解释暂不可用：{exc}"
@@ -147,6 +202,11 @@ async def review(request: ReviewRequest) -> ReviewResponse:
         engine=engine_result,
         explanation=explanation,
         warning=warning,
+        threats=fact_package.threats,
+        plans=[
+            plan for plan in fact_package.plans
+            if plan.confidence == "high"
+        ],
     )
 
 
@@ -176,6 +236,8 @@ async def game_review(request: GameReviewRequest) -> GameReviewResponse:
         expired_id, _ = game_cache.popitem(last=False)
         for cache_key in [key for key in explanation_cache if key[0] == expired_id]:
             explanation_cache.pop(cache_key, None)
+        for cache_key in [key for key in analysis_report_cache if key[0] == expired_id]:
+            analysis_report_cache.pop(cache_key, None)
     return result
 
 
@@ -319,3 +381,78 @@ async def professional_analysis(request: MoveExplanationRequest) -> Professional
         task = professional_tasks.get(cache_key)
         if task is not None and task.done():
             professional_tasks.pop(cache_key, None)
+
+
+@app.post(
+    "/api/analysis-report",
+    response_model=AnalysisReportResponse,
+    response_model_exclude_none=True,
+)
+async def analysis_report(request: MoveExplanationRequest) -> AnalysisReportResponse:
+    """Generate the independent Phase 4 report without invoking the legacy LLM path."""
+    moves = game_cache.get(request.analysis_id)
+    if moves is None:
+        raise HTTPException(status_code=404, detail="本次分析缓存已过期，请重新分析棋谱")
+    if request.move_index > len(moves):
+        raise HTTPException(status_code=404, detail="找不到这一步的事实数据")
+
+    cache_key = (request.analysis_id, request.move_index)
+    cached = analysis_report_cache.get(cache_key)
+    if cached is not None:
+        analysis_report_cache.move_to_end(cache_key)
+        return AnalysisReportResponse(
+            report=cached.report,
+            validation_warnings=cached.validation_warnings,
+            usage=cached.usage,
+            cached=True,
+        )
+
+    move = moves[request.move_index - 1]
+    created_task = False
+    try:
+        task = analysis_report_tasks.get(cache_key)
+        if task is None:
+            task = asyncio.create_task(_generate_analysis_report(move))
+            analysis_report_tasks[cache_key] = task
+            created_task = True
+        generated = await asyncio.shield(task)
+        analysis_report_cache[cache_key] = generated
+        analysis_report_cache.move_to_end(cache_key)
+        while len(analysis_report_cache) > MAX_CACHED_ANALYSIS_REPORTS:
+            analysis_report_cache.popitem(last=False)
+        return AnalysisReportResponse(
+            report=generated.report,
+            validation_warnings=generated.validation_warnings,
+            usage=generated.usage,
+            cached=not created_task,
+        )
+    except Exception as exc:
+        logger.exception("Unexpected analysis report error")
+        raise HTTPException(status_code=503, detail="专业复盘报告暂不可用") from exc
+    finally:
+        task = analysis_report_tasks.get(cache_key)
+        if task is not None and task.done():
+            analysis_report_tasks.pop(cache_key, None)
+
+
+async def _generate_analysis_report(move: MoveReview) -> GeneratedAnalysisReport:
+    fact_package = build_move_fact_package(move)
+    threats = threat_analyzer.detect(fact_package)
+    threat_package = ThreatPackage(
+        position_id=position_id(fact_package.position.fen),
+        threats=threats,
+    )
+    fact_package.threats = threats
+    strategic_plan_package = strategic_plan_analyzer.analyze(
+        fact_package,
+        position_facts=move.position_facts,
+        threat_package=threat_package,
+    )
+    fact_package.plans = strategic_plan_package.plans
+    package = build_analysis_report(
+        move,
+        fact_package,
+        threat_package,
+        strategic_plan_package,
+    )
+    return await narrative_generator.generate(package)
