@@ -50,7 +50,6 @@ def extract_position_facts(
     king_safety = _king_safety(board)
     pawn_structure = _pawn_structure(board)
     threats = _route_threats(candidate_lines, actual_move_line, tactics)
-    key_pieces = _key_pieces(board, candidate_lines, actual_move_line)
     open_files, semi_open_files = _file_status(board)
     immediate_checks = []
     immediate_captures = []
@@ -97,7 +96,6 @@ def extract_position_facts(
         king_safety=king_safety,
         pawn_structure=pawn_structure,
         threats=threats,
-        key_pieces=key_pieces,
         open_files=open_files,
         semi_open_files=semi_open_files,
         immediate_checks=immediate_checks,
@@ -446,34 +444,6 @@ def _route_threats(
     return facts
 
 
-def _key_pieces(
-    board: chess.Board,
-    candidate_lines: list[CandidateLine],
-    actual_move_line: CandidateLine | None,
-) -> list[EvidenceFact]:
-    appearances: Counter[tuple[str, str]] = Counter()
-    evidence: dict[tuple[str, str], list[str]] = {}
-    for label, line in [(f"候选路线{item.rank}", item) for item in candidate_lines] + ([ ("实战后路线", actual_move_line) ] if actual_move_line else []):
-        for item in line.moves:
-            key = (item.piece, item.from_square)
-            appearances[key] += 1
-            evidence.setdefault(key, []).append(f"{label}第{item.ply}步: {item.san} ({item.uci})")
-    facts = []
-    for (piece_id, square), count in appearances.most_common(6):
-        color, piece_name = piece_id.split("_", 1) if "_" in piece_id else ("", "piece")
-        piece_type = chess.PIECE_NAMES.index(piece_name) if piece_name in chess.PIECE_NAMES else chess.PAWN
-        facts.append(
-            EvidenceFact(
-                category="pv_key_piece",
-                side=color or None,
-                description=f"{('白' if color == 'white' else '黑') + PIECE_NAMES[piece_type]}从{square}出发在引擎路线中出现{count}次",
-                evidence=evidence[(piece_id, square)][:5],
-                squares=[square],
-            )
-        )
-    return facts
-
-
 def _fact(category: str, side: str | None, description: str, squares: list[str]) -> EvidenceFact:
     return EvidenceFact(
         category=category,
@@ -490,7 +460,6 @@ def _assign_fact_ids(facts: PositionFacts, namespace: str) -> None:
         "king": facts.king_safety,
         "pawn": facts.pawn_structure,
         "threat": facts.threats,
-        "key": facts.key_pieces,
     }
     for group, items in groups.items():
         seen: Counter[str] = Counter()

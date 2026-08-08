@@ -6,8 +6,9 @@ import logging
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+import chess
 import httpx
 
 from .chess_facts import (
@@ -21,19 +22,33 @@ from .models import (
     ProfessionalAnalysis,
     ProfessionalAnalysisUsage,
     ProfessionalComplexity,
+    ProfessionalEvidenceText,
+    ProfessionalThreat,
 )
 from .professional_validation import (
     LENGTH_RANGES,
     VAGUE_PHRASES,
     _narrative_length,
     build_validation_context,
+    normalize_program_owned_claims,
     validate_professional_analysis,
 )
 from .strategic_plans import (
     STRATEGIC_PLAN_PACKAGE_VERSION,
     StrategicPlanAnalyzer,
+    StrategicPlanPackage,
 )
-from .threat_analysis import THREAT_PACKAGE_VERSION, ThreatAnalyzer
+from .threat_analysis import (
+    THREAT_PACKAGE_VERSION,
+    ThreatAnalyzer,
+    ThreatPackage,
+    assess_initiative,
+    position_id,
+)
+from .position_interpretation import (
+    POSITION_INTERPRETATION_VERSION,
+    build_position_interpretation,
+)
 from .analysis_focus import select_analysis_focus
 from .professional_refs import (
     REFERENCE_OUTPUT_CONTRACT,
@@ -47,7 +62,10 @@ from .professional_refs import (
 
 
 logger = logging.getLogger(__name__)
-PROFESSIONAL_PROMPT_VERSION = "professional-v9-strategic-plan-package"
+
+if TYPE_CHECKING:
+    from .book_case_transfer import BookCaseTransferPackage
+PROFESSIONAL_PROMPT_VERSION = "professional-v12-program-direct-purpose"
 PROFESSIONAL_TOKEN_LIMITS = {"simple": 1500, "normal": 2600, "complex": 3400}
 STRATEGY_TAGS = [
     "king_attack",
@@ -113,11 +131,38 @@ class ProfessionalAnalysisService:
         self,
         move: MoveReview,
         diagnostics: list[ProfessionalAttemptDiagnostic] | None = None,
+        *,
+        threat_package: ThreatPackage | None = None,
+        book_context: "BookCaseTransferPackage | None" = None,
     ) -> GeneratedProfessionalAnalysis:
         complexity = compute_professional_complexity(move)
-        context = build_validation_context(move, complexity.level)
+        fact_package = build_move_fact_package(move)
+        if threat_package is None:
+            threat_package = ThreatAnalyzer().classify(fact_package)
+        elif threat_package.position_id != position_id(fact_package.position.fen):
+            raise ValueError("ThreatPackage position does not match MoveReview")
+        fact_package.threats = threat_package.threats
+        initiative = assess_initiative(fact_package, threat_package)
+        context = build_validation_context(
+            move,
+            complexity.level,
+            initiative_side=initiative.side,
+            threat_package=threat_package,
+        )
         if not self.configured:
-            safe = build_safe_professional_analysis(move, complexity)
+            safe = _fit_resolved_analysis_length(
+                apply_hard_fact_guard(
+                    build_safe_professional_analysis(
+                        move,
+                        complexity,
+                        threat_package=threat_package,
+                    ),
+                    move,
+                    threat_package=threat_package,
+                ),
+                move,
+                complexity.level,
+            )
             errors = validate_professional_analysis(safe, context)
             if errors:
                 raise RuntimeError("安全专业分析未通过事实校验")
@@ -127,20 +172,31 @@ class ProfessionalAnalysisService:
                 validation_warnings=["服务端尚未配置DeepSeek，已使用统一事实包生成安全结果。"],
                 usage=_usage([]),
             )
-        fact_package = build_move_fact_package(move)
-        if not fact_package.threats:
-            fact_package.threats = ThreatAnalyzer().detect(fact_package)
         strategic_plan_package = StrategicPlanAnalyzer().analyze(
             fact_package,
             position_facts=move.position_facts,
+            threat_package=threat_package,
         )
         fact_package.plans = strategic_plan_package.plans
+        interpretation = build_position_interpretation(
+            fact_package,
+            position_facts=move.position_facts,
+            threat_package=threat_package,
+            plan_package=strategic_plan_package,
+        )
         payload = build_professional_payload(
             move,
             complexity,
             context.allowed_evidence_ids,
             fact_package=fact_package,
         )
+        payload["positionInterpretation"] = interpretation.prompt_payload()
+        payload["interpretationPolicy"] = {
+            "initiative": initiative.model_dump(),
+            "hardFacts": "program_controlled",
+        }
+        if book_context is not None and book_context.cases:
+            payload["analogousBookContext"] = book_context.prompt_payload()
         system = professional_system_prompt()
         prompt = professional_user_prompt(payload, complexity.level)
         usage_results: list[ChatResult] = []
@@ -194,6 +250,23 @@ class ProfessionalAnalysisService:
                     context,
                     strategic_plan_package=strategic_plan_package,
                 )
+                parsed = apply_hard_fact_guard(
+                    parsed,
+                    move,
+                    threat_package=threat_package,
+                )
+                parsed, claim_normalizations = normalize_program_owned_claims(
+                    parsed,
+                    context,
+                )
+                normalizations.extend(
+                    DraftValidationIssue(
+                        path=path,
+                        category="硬事实保护",
+                        message="已整句重建越界的程序专属结论",
+                    )
+                    for path in claim_normalizations
+                )
                 parsed = _fit_resolved_analysis_length(parsed, move, complexity.level)
                 attempt_postprocess_ms = round((time.perf_counter() - postprocess_started) * 1000)
                 postprocess_ms += attempt_postprocess_ms
@@ -235,7 +308,19 @@ class ProfessionalAnalysisService:
             )
 
         postprocess_started = time.perf_counter()
-        safe = build_safe_professional_analysis(move, complexity)
+        safe = _fit_resolved_analysis_length(
+            apply_hard_fact_guard(
+                build_safe_professional_analysis(
+                    move,
+                    complexity,
+                    threat_package=threat_package,
+                ),
+                move,
+                threat_package=threat_package,
+            ),
+            move,
+            complexity.level,
+        )
         postprocess_ms += round((time.perf_counter() - postprocess_started) * 1000)
         validation_started = time.perf_counter()
         safe_errors = validate_professional_analysis(safe, context)
@@ -401,15 +486,39 @@ def build_professional_payload(
     del allowed_evidence_ids
     package = fact_package or build_move_fact_package(move)
     if not package.threats:
-        package.threats = ThreatAnalyzer().detect(package)
+        classified_threats = ThreatAnalyzer().classify(package)
+        package.threats = classified_threats.threats
+    else:
+        classified_threats = ThreatAnalyzer().classify(package)
     if not package.plans:
-        package.plans = StrategicPlanAnalyzer().analyze(
+        strategic_plan_package = StrategicPlanAnalyzer().analyze(
             package,
             position_facts=move.position_facts,
-        ).plans
+            threat_package=classified_threats,
+        )
+        package.plans = strategic_plan_package.plans
+    else:
+        strategic_plan_package = StrategicPlanPackage(
+            position_id=package.position.fen,
+            plans=package.plans,
+        )
+    interpretation = build_position_interpretation(
+        package,
+        position_facts=move.position_facts,
+        threat_package=classified_threats,
+        plan_package=strategic_plan_package,
+    )
     payload = build_reference_payload(move, complexity.level, complexity.reasons)
     payload.get("pos", {}).pop("fen", None)
     payload["chessFacts"] = package.protocol_manifest()
+    payload["positionInterpretation"] = interpretation.prompt_payload()
+    payload["interpretationPolicy"] = {
+        "initiative": assess_initiative(
+            package,
+            classified_threats,
+        ).model_dump(),
+        "hardFacts": "program_controlled",
+    }
     return payload
 
 
@@ -431,13 +540,21 @@ def professional_system_prompt() -> str:
         "你只负责解释后端提供的国际象棋事实引用，不负责重新抄写或计算棋盘。"
         "你的首要任务不是填满所有栏目，而是抓住当前局面中最影响决策的一至三个重点。"
         "不要把所有棋盘事实都写进分析，只有focus.selectedFacts允许进入最终结论。"
-        "所有棋子必须用pieceRef，候选路线必须用lineRef，PV必须用plyRefs，事实必须用evidenceRefs。"
+        "候选路线必须用lineRef，PV必须用plyRefs，事实必须用evidenceRefs。"
         "自由解释文本只能使用中文、中文标点和常用百分数，禁止任何拉丁字母、棋盘格、SAN或UCI；"
         "自由解释文本也禁止自行写吃子、将军、将杀或绝杀，这些事件由后端从ply事实填充；"
         "需要指代具体对象时只能写‘该棋子’‘该路线’‘该阶段’，后端会从引用ID回填真实棋子、格子和走法。"
         "不能引用输入目录之外的ID，不能把白方与黑方说反。证据不足时返回空数组、null或isRelevant为false。"
         "没有保护不等于弱点，王前兵较少不等于存在攻王，没有易位权不等于王不安全。"
         "单条Stockfish路线中的普通吃子不等于全局潜在威胁，物质数量不作为固定栏目。"
+        "物质差、双方王位置、易位边界、实战着是否与首选一致、评价方向和走法质量由后端模板生成，"
+        "自由文本不得重新表述这些硬事实。"
+        "Stockfish分数不能直接推出主动权；interpretationPolicy.initiative.side为unknown时，"
+        "禁止使用主动权、掌握主动、攻势完全在某方手中等结论。"
+        "positionInterpretation.themes中scope为candidate_route的战术只能解释对应候选路线，"
+        "不得升级为当前局面已经存在的直接威胁。"
+        "positionInterpretation.objective是程序选定的首要分析任务，必须先回答该问题；"
+        "deemphasizedTopics中的内容不得作为分析主线。"
         "PV只是参考变化，不是必然发生。"
         "所有解释必须是完整、自然、可直接展示给用户的中文棋理句子。"
         "禁止在解释中出现事实依据、判断依据、根据某事实可以判断、证据数量、内部变量名或引用ID。"
@@ -464,24 +581,32 @@ def professional_user_prompt(payload: dict[str, Any], complexity: str) -> str:
         separators=(",", ":"),
     )
     strategy_tags = ",".join(STRATEGY_TAGS)
+    analogous_rule = ""
+    if payload.get("analogousBookContext"):
+        analogous_rule = (
+            "\n15. analogousBookContext只提供相似棋书案例的观察角度和思考顺序，不属于当前局面事实。"
+            "不得复制其中的棋子、格子、走法、评价、胜负或威胁；只有当前引用目录已有证据时才能借鉴解释角度。"
+            "棋书案例ID不得进入任何Ref字段，变化内部事件不得升级为当前事件。"
+        )
     return f"""请根据以下引用目录生成分析草稿：
 {compact_payload}
 
 严格规则：
-1. pieceRef只能来自pos.pieces[].id；不得输出piece、square或自造棋子名称。
-2. candidateLines必须恰好返回{len(payload.get('lines', []))}项，lineRef按lines顺序逐条引用；每条路线只返回一个plyRefs数组，必须按顺序完整覆盖该路线plies[].id，不能串线。本次不可改动的引用骨架为：{line_skeleton}
-3. playedMoveAnalysis.moveRef必须等于played.ref；strongestReplyRef及唯一的plyRefs数组只能来自并完整覆盖actual.plies。
-4. evidenceRefs、dangerRef只能引用输入中出现的ID。每组evidenceRefs只选1—4个最相关ID，不要枚举整份事实目录。每个危险、计划和因果结论必须有证据。
-5. 自由文本只能使用中文和中文标点，禁止拉丁字母、数字、棋盘格、SAN和UCI。不得自行写“吃子、将军、将杀、绝杀”等事件词，这些事件由后端根据ply填充。错误示例：“控制d4”“走Qe2”；正确示例：“控制该中心格”“该路线首着完成协调”。
-6. mainDanger有具体危险时用dangerRef引用一个已有ply；无可靠直接危险时dangerRef写null且level写none。危险一方由后端从ply推导，不要输出sideInDanger。
-7. positionAssessment只允许输出summary，不得输出material、kingSafety、pieceActivity或pawnStructure；这些动态栏目全部由后端重点选择器按selectedFacts回填。
-8. positionAssessment.summary必须用完整段落具体说明双方子力状态、活跃与受限棋子、中心和两翼局势，不能只写“当前局面某方子”之类残句。
-9. keyPieces的role只说明棋子当前位置、控制线路、活跃或受限状态及实际影响；不要写“下一项任务”。futureTask字段仍按契约返回，但只作内部数据，不要在role中重复。
-10. plans.white和plans.black必须返回空数组。战略计划只能通过planExplanations按chessFacts.plans中的plan_id解释；没有程序计划时planExplanations返回空数组。禁止创建planId、修改计划类型或增加棋步。
-11. playedMoveAnalysis的intention、positiveEffects和problems都必须是完整句子，分别说明直接解决的问题、后续准备、局面影响与具体风险。禁止使用“依据”“可以判断”“根据”开头。
-12. 每条candidateLines的directPurpose、continuationExplanation、advantages和risks必须使用完整具体中文；优点和风险要说明对子力、空间、兵形或线路的实际影响，不能只写标签。
-13. 为避免重复，keyPieces.white只能引用白方棋子，keyPieces.black只能引用黑方棋子；弱点、王安全、子力活动、兵形、全局威胁与路线内部事件由后端重点选择器生成，不要输出这些字段；不要自行拆分PV阶段。strategyTags只能使用：{strategy_tags}。
-14. 草稿解释文字目标为{length}个中文字符；后端会追加结构化事实并回填真实走法。complexity必须是{complexity}。
+1. candidateLines必须恰好返回{len(payload.get('lines', []))}项，lineRef按lines顺序逐条引用；每条路线只返回一个plyRefs数组，必须按顺序完整覆盖该路线plies[].id，不能串线。本次不可改动的引用骨架为：{line_skeleton}
+2. playedMoveAnalysis.moveRef必须等于played.ref；strongestReplyRef及唯一的plyRefs数组只能来自并完整覆盖actual.plies。
+3. evidenceRefs、dangerRef只能引用输入中出现的ID。每组evidenceRefs只选1—4个最相关ID，不要枚举整份事实目录。每个危险、计划和因果结论必须有证据。
+4. 自由文本只能使用中文和中文标点，禁止拉丁字母、数字、棋盘格、SAN和UCI。不得自行写“吃子、将军、将杀、绝杀”等事件词，这些事件由后端根据ply填充。错误示例：“控制d4”“走Qe2”；正确示例：“控制该中心格”“该路线首着完成协调”。
+5. mainDanger有具体危险时用dangerRef引用一个已有ply；无可靠直接危险时dangerRef写null且level写none。危险一方由后端从ply推导，不要输出sideInDanger。
+6. positionAssessment只允许输出summary，不得输出material、kingSafety、pieceActivity或pawnStructure；这些动态栏目全部由后端重点选择器按selectedFacts回填。
+7. positionAssessment.summary必须用完整段落具体说明双方子力状态、活跃与受限棋子、中心和两翼局势，不能只写“当前局面某方子”之类残句。
+8. plans.white和plans.black必须返回空数组。战略计划只能通过planExplanations按chessFacts.plans中的plan_id解释；没有程序计划时planExplanations返回空数组。禁止创建planId、修改计划类型或增加棋步。
+9. playedMoveAnalysis的intention、positiveEffects和problems都必须是完整句子，分别说明直接解决的问题、后续准备、局面影响与具体风险。禁止使用“依据”“可以判断”“根据”开头。
+10. 每条candidateLines的directPurpose、continuationExplanation、advantages和risks必须使用完整具体中文；优点和风险要说明对子力、空间、兵形或线路的实际影响，不能只写标签。
+11. 弱点、王安全、子力活动、兵形、全局威胁与路线内部事件由后端重点选择器生成，不要输出这些字段；不要自行拆分PV阶段。strategyTags只能使用：{strategy_tags}。
+12. 草稿解释文字目标为{length}个中文字符；后端会追加结构化事实并回填真实走法。complexity必须是{complexity}。
+13. 物质差、王位置、易位、评价方向、走法质量以及实战着是否与首选一致全部由程序填写。自由文本不得重写。interpretationPolicy.initiative.side为unknown时，禁止声称任何一方拥有主动权；不得把Stockfish分数直接解释成主动权。
+14. 必须先回答positionInterpretation.objective.primaryQuestion，并围绕priorityTopics组织局面概览、实战着解释和路线比较。deemphasizedTopics不得成为主线。winning_conversion应解释优势方如何兑现；attack_conversion应解释攻势配合和防守资源；endgame_plan不得在没有直接危险时泛谈护王；dynamic_balance应比较活动性与静态因素；move_quality_explanation必须按真实评价差控制批评强度。
+{analogous_rule}
 
 只返回与以下契约完全一致的JSON，不要Markdown或额外字段。数组对象表示元素结构：
 {compact_contract}"""
@@ -515,6 +640,7 @@ def professional_cache_key(
             "factPackageVersion": CHESS_FACT_PACKAGE_VERSION,
             "threatPackageVersion": THREAT_PACKAGE_VERSION,
             "strategicPlanPackageVersion": STRATEGIC_PLAN_PACKAGE_VERSION,
+            "positionInterpretationVersion": POSITION_INTERPRETATION_VERSION,
         },
         ensure_ascii=False,
         sort_keys=True,
@@ -526,8 +652,18 @@ def professional_cache_key(
 def build_safe_professional_analysis(
     move: MoveReview,
     complexity: ProfessionalComplexity,
+    *,
+    threat_package: ThreatPackage | None = None,
 ) -> ProfessionalAnalysis:
     focus = select_analysis_focus(move)
+    fact_package = build_move_fact_package(move)
+    classified_threats = threat_package or ThreatAnalyzer().classify(fact_package)
+    fact_package.threats = classified_threats.threats
+    confirmed_threat_moves = {
+        san
+        for threat in classified_threats.threats
+        for san in threat.supporting_moves
+    }
     played_ref = move.played_move.id or f"move:played:{move.index}"
     raw_by_id = {
         fact.id: fact
@@ -536,7 +672,6 @@ def build_safe_professional_analysis(
             move.position_facts.king_safety,
             move.position_facts.pawn_structure,
             move.position_facts.threats,
-            move.position_facts.key_pieces,
         )
         for fact in group
     }
@@ -546,16 +681,14 @@ def build_safe_professional_analysis(
     danger_description = "结构化事实没有确认需要立即处理的单一危险，证据不足，无法可靠判断更具体的威胁。"
     danger_consequence = "继续比较棋规库列出的强制走法和Stockfish第一路线，不补写未验证后果。"
     danger_refs = [played_ref]
-    top_threat = focus.global_threats[0] if focus.global_threats else None
-    threat_source = next(
-        (
-            item
-            for item in (*move.position_facts.immediate_checks, *move.position_facts.immediate_captures)
-            if top_threat and item.id in top_threat.evidence_refs
-        ),
-        None,
-    )
-    if top_threat and threat_source:
+    threat_pairs = [
+        (fact, source)
+        for fact in focus.global_threats
+        for source in (*move.position_facts.immediate_checks, *move.position_facts.immediate_captures)
+        if source.id in fact.evidence_refs and source.san in confirmed_threat_moves
+    ]
+    top_threat, threat_source = threat_pairs[0] if threat_pairs else (None, None)
+    if top_threat is not None and threat_source is not None:
         danger_side = "black" if top_threat.side == "white" else "white"
         danger_level = "immediate"
         danger_description = (
@@ -565,38 +698,11 @@ def build_safe_professional_analysis(
         danger_consequence = top_threat.decision_impact
         danger_refs = list(top_threat.evidence_refs)
 
-    key_pieces = []
-    pieces = move.position_facts.pieces
-    for side in ("white", "black"):
-        selected_squares = [square for fact in focus.key_piece_facts[side] for square in fact.squares]
-        preferred = next(
-            (
-                piece
-                for square in selected_squares
-                for piece in pieces
-                if piece["side"] == side and piece["square"] == square
-            ),
-            None,
-        ) or next((piece for piece in pieces if piece["side"] == side and piece["piece"] != "pawn"), None)
-        if preferred:
-            key_pieces.append(
-                {
-                    "side": side,
-                    "piece": preferred["piece"],
-                    "square": preferred["square"],
-                    "role": "当前棋盘上真实存在；更具体作用证据不足，无法可靠判断。",
-                    "futureTask": "只沿Stockfish参考路线观察，不补写路线外任务。",
-                    "evidenceRefs": [preferred["id"]],
-                }
-            )
-
     plans = {"white": [], "black": []}
-    fact_package = build_move_fact_package(move)
-    if not fact_package.threats:
-        fact_package.threats = ThreatAnalyzer().detect(fact_package)
     strategic_package = StrategicPlanAnalyzer().analyze(
         fact_package,
         position_facts=move.position_facts,
+        threat_package=classified_threats,
     )
     for plan in strategic_package.plans:
         if plan.confidence != "high":
@@ -622,6 +728,16 @@ def build_safe_professional_analysis(
             )
     threats = []
     for fact in focus.global_threats:
+        source = next(
+            (
+                item
+                for item in (*move.position_facts.immediate_checks, *move.position_facts.immediate_captures)
+                if item.id in fact.evidence_refs and item.san in confirmed_threat_moves
+            ),
+            None,
+        )
+        if source is None:
+            continue
         if fact.side in {"white", "black"}:
             threats.append(
                 {
@@ -636,6 +752,26 @@ def build_safe_professional_analysis(
                     "evidenceRefs": list(fact.evidence_refs),
                 }
             )
+    for threat in classified_threats.prepared_threats:
+        threats.append({
+            "side": threat.side,
+            "level": "short_term",
+            "scope": "current_position",
+            "description": (
+                f"这是准备型威胁：{'白方' if threat.side == 'white' else '黑方'}计划以"
+                f"{'、'.join(threat.preparation_moves)}形成{threat.type}。"
+            ),
+            "target": threat.target or "程序未指定单一目标",
+            "attacker": "、".join(threat.preparation_moves),
+            "preparation": (
+                f"程序对{threat.ignore_test.ignored_move or '中性应手'}完成Ignore Test，"
+                f"最小评价损失为{threat.ignore_test.evaluation_loss:.2f}兵。"
+                if threat.ignore_test.evaluation_loss is not None
+                else "准备步骤已经确认，但评价损失待确认。"
+            ),
+            "consequence": "对手不能把这一构想当作普通PV事件安全忽略。",
+            "evidenceRefs": list(threat.evidence_route_ids),
+        })
 
     actual = move.actual_move_line
     actual_phases = _safe_phases(actual.moves if actual else [], 3)
@@ -714,7 +850,6 @@ def build_safe_professional_analysis(
             "consequence": danger_consequence,
             "evidenceRefs": danger_refs,
         },
-        "keyPieces": key_pieces,
         "plans": plans,
         "weaknesses": weaknesses,
         "threats": threats,
@@ -796,9 +931,6 @@ def _apply_safe_length_profile(
             phase.explanation = "按该PV顺序参考，不代表必然发生。"
 
     result.position_assessment.summary = f"{move.side}行棋；判断只引用事实包与Stockfish参考线。"
-    for piece in result.key_pieces:
-        piece.role = f"{piece.side}_{piece.piece}位于{piece.square}。"
-        piece.future_task = "仅沿参考线观察。"
     for plans in (result.plans.white, result.plans.black):
         for plan in plans:
             plan.required_preparation = "路线外准备证据不足。"
@@ -838,7 +970,415 @@ def _apply_safe_length_profile(
         line.resulting_position = _very_short_result_position(source)
     result.comparison.main_difference = "三线首着、顺序与评价不同。"
     result.comparison.why_first_line_is_best = "第一线由Stockfish排首位。"
-    return _trim_profile_max(result, level)
+    return _fit_resolved_analysis_length(result, move, level)
+
+
+def apply_hard_fact_guard(
+    analysis: ProfessionalAnalysis,
+    move: MoveReview,
+    *,
+    threat_package: ThreatPackage | None = None,
+) -> ProfessionalAnalysis:
+    """Replace protected conclusions with deterministic program-owned text."""
+    result = analysis.model_copy(deep=True)
+    result.position_assessment.summary = _controlled_position_summary(move)
+    result.played_move_analysis.evaluation_reason = _controlled_move_summary(move)
+    # These fields are displayed next to program-owned evaluation facts. Keep
+    # them deterministic so model prose cannot reclassify a static score or
+    # invent a danger when the program found none.
+    if result.main_danger.side_in_danger == "none":
+        result.main_danger.description = "当前没有程序确认的单一直接危险，证据不足以指定更具体的威胁。"
+        result.main_danger.consequence = "继续比较已验证的合法路线，不把普通PV事件升级为当前威胁。"
+    direct_threats = (
+        [
+            item for item in threat_package.threats
+            if item.scope == "current_direct_threat"
+        ]
+        if threat_package is not None else []
+    )
+    if direct_threats:
+        direct = direct_threats[0]
+        piece_text, from_square, to_square = _threat_move_details(move, direct)
+        supporting = "、".join(direct.supporting_moves)
+        result.main_danger.side_in_danger = _opposite_side(direct.side)
+        result.main_danger.level = "immediate"
+        result.main_danger.description = (
+            f"{piece_text}当前可以从{from_square}走到{to_square}（{supporting}），"
+            f"程序确认这是{_professional_threat_name(direct.type)}。"
+        )
+        result.main_danger.consequence = (
+            "条件化深度升级已经确认强制将杀，必须立即处理。"
+            if direct.type == "mate_threat"
+            else "这是根节点可立即执行的程序确认威胁，必须纳入本回合决策。"
+        )
+        result.main_danger.evidence_refs = [
+            direct.threat_id,
+            *direct.evidence_route_ids,
+        ]
+        direct_text = ProfessionalThreat(
+            side=direct.side,
+            level="immediate",
+            scope="current_position",
+            description=(
+                f"当前直接威胁：{piece_text}可从{from_square}走到{to_square}"
+                f"（{supporting}），形成{_professional_threat_name(direct.type)}。"
+            ),
+            target=direct.target or to_square,
+            attacker=from_square,
+            preparation="根节点当前合法走法可以直接执行，不需要准备步骤。",
+            consequence=result.main_danger.consequence,
+            evidenceRefs=[direct.threat_id, *direct.evidence_route_ids],
+        )
+        result.threats = [
+            direct_text,
+            *[
+                item for item in result.threats
+                if "当前直接威胁" not in item.description
+            ],
+        ]
+    elif threat_package is not None and threat_package.prepared_threats:
+        prepared = threat_package.prepared_threats[0]
+        prepared_uci = _prepared_threat_uci(move, prepared)
+        prepared_piece = _prepared_piece_text(move, prepared_uci, prepared.side)
+        from_square = prepared_uci[:2] if prepared_uci else "来源格"
+        to_square = prepared_uci[2:4] if prepared_uci else "目标格"
+        result.main_danger.side_in_danger = _opposite_side(prepared.side)
+        result.main_danger.level = "short_term"
+        result.main_danger.description = (
+            f"当前没有程序确认的可立即执行战术；{prepared_piece}准备从"
+            f"{from_square}走到{to_square}（{'、'.join(prepared.preparation_moves)}），"
+            "形成准备型威胁。"
+        )
+        result.main_danger.consequence = (
+            f"有界Ignore Test的最小评价损失为"
+            f"{prepared.ignore_test.evaluation_loss:.2f}兵，对手不能安全忽略这一构想。"
+            if prepared.ignore_test.evaluation_loss is not None
+            else "程序已确认准备关系，但尚无足够评价损失证据。"
+        )
+        result.main_danger.evidence_refs = [
+            prepared.threat_id,
+            *prepared.evidence_route_ids,
+        ]
+        prepared_text = ProfessionalThreat(
+            side=prepared.side,
+            level="short_term",
+            scope="current_position",
+            description=(
+                f"这是准备型威胁：{'白方' if prepared.side == 'white' else '黑方'}计划以"
+                f"{'、'.join(prepared.preparation_moves)}形成战术压力，尚未在当前局面执行。"
+            ),
+            target=prepared.target or "程序未指定单一目标",
+            attacker="、".join(prepared.preparation_moves),
+            preparation=(
+                f"Ignore Test检查了{prepared.ignore_test.ignored_move or '中性应手'}；"
+                f"最小评价损失为{prepared.ignore_test.evaluation_loss:.2f}兵。"
+                if prepared.ignore_test.evaluation_loss is not None
+                else "程序已确认准备步骤。"
+            ),
+            consequence="对手不能把这一构想当作普通PV事件安全忽略。",
+            evidenceRefs=[prepared.threat_id, *prepared.evidence_route_ids],
+        )
+        result.threats = [
+            prepared_text,
+            *[
+                item for item in result.threats
+                if "准备型威胁" not in item.description
+            ],
+        ]
+    result.played_move_analysis.problems = [
+        f"程序记录实战前后评价为{move.before.evaluation}和{move.after.evaluation}；具体棋理原因只从已验证路线解释。"
+    ]
+    current_tactics = [
+        tactic for tactic in move.verified_tactics
+        if tactic.move_uci == move.played_move.uci
+    ]
+    if current_tactics:
+        tactic_text = _guarded_tactic_text(current_tactics[0].description)
+        result.played_move_analysis.intention = tactic_text
+        result.played_move_analysis.positive_effects = list(dict.fromkeys([
+            tactic_text,
+            *result.played_move_analysis.positive_effects,
+        ]))
+    actual_route_moves = {
+        item.uci
+        for item in (move.actual_move_line.moves if move.actual_move_line else [])
+    }
+    route_tactics = [
+        tactic for tactic in move.verified_tactics
+        if tactic.move_uci in actual_route_moves
+        and tactic.move_uci != move.played_move.uci
+    ]
+    if route_tactics:
+        result.played_move_analysis.problems.append(
+            f"实战后验证路线包含：{_guarded_tactic_text(route_tactics[0].description)}"
+        )
+    for side, target_rank in (("white", "7"), ("black", "2")):
+        rooks = [
+            piece
+            for piece in move.position_facts.pieces
+            if piece.get("side") == side
+            and piece.get("piece") == "rook"
+            and str(piece.get("square", "")).endswith(target_rank)
+        ]
+        if len(rooks) < 2:
+            continue
+        description = f"{'白方' if side == 'white' else '黑方'}两辆车已经位于第七横线，重子的深入活动是当前重要局面因素。"
+        refs = [piece["id"] for piece in rooks if piece.get("id")]
+        if result.position_assessment.piece_activity is None:
+            result.position_assessment.piece_activity = ProfessionalEvidenceText(
+                description=description,
+                evidenceRefs=refs,
+            )
+        elif description not in result.position_assessment.piece_activity.description:
+            result.position_assessment.piece_activity.description += description
+            result.position_assessment.piece_activity.evidence_refs = list(dict.fromkeys([
+                *result.position_assessment.piece_activity.evidence_refs,
+                *refs,
+            ]))
+    return result
+
+
+def _guarded_tactic_text(description: str) -> str:
+    """Keep the tactical relation without restating a protected king square."""
+    guarded = re.sub(
+        r"((?:白|黑)(?:方的)?王)[（(]\s*[a-h][1-8]\s*[）)]",
+        r"\1",
+        description,
+        flags=re.IGNORECASE,
+    )
+    if re.search(r"(?:白|黑)(?:方的)?王", guarded):
+        guarded = re.sub(
+            r"[（(]\s*[a-h][1-8]\s*[）)]",
+            "",
+            guarded,
+            flags=re.IGNORECASE,
+        )
+    return guarded
+
+
+def _opposite_side(side: str) -> str:
+    return "black" if side == "white" else "white"
+
+
+def _prepared_threat_uci(
+    move: MoveReview,
+    threat: ThreatFact,
+) -> str | None:
+    for evidence in threat.evidence:
+        match = re.search(
+            r"准备走法([a-h][1-8][a-h][1-8][qrbn]?)",
+            evidence,
+            re.IGNORECASE,
+        )
+        if match:
+            return match.group(1).lower()
+    preparations = {_normalize_san(item) for item in threat.preparation_moves}
+    if preparations:
+        for route in move.candidate_lines:
+            if route.id not in threat.evidence_route_ids:
+                continue
+            for ply in route.moves:
+                if _normalize_san(ply.san) in preparations:
+                    return ply.uci.lower()
+    return None
+
+
+def _prepared_piece_text(
+    move: MoveReview,
+    uci: str | None,
+    side: str,
+) -> str:
+    piece_name = "棋子"
+    if uci:
+        piece = chess.Board(move.before_fen).piece_at(chess.parse_square(uci[:2]))
+        if piece is not None:
+            piece_name = {
+                chess.PAWN: "兵",
+                chess.KNIGHT: "马",
+                chess.BISHOP: "象",
+                chess.ROOK: "车",
+                chess.QUEEN: "后",
+                chess.KING: "王",
+            }[piece.piece_type]
+    return f"{'白' if side == 'white' else '黑'}{piece_name}"
+
+
+def _threat_move_details(
+    move: MoveReview,
+    threat: ThreatFact,
+) -> tuple[str, str, str]:
+    supporting = set(threat.supporting_moves)
+    for fact in (*move.position_facts.immediate_checks, *move.position_facts.immediate_captures):
+        if fact.san not in supporting:
+            continue
+        side = "白" if threat.side == "white" else "黑"
+        piece = {
+            "pawn": "兵",
+            "knight": "马",
+            "bishop": "象",
+            "rook": "车",
+            "queen": "后",
+            "king": "王",
+        }.get(fact.piece.split("_")[-1], "棋子")
+        return f"{side}{piece}", fact.from_square, fact.to_square
+    for evidence in threat.evidence:
+        match = re.search(
+            r"(?:深度升级走法|准备走法)([a-h][1-8][a-h][1-8][qrbn]?)",
+            evidence,
+            re.IGNORECASE,
+        )
+        if match:
+            uci = match.group(1).lower()
+            return (
+                _prepared_piece_text(move, uci, threat.side),
+                uci[:2],
+                uci[2:4],
+            )
+    route_sans = {
+        _normalize_san(item)
+        for item in [*threat.preparation_moves, *threat.supporting_moves]
+    }
+    for route in move.candidate_lines:
+        if route.id not in threat.evidence_route_ids:
+            continue
+        for ply in route.moves:
+            if _normalize_san(ply.san) not in route_sans:
+                continue
+            return (
+                _prepared_piece_text(move, ply.uci, threat.side),
+                ply.from_square,
+                ply.to_square,
+            )
+    return (
+        f"{'白' if threat.side == 'white' else '黑'}方棋子",
+        "来源格",
+        threat.target or "目标格",
+    )
+
+
+def _normalize_san(value: str) -> str:
+    return value.replace("0", "O").rstrip("+#")
+
+
+def _professional_threat_name(threat_type: str) -> str:
+    return {
+        "mate_threat": "将杀威胁",
+        "tactical_capture": "战术吃子",
+        "material_win": "赢子威胁",
+        "promotion_threat": "升变威胁",
+        "center_break": "中心突破",
+        "prepared_tactic": "准备型战术",
+    }.get(threat_type, "直接威胁")
+
+
+def _controlled_position_summary(move: MoveReview) -> str:
+    board = chess.Board(move.before_fen)
+    parts = [
+        _controlled_evaluation_text(move.before.centipawn, move.before.mate_in),
+        _controlled_material_text(move),
+    ]
+    for color, side_name in ((chess.WHITE, "白方"), (chess.BLACK, "黑方")):
+        square = board.king(color)
+        if square is None:
+            continue
+        rights = []
+        if board.has_kingside_castling_rights(color):
+            rights.append("王翼")
+        if board.has_queenside_castling_rights(color):
+            rights.append("后翼")
+        rights_text = (
+            f"当前保留{'和'.join(rights)}易位权"
+            if rights
+            else "当前没有易位权"
+        )
+        parts.append(
+            f"{side_name}王位于{chess.square_name(square)}，{rights_text}；"
+            "仅凭当前局面不能判断此前是否已经易位。"
+        )
+    return "".join(parts)
+
+
+def _controlled_evaluation_text(
+    centipawn: int | None,
+    mate_in: int | None,
+) -> str:
+    if mate_in is not None:
+        side = "白方" if mate_in > 0 else "黑方"
+        return f"程序确认{side}存在强制将杀。"
+    if centipawn is None:
+        return "程序暂未取得可靠的评价方向。"
+    if abs(centipawn) <= 25:
+        return "程序评价显示局面接近均势。"
+    side = "白方" if centipawn > 0 else "黑方"
+    level = "轻微" if abs(centipawn) <= 100 else "明显" if abs(centipawn) <= 300 else "决定性"
+    return f"程序评价显示{side}拥有{level}优势。"
+
+
+def _controlled_material_text(move: MoveReview) -> str:
+    material = move.position_facts.material
+    white = material.get("white")
+    black = material.get("black")
+    difference = material.get("valueDifferenceWhiteMinusBlack")
+    if not isinstance(white, dict) or not isinstance(black, dict) or not isinstance(difference, int):
+        return "程序未取得完整的物质统计。"
+    white_value = white.get("value")
+    black_value = black.get("value")
+    white_pieces = white.get("pieces")
+    black_pieces = black.get("pieces")
+    if difference == 0:
+        return f"程序统计双方物质相等，白方与黑方均为{white_value}分。"
+    side = "白方" if difference > 0 else "黑方"
+    value = abs(difference)
+    if isinstance(white_pieces, dict) and isinstance(black_pieces, dict) and value == 1:
+        white_pawns = white_pieces.get("pawn")
+        black_pawns = black_pieces.get("pawn")
+        non_pawn_counts_equal = all(
+            isinstance(white_pieces.get(piece), list)
+            and isinstance(black_pieces.get(piece), list)
+            and len(white_pieces[piece]) == len(black_pieces[piece])
+            for piece in ("knight", "bishop", "rook", "queen")
+        )
+        if (
+            isinstance(white_pawns, list)
+            and isinstance(black_pawns, list)
+            and non_pawn_counts_equal
+        ):
+            pawn_difference = len(white_pawns) - len(black_pawns)
+            if pawn_difference == (1 if difference > 0 else -1):
+                return f"程序统计{side}多一兵。"
+    return (
+        f"程序统计白方物质为{white_value}分、黑方为{black_value}分，"
+        f"{side}多{value}分子力价值。"
+    )
+
+
+def _controlled_move_summary(move: MoveReview) -> str:
+    same_as_best = bool(
+        move.best_move_uci
+        and move.best_move_uci == move.played_move.uci
+    )
+    text = f"程序将实战着{move.played_move.san}评为{move.quality_label}。"
+    if same_as_best:
+        text += "该着与Stockfish首选一致。"
+    elif move.best_move_san:
+        text += f"该着与Stockfish首选不一致，程序首选为{move.best_move_san}。"
+    else:
+        text += "当前没有可用于一致性比较的Stockfish首选。"
+    text += (
+        f"评价方向由{_controlled_score_direction(move.before.centipawn)}"
+        f"变为{_controlled_score_direction(move.after.centipawn)}。"
+    )
+    return text
+
+
+def _controlled_score_direction(centipawn: int | None) -> str:
+    if centipawn is None:
+        return "未知"
+    if centipawn > 25:
+        return "白方较好"
+    if centipawn < -25:
+        return "黑方较好"
+    return "接近均势"
 
 
 def _fit_resolved_analysis_length(
@@ -892,8 +1432,6 @@ def _trim_profile_max(analysis: ProfessionalAnalysis, level: str) -> Professiona
     ):
         if optional is not None:
             fields.append((optional, "description"))
-    for piece in result.key_pieces:
-        fields.extend([(piece, "role"), (piece, "future_task")])
     for plan in [*result.plans.white, *result.plans.black]:
         fields.extend([(plan, "description"), (plan, "required_preparation")])
     for weakness in [*result.weaknesses.white, *result.weaknesses.black]:
@@ -963,9 +1501,6 @@ def _trim_profile_max(analysis: ProfessionalAnalysis, level: str) -> Professiona
     if length() > maximum:
         # Replace non-display metadata with short, complete sentences before touching user-facing prose.
         atomic_replacements = [
-            (piece, "future_task", "")
-            for piece in result.key_pieces
-        ] + [
             (result.comparison, "main_difference", ""),
             (result.comparison, "why_first_line_is_best", ""),
             (result.played_move_analysis, "evaluation_reason", ""),
@@ -997,7 +1532,11 @@ def _fit_complex_safe_length(
         return _narrative_length(result.model_dump(by_alias=True))
 
     if length() <= maximum:
-        return result
+        return (
+            _fit_resolved_analysis_length(result, move, "complex")
+            if length() < minimum
+            else result
+        )
 
     compact = _apply_safe_length_profile(analysis, move, "normal")
 
@@ -1048,7 +1587,6 @@ def _fit_complex_safe_length(
             (result.weaknesses, "white", compact.weaknesses.white),
             (result.weaknesses, "black", compact.weaknesses.black),
             (result, "threats", compact.threats),
-            (result, "key_pieces", compact.key_pieces),
             (result, "plans", compact.plans),
             (result, "played_move_analysis", compact.played_move_analysis),
         ]

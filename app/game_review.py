@@ -70,6 +70,9 @@ async def analyze_pgn(
         verified_tactics = _detect_tactical_motifs(before_board, played)
         if opponent_reply:
             verified_tactics.extend(_detect_tactical_motifs(after_board, opponent_reply))
+            sacrifice = _detect_tactical_sacrifice(before_board, played, opponent_reply)
+            if sacrifice is not None:
+                verified_tactics.append(sacrifice)
         direct_piece_loss = bool(
             opponent_reply
             and opponent_reply.capture
@@ -626,18 +629,23 @@ def _detect_tactical_motifs(board: chess.Board, fact: MoveFacts) -> list[Verifie
         return []
 
     motifs: list[VerifiedTactic] = []
-    valuable_targets = [
+    attacked_targets = [
         square
         for square in next_board.attacks(move.to_square)
         if (target := next_board.piece_at(square)) is not None
         and target.color == enemy
+    ]
+    valuable_targets = [
+        square
+        for square in attacked_targets
+        if (target := next_board.piece_at(square)) is not None
         and target.piece_type in {chess.KNIGHT, chess.BISHOP, chess.ROOK, chess.QUEEN, chess.KING}
     ]
-    newly_attacked = [square for square in valuable_targets if square not in before_attacks]
-    if len(valuable_targets) >= 2 and newly_attacked:
+    newly_attacked = [square for square in attacked_targets if square not in before_attacks]
+    if len(attacked_targets) >= 2 and valuable_targets and newly_attacked:
         target_names = "、".join(
             f"{_piece_zh(_piece_id(next_board.piece_at(square)))}（{chess.square_name(square)}）"
-            for square in valuable_targets[:3]
+            for square in attacked_targets[:3]
         )
         motifs.append(
             VerifiedTactic(
@@ -645,7 +653,7 @@ def _detect_tactical_motifs(board: chess.Board, fact: MoveFacts) -> list[Verifie
                 side="white" if actor == chess.WHITE else "black",
                 move_uci=fact.uci,
                 description=f"{fact.san} 后，{_piece_zh(fact.piece)}同时攻击 {target_names}。",
-                squares=[fact.to_square, *[chess.square_name(square) for square in valuable_targets[:3]]],
+                squares=[fact.to_square, *[chess.square_name(square) for square in attacked_targets[:3]]],
             )
         )
 
@@ -684,6 +692,34 @@ def _detect_tactical_motifs(board: chess.Board, fact: MoveFacts) -> list[Verifie
             )
         )
     return motifs
+
+
+def _detect_tactical_sacrifice(
+    board: chess.Board,
+    played: MoveFacts,
+    opponent_reply: MoveFacts,
+) -> VerifiedTactic | None:
+    """Confirm a sacrifice only when the engine reply takes the moved piece."""
+    if not played.capture or not opponent_reply.capture:
+        return None
+    if opponent_reply.to_square != played.to_square:
+        return None
+    if opponent_reply.captured_piece != played.piece:
+        return None
+    if _piece_value(played.piece) <= _piece_value(played.captured_piece):
+        return None
+    side = "white" if board.turn == chess.WHITE else "black"
+    return VerifiedTactic(
+        name="tactical_sacrifice",
+        side=side,
+        move_uci=played.uci,
+        description=(
+            f"{played.san}是战术性牺牲，以{_piece_zh(played.piece)}换取"
+            f"{_piece_zh(played.captured_piece)}，对手主线以{opponent_reply.san}吃回；"
+            "是否成立必须结合后续强制路线判断。"
+        ),
+        squares=[played.from_square, played.to_square],
+    )
 
 
 def _king_skewer_target(board: chess.Board, attacker_square: int, enemy: chess.Color) -> tuple[int, int] | None:

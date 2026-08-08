@@ -20,7 +20,7 @@ from app.engine import StockfishService
 from app.game_review import analyze_pgn
 from app.narrative_generator import NarrativeGenerator
 from app.strategic_plans import StrategicPlanAnalyzer
-from app.threat_analysis import ThreatAnalyzer, ThreatPackage, position_id
+from app.threat_analysis import ThreatAnalyzer
 
 
 DEFAULT_FIXTURES = Path("tests/fixtures/professional_validation_positions.json")
@@ -80,12 +80,11 @@ async def run_suite(
 
             assembly_started = time.perf_counter()
             facts = build_move_fact_package(move)
-            threats = threat_analyzer.detect(facts)
-            threat_package = ThreatPackage(
-                position_id=position_id(facts.position.fen),
-                threats=threats,
+            threat_package = await threat_analyzer.analyze(
+                facts,
+                stockfish=engine,
             )
-            facts.threats = threats
+            facts.threats = threat_package.threats
             plans = plan_analyzer.analyze(
                 facts,
                 position_facts=move.position_facts,

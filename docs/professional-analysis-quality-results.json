@@ -13,9 +13,8 @@
     "fixedMaterialSectionRemoved": true,
     "displayedSections": [
       "positionAssessment",
-      "keyPieces",
-      "plans",
       "playedMoveAnalysis",
+      "plans",
       "candidateLines",
       "comparison"
     ],
@@ -43,7 +42,7 @@
     ],
     "afterKingSafety": [],
     "beforeGlobalThreats": [
-      "候选路线1第5个半回合cxd5包含吃子"
+      "Qa4+ 后，白后同时攻击 黑兵（d4）、黑兵（a7）、黑王（e8）。"
     ],
     "afterGlobalThreats": [],
     "candidateLineEvents": {
@@ -60,21 +59,39 @@
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 5159,
-    "outputTokens": 1416,
-    "totalTokens": 6575,
-    "firstLatencyMs": 14243,
-    "totalLatencyMs": 14256,
-    "networkMs": 14243,
-    "validationMs": 6,
-    "postprocessMs": 4,
-    "chineseChars": 713,
-    "keyPiecesCorrect": true,
+    "inputTokens": 6854,
+    "outputTokens": 1789,
+    "totalTokens": 8643,
+    "firstLatencyMs": 18405,
+    "totalLatencyMs": 18977,
+    "networkMs": 18405,
+    "validationMs": 11,
+    "postprocessMs": 42,
+    "chineseChars": 845,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
     "threeRoutesValid": true,
     "issues": [],
-    "normalizations": [],
+    "normalizations": [
+      {
+        "attempt": 1,
+        "path": "playedMoveAnalysis.continuationPhases[0].explanation",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      },
+      {
+        "attempt": 1,
+        "path": "candidateLines[1].advantages[0]",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      },
+      {
+        "attempt": 1,
+        "path": "candidateLines[1].risks[1]",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      }
+    ],
     "finalErrors": []
   },
   {
@@ -91,9 +108,8 @@
     "fixedMaterialSectionRemoved": true,
     "displayedSections": [
       "positionAssessment",
-      "keyPieces",
-      "plans",
       "playedMoveAnalysis",
+      "plans",
       "candidateLines",
       "comparison"
     ],
@@ -121,7 +137,7 @@
     ],
     "afterKingSafety": [],
     "beforeGlobalThreats": [
-      "候选路线1第5个半回合dxc5包含吃子"
+      "cxd4 后，黑兵同时攻击 白马（c3）、白兵（e3）。"
     ],
     "afterGlobalThreats": [],
     "candidateLineEvents": {
@@ -134,21 +150,27 @@
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 4526,
-    "outputTokens": 1452,
-    "totalTokens": 5978,
-    "firstLatencyMs": 13547,
-    "totalLatencyMs": 13556,
-    "networkMs": 13547,
-    "validationMs": 3,
-    "postprocessMs": 3,
-    "chineseChars": 758,
-    "keyPiecesCorrect": true,
+    "inputTokens": 6060,
+    "outputTokens": 1635,
+    "totalTokens": 7695,
+    "firstLatencyMs": 17114,
+    "totalLatencyMs": 17215,
+    "networkMs": 17114,
+    "validationMs": 12,
+    "postprocessMs": 62,
+    "chineseChars": 908,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
     "threeRoutesValid": true,
     "issues": [],
-    "normalizations": [],
+    "normalizations": [
+      {
+        "attempt": 1,
+        "path": "candidateLines[1].risks[0]",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      }
+    ],
     "finalErrors": []
   },
   {
@@ -165,9 +187,8 @@
     "fixedMaterialSectionRemoved": true,
     "displayedSections": [
       "positionAssessment",
-      "keyPieces",
-      "plans",
       "playedMoveAnalysis",
+      "plans",
       "candidateLines",
       "comparison"
     ],
@@ -195,7 +216,7 @@
     ],
     "afterKingSafety": [],
     "beforeGlobalThreats": [
-      "Bxc6 后，黑兵在 d7 被钉在王前。"
+      "Nxc6 后，白马同时攻击 黑兵（a7）、黑后（d8）。"
     ],
     "afterGlobalThreats": [],
     "candidateLineEvents": {
@@ -217,21 +238,33 @@
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 6009,
-    "outputTokens": 1440,
-    "totalTokens": 7449,
-    "firstLatencyMs": 11416,
-    "totalLatencyMs": 11435,
-    "networkMs": 11416,
-    "validationMs": 4,
-    "postprocessMs": 10,
-    "chineseChars": 696,
-    "keyPiecesCorrect": true,
+    "inputTokens": 7522,
+    "outputTokens": 1782,
+    "totalTokens": 9304,
+    "firstLatencyMs": 18592,
+    "totalLatencyMs": 19216,
+    "networkMs": 18592,
+    "validationMs": 8,
+    "postprocessMs": 67,
+    "chineseChars": 831,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
     "threeRoutesValid": true,
     "issues": [],
-    "normalizations": [],
+    "normalizations": [
+      {
+        "attempt": 1,
+        "path": "playedMoveAnalysis.continuationPhases[0].explanation",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      },
+      {
+        "attempt": 1,
+        "path": "comparison.whyFirstLineIsBest",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      }
+    ],
     "finalErrors": []
   },
   {
@@ -250,9 +283,8 @@
       "positionAssessment",
       "threats",
       "weaknesses",
-      "keyPieces",
-      "plans",
       "playedMoveAnalysis",
+      "plans",
       "candidateLines",
       "comparison"
     ],
@@ -282,7 +314,7 @@
     ],
     "afterKingSafety": [],
     "beforeGlobalThreats": [
-      "Nxc6 后，白马同时攻击 黑象（e7）、黑后（d8）。"
+      "Nxc6 后，白马同时攻击 黑兵（a7）、黑象（e7）、黑后（d8）。"
     ],
     "afterGlobalThreats": [
       "white方当前可以走Nxd7"
@@ -306,16 +338,15 @@
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 6264,
-    "outputTokens": 1648,
-    "totalTokens": 7912,
-    "firstLatencyMs": 15092,
-    "totalLatencyMs": 15105,
-    "networkMs": 15092,
-    "validationMs": 5,
-    "postprocessMs": 4,
-    "chineseChars": 1143,
-    "keyPiecesCorrect": true,
+    "inputTokens": 8372,
+    "outputTokens": 2143,
+    "totalTokens": 10515,
+    "firstLatencyMs": 21585,
+    "totalLatencyMs": 22329,
+    "networkMs": 21585,
+    "validationMs": 15,
+    "postprocessMs": 72,
+    "chineseChars": 1507,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
     "threeRoutesValid": true,
@@ -323,9 +354,15 @@
     "normalizations": [
       {
         "attempt": 1,
-        "path": "plans.white[0].evidenceRefs",
-        "category": "黑白说反",
-        "message": "已移除不支持white方计划的引用：f:18"
+        "path": "candidateLines[0].continuationPhases[0].explanation",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      },
+      {
+        "attempt": 1,
+        "path": "candidateLines[1].risks[0]",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
       }
     ],
     "finalErrors": []
@@ -346,9 +383,8 @@
       "positionAssessment",
       "threats",
       "kingSafety",
-      "keyPieces",
-      "plans",
       "playedMoveAnalysis",
+      "plans",
       "candidateLines",
       "comparison"
     ],
@@ -380,7 +416,7 @@
       "g7附近两格范围内有2枚对方棋子"
     ],
     "beforeGlobalThreats": [
-      "候选路线1第1个半回合Rxf7+包含吃子、将军"
+      "Rxf7+ 后，白车同时攻击 黑兵（a7）、黑王（g7）。"
     ],
     "afterGlobalThreats": [
       "white方当前可以走Rxf7+",
@@ -404,21 +440,45 @@
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 6217,
-    "outputTokens": 1459,
-    "totalTokens": 7676,
-    "firstLatencyMs": 13641,
-    "totalLatencyMs": 13654,
-    "networkMs": 13641,
-    "validationMs": 6,
-    "postprocessMs": 4,
-    "chineseChars": 1207,
-    "keyPiecesCorrect": true,
+    "inputTokens": 8652,
+    "outputTokens": 1959,
+    "totalTokens": 10611,
+    "firstLatencyMs": 19360,
+    "totalLatencyMs": 19928,
+    "networkMs": 19360,
+    "validationMs": 15,
+    "postprocessMs": 20,
+    "chineseChars": 1510,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
     "threeRoutesValid": true,
     "issues": [],
-    "normalizations": [],
+    "normalizations": [
+      {
+        "attempt": 1,
+        "path": "mainDanger.description",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      },
+      {
+        "attempt": 1,
+        "path": "playedMoveAnalysis.continuationPhases[0].explanation",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      },
+      {
+        "attempt": 1,
+        "path": "candidateLines[1].risks[1]",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      },
+      {
+        "attempt": 1,
+        "path": "comparison.whyFirstLineIsBest",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      }
+    ],
     "finalErrors": []
   },
   {
@@ -437,9 +497,8 @@
       "positionAssessment",
       "threats",
       "kingSafety",
-      "keyPieces",
-      "plans",
       "playedMoveAnalysis",
+      "plans",
       "candidateLines",
       "comparison"
     ],
@@ -498,21 +557,33 @@
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 6726,
-    "outputTokens": 1671,
-    "totalTokens": 8397,
-    "firstLatencyMs": 21144,
-    "totalLatencyMs": 21155,
-    "networkMs": 21144,
-    "validationMs": 5,
-    "postprocessMs": 4,
-    "chineseChars": 1223,
-    "keyPiecesCorrect": true,
+    "inputTokens": 8179,
+    "outputTokens": 1876,
+    "totalTokens": 10055,
+    "firstLatencyMs": 21730,
+    "totalLatencyMs": 22478,
+    "networkMs": 21730,
+    "validationMs": 10,
+    "postprocessMs": 21,
+    "chineseChars": 1499,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
     "threeRoutesValid": true,
     "issues": [],
-    "normalizations": [],
+    "normalizations": [
+      {
+        "attempt": 1,
+        "path": "candidateLines[0].advantages[0]",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      },
+      {
+        "attempt": 1,
+        "path": "candidateLines[1].continuationPhases[0].explanation",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      }
+    ],
     "finalErrors": []
   },
   {
@@ -532,9 +603,8 @@
       "threats",
       "kingSafety",
       "weaknesses",
-      "keyPieces",
-      "plans",
       "playedMoveAnalysis",
+      "plans",
       "candidateLines",
       "comparison"
     ],
@@ -594,21 +664,45 @@
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 5802,
-    "outputTokens": 1465,
-    "totalTokens": 7267,
-    "firstLatencyMs": 12900,
-    "totalLatencyMs": 12909,
-    "networkMs": 12900,
-    "validationMs": 4,
-    "postprocessMs": 3,
-    "chineseChars": 1060,
-    "keyPiecesCorrect": true,
+    "inputTokens": 7274,
+    "outputTokens": 1625,
+    "totalTokens": 8899,
+    "firstLatencyMs": 17011,
+    "totalLatencyMs": 17074,
+    "networkMs": 17011,
+    "validationMs": 14,
+    "postprocessMs": 16,
+    "chineseChars": 1324,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
     "threeRoutesValid": true,
     "issues": [],
-    "normalizations": [],
+    "normalizations": [
+      {
+        "attempt": 1,
+        "path": "playedMoveAnalysis.continuationPhases[0].explanation",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      },
+      {
+        "attempt": 1,
+        "path": "candidateLines[0].continuationPhases[0].explanation",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      },
+      {
+        "attempt": 1,
+        "path": "candidateLines[1].continuationPhases[0].explanation",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      },
+      {
+        "attempt": 1,
+        "path": "candidateLines[2].continuationPhases[0].explanation",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      }
+    ],
     "finalErrors": []
   },
   {
@@ -627,9 +721,8 @@
       "positionAssessment",
       "threats",
       "kingSafety",
-      "keyPieces",
-      "plans",
       "playedMoveAnalysis",
+      "plans",
       "candidateLines",
       "comparison"
     ],
@@ -661,7 +754,7 @@
       "g7附近两格范围内有1枚对方棋子"
     ],
     "beforeGlobalThreats": [
-      "Ng5 后，白马同时攻击 黑象（e4）、黑后（e6）。"
+      "Ng5 后，白马同时攻击 黑象（e4）、黑后（e6）、黑兵（f7）。"
     ],
     "afterGlobalThreats": [
       "white方当前可以走Rxf7+",
@@ -683,16 +776,15 @@
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 6009,
-    "outputTokens": 1388,
-    "totalTokens": 7397,
-    "firstLatencyMs": 14040,
-    "totalLatencyMs": 14051,
-    "networkMs": 14040,
-    "validationMs": 4,
-    "postprocessMs": 3,
-    "chineseChars": 1110,
-    "keyPiecesCorrect": true,
+    "inputTokens": 7646,
+    "outputTokens": 1604,
+    "totalTokens": 9250,
+    "firstLatencyMs": 21131,
+    "totalLatencyMs": 21711,
+    "networkMs": 21131,
+    "validationMs": 23,
+    "postprocessMs": 34,
+    "chineseChars": 1421,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
     "threeRoutesValid": true,
@@ -716,9 +808,8 @@
       "positionAssessment",
       "threats",
       "kingSafety",
-      "keyPieces",
-      "plans",
       "playedMoveAnalysis",
+      "plans",
       "candidateLines",
       "comparison"
     ],
@@ -748,7 +839,7 @@
       "黑王位于g8"
     ],
     "beforeGlobalThreats": [
-      "Nd8 后，白马同时攻击 黑象（e6）、黑车（b7）。"
+      "Nd4 后，白马同时攻击 黑兵（b5）、黑象（e6）。"
     ],
     "afterGlobalThreats": [
       "white方当前可以走Ne7+"
@@ -763,21 +854,33 @@
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 4457,
-    "outputTokens": 1646,
-    "totalTokens": 6103,
-    "firstLatencyMs": 17170,
-    "totalLatencyMs": 17179,
-    "networkMs": 17170,
-    "validationMs": 4,
-    "postprocessMs": 3,
-    "chineseChars": 979,
-    "keyPiecesCorrect": true,
+    "inputTokens": 5744,
+    "outputTokens": 1828,
+    "totalTokens": 7572,
+    "firstLatencyMs": 22083,
+    "totalLatencyMs": 22657,
+    "networkMs": 22083,
+    "validationMs": 10,
+    "postprocessMs": 15,
+    "chineseChars": 1295,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
     "threeRoutesValid": true,
     "issues": [],
-    "normalizations": [],
+    "normalizations": [
+      {
+        "attempt": 1,
+        "path": "playedMoveAnalysis.continuationPhases[0].explanation",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      },
+      {
+        "attempt": 1,
+        "path": "candidateLines[1].continuationPhases[0].explanation",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      }
+    ],
     "finalErrors": []
   },
   {
@@ -796,9 +899,8 @@
       "positionAssessment",
       "threats",
       "kingSafety",
-      "keyPieces",
-      "plans",
       "playedMoveAnalysis",
+      "plans",
       "candidateLines",
       "comparison"
     ],
@@ -828,7 +930,7 @@
       "黑王位于g8"
     ],
     "beforeGlobalThreats": [
-      "dxe4 后，黑兵同时攻击 白象（d3）、白马（f3）。"
+      "Nxe4 后，黑马同时攻击 白马（d2）、白兵（f2）、白兵（c3）。"
     ],
     "afterGlobalThreats": [
       "white方当前可以走Bxh7+"
@@ -848,32 +950,24 @@
       ]
     },
     "meaninglessWeaknessStillDisplayed": false,
-    "firstPass": true,
+    "firstPass": false,
     "retried": false,
-    "fallback": false,
+    "fallback": true,
     "finalValid": true,
-    "inputTokens": 6224,
-    "outputTokens": 1648,
-    "totalTokens": 7872,
-    "firstLatencyMs": 29139,
-    "totalLatencyMs": 29152,
-    "networkMs": 29139,
-    "validationMs": 5,
-    "postprocessMs": 4,
-    "chineseChars": 1236,
-    "keyPiecesCorrect": true,
+    "inputTokens": null,
+    "outputTokens": null,
+    "totalTokens": null,
+    "firstLatencyMs": 11143,
+    "totalLatencyMs": 11143,
+    "networkMs": 0,
+    "validationMs": 7,
+    "postprocessMs": 28,
+    "chineseChars": 1368,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
     "threeRoutesValid": true,
     "issues": [],
-    "normalizations": [
-      {
-        "attempt": 1,
-        "path": "candidateLines[1].directPurpose",
-        "category": "不属于Stockfish的走法",
-        "message": "已移除路线外SAN：Bg4"
-      }
-    ],
+    "normalizations": [],
     "finalErrors": []
   },
   {
@@ -890,9 +984,8 @@
     "fixedMaterialSectionRemoved": true,
     "displayedSections": [
       "positionAssessment",
-      "keyPieces",
-      "plans",
       "playedMoveAnalysis",
+      "plans",
       "candidateLines",
       "comparison"
     ],
@@ -918,7 +1011,7 @@
     ],
     "afterKingSafety": [],
     "beforeGlobalThreats": [
-      "Bxc3 后，黑象同时攻击 白象（e1）、白马（d4）。"
+      "d5 后，白兵同时攻击 黑马（c6）、黑兵（e6）。"
     ],
     "afterGlobalThreats": [],
     "candidateLineEvents": {
@@ -940,21 +1033,69 @@
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 5943,
-    "outputTokens": 1530,
-    "totalTokens": 7473,
-    "firstLatencyMs": 15340,
-    "totalLatencyMs": 15352,
-    "networkMs": 15340,
-    "validationMs": 5,
-    "postprocessMs": 4,
-    "chineseChars": 1153,
-    "keyPiecesCorrect": true,
+    "inputTokens": 7079,
+    "outputTokens": 1473,
+    "totalTokens": 8552,
+    "firstLatencyMs": 18353,
+    "totalLatencyMs": 18971,
+    "networkMs": 18353,
+    "validationMs": 12,
+    "postprocessMs": 17,
+    "chineseChars": 1271,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
     "threeRoutesValid": true,
     "issues": [],
-    "normalizations": [],
+    "normalizations": [
+      {
+        "attempt": 1,
+        "path": "playedMoveAnalysis.continuationPhases[0].explanation",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      },
+      {
+        "attempt": 1,
+        "path": "candidateLines[0].risks[1]",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      },
+      {
+        "attempt": 1,
+        "path": "candidateLines[1].advantages[0]",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      },
+      {
+        "attempt": 1,
+        "path": "candidateLines[1].advantages[1]",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      },
+      {
+        "attempt": 1,
+        "path": "candidateLines[1].risks[1]",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      },
+      {
+        "attempt": 1,
+        "path": "candidateLines[1].continuationPhases[0].explanation",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      },
+      {
+        "attempt": 1,
+        "path": "candidateLines[2].advantages[0]",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      },
+      {
+        "attempt": 1,
+        "path": "comparison.whyFirstLineIsBest",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      }
+    ],
     "finalErrors": []
   },
   {
@@ -971,9 +1112,8 @@
     "fixedMaterialSectionRemoved": true,
     "displayedSections": [
       "positionAssessment",
-      "keyPieces",
-      "plans",
       "playedMoveAnalysis",
+      "plans",
       "candidateLines",
       "comparison"
     ],
@@ -1014,21 +1154,27 @@
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 4595,
-    "outputTokens": 1343,
-    "totalTokens": 5938,
-    "firstLatencyMs": 11876,
-    "totalLatencyMs": 11885,
-    "networkMs": 11876,
-    "validationMs": 4,
-    "postprocessMs": 3,
-    "chineseChars": 602,
-    "keyPiecesCorrect": true,
+    "inputTokens": 5406,
+    "outputTokens": 1439,
+    "totalTokens": 6845,
+    "firstLatencyMs": 13315,
+    "totalLatencyMs": 13366,
+    "networkMs": 13315,
+    "validationMs": 7,
+    "postprocessMs": 25,
+    "chineseChars": 873,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
     "threeRoutesValid": true,
     "issues": [],
-    "normalizations": [],
+    "normalizations": [
+      {
+        "attempt": 1,
+        "path": "candidateLines[2].advantages[1]",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      }
+    ],
     "finalErrors": []
   },
   {
@@ -1046,9 +1192,8 @@
     "displayedSections": [
       "positionAssessment",
       "threats",
-      "keyPieces",
-      "plans",
       "playedMoveAnalysis",
+      "plans",
       "candidateLines",
       "comparison"
     ],
@@ -1076,7 +1221,7 @@
     ],
     "afterKingSafety": [],
     "beforeGlobalThreats": [
-      "候选路线1第4个半回合gxh4包含吃子"
+      "c5 后，黑兵同时攻击 白兵（b4）、白马（d4）。"
     ],
     "afterGlobalThreats": [
       "white方当前可以走Bxe7"
@@ -1094,40 +1239,20 @@
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 5045,
-    "outputTokens": 1650,
-    "totalTokens": 6695,
-    "firstLatencyMs": 14271,
-    "totalLatencyMs": 14281,
-    "networkMs": 14271,
-    "validationMs": 4,
-    "postprocessMs": 3,
-    "chineseChars": 985,
-    "keyPiecesCorrect": true,
+    "inputTokens": 5802,
+    "outputTokens": 1441,
+    "totalTokens": 7243,
+    "firstLatencyMs": 18840,
+    "totalLatencyMs": 19458,
+    "networkMs": 18840,
+    "validationMs": 9,
+    "postprocessMs": 12,
+    "chineseChars": 1196,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
     "threeRoutesValid": true,
     "issues": [],
-    "normalizations": [
-      {
-        "attempt": 1,
-        "path": "plans.white[1].explanation",
-        "category": "不存在的格子",
-        "message": "已移除事实包外格子：d5"
-      },
-      {
-        "attempt": 1,
-        "path": "plans.white[1].explanation",
-        "category": "不存在的格子",
-        "message": "已移除事实包外格子：e5"
-      },
-      {
-        "attempt": 1,
-        "path": "playedMoveAnalysis.positiveEffects[1]",
-        "category": "不存在的格子",
-        "message": "已移除事实包外格子：c4"
-      }
-    ],
+    "normalizations": [],
     "finalErrors": []
   },
   {
@@ -1145,9 +1270,8 @@
     "displayedSections": [
       "positionAssessment",
       "threats",
-      "keyPieces",
-      "plans",
       "playedMoveAnalysis",
+      "plans",
       "candidateLines",
       "comparison"
     ],
@@ -1175,7 +1299,7 @@
     ],
     "afterKingSafety": [],
     "beforeGlobalThreats": [
-      "Qxb8 后，黑车在 f8 被钉在王前。"
+      "Qxb8 后，白后同时攻击 黑兵（b6）、黑车（f8）。"
     ],
     "afterGlobalThreats": [
       "white方当前可以走Qxb8",
@@ -1200,21 +1324,39 @@
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 6199,
-    "outputTokens": 1421,
-    "totalTokens": 7620,
-    "firstLatencyMs": 17289,
-    "totalLatencyMs": 17301,
-    "networkMs": 17289,
-    "validationMs": 6,
-    "postprocessMs": 4,
-    "chineseChars": 1171,
-    "keyPiecesCorrect": true,
+    "inputTokens": 7642,
+    "outputTokens": 1470,
+    "totalTokens": 9112,
+    "firstLatencyMs": 19674,
+    "totalLatencyMs": 20214,
+    "networkMs": 19674,
+    "validationMs": 13,
+    "postprocessMs": 15,
+    "chineseChars": 1332,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
     "threeRoutesValid": true,
     "issues": [],
-    "normalizations": [],
+    "normalizations": [
+      {
+        "attempt": 1,
+        "path": "candidateLines[0].advantages[1]",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      },
+      {
+        "attempt": 1,
+        "path": "candidateLines[1].risks[1]",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      },
+      {
+        "attempt": 1,
+        "path": "candidateLines[1].continuationPhases[0].explanation",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      }
+    ],
     "finalErrors": []
   },
   {
@@ -1231,9 +1373,8 @@
     "fixedMaterialSectionRemoved": true,
     "displayedSections": [
       "positionAssessment",
-      "keyPieces",
-      "plans",
       "playedMoveAnalysis",
+      "plans",
       "candidateLines",
       "comparison"
     ],
@@ -1261,7 +1402,7 @@
     ],
     "afterKingSafety": [],
     "beforeGlobalThreats": [
-      "Qe4 后，黑后在 f5 被钉在王前。"
+      "Qe4 后，白后同时攻击 黑兵（e5）、黑后（f5）。"
     ],
     "afterGlobalThreats": [],
     "candidateLineEvents": {
@@ -1279,21 +1420,45 @@
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 4979,
-    "outputTokens": 1287,
-    "totalTokens": 6266,
-    "firstLatencyMs": 11301,
-    "totalLatencyMs": 11311,
-    "networkMs": 11301,
-    "validationMs": 4,
-    "postprocessMs": 3,
-    "chineseChars": 876,
-    "keyPiecesCorrect": true,
+    "inputTokens": 6454,
+    "outputTokens": 1604,
+    "totalTokens": 8058,
+    "firstLatencyMs": 19716,
+    "totalLatencyMs": 20261,
+    "networkMs": 19716,
+    "validationMs": 13,
+    "postprocessMs": 17,
+    "chineseChars": 1267,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
     "threeRoutesValid": true,
     "issues": [],
-    "normalizations": [],
+    "normalizations": [
+      {
+        "attempt": 1,
+        "path": "candidateLines[1].advantages[1]",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      },
+      {
+        "attempt": 1,
+        "path": "candidateLines[1].risks[1]",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      },
+      {
+        "attempt": 1,
+        "path": "candidateLines[2].advantages[1]",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      },
+      {
+        "attempt": 1,
+        "path": "candidateLines[2].risks[0]",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      }
+    ],
     "finalErrors": []
   }
 ]

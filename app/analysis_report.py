@@ -10,8 +10,14 @@ from pydantic import BaseModel, ConfigDict, Field
 from .analysis_focus import select_analysis_focus
 from .chess_facts import ChessFactPackage, FactEvaluation
 from .models import EvidenceFact, MoveReview
+from .position_interpretation import ThemeEvidence, build_position_interpretation
 from .strategic_plans import StrategicPlanPackage
-from .threat_analysis import ThreatPackage, position_id
+from .threat_analysis import (
+    InitiativeAssessment,
+    ThreatPackage,
+    assess_initiative,
+    position_id,
+)
 
 
 ANALYSIS_REPORT_PACKAGE_VERSION = "1.0"
@@ -77,6 +83,7 @@ class ReportThreatItem(BaseModel):
 
     threat_id: str
     type: str
+    scope: Literal["current_direct_threat", "prepared_threat"]
     side: Literal["white", "black"]
     target: str | None = None
     supporting_moves: list[str] = Field(default_factory=list)
@@ -143,6 +150,7 @@ class AnalysisReportPackage(BaseModel):
 
     version: Literal["1.0"] = ANALYSIS_REPORT_PACKAGE_VERSION
     report_id: str
+    initiative: InitiativeAssessment
     position_overview: PositionOverviewSection
     move_analysis: MoveAnalysisSection
     threat_section: ThreatSection
@@ -164,6 +172,7 @@ class AnalysisReportPackage(BaseModel):
         position = self.position_overview
         move = self.move_analysis
         return {
+            "initiative": self.initiative.model_dump(),
             "position_overview": {
                 "evaluation": {
                     "perspective": position.evaluation.perspective,
@@ -197,6 +206,7 @@ class AnalysisReportPackage(BaseModel):
                 {
                     "threat_id": item.threat_id,
                     "type": item.type,
+                    "scope": item.scope,
                     "side": item.side,
                     "target": item.target,
                     "evidence_route_ids": item.evidence_route_ids,
@@ -275,7 +285,8 @@ def build_analysis_report(
     threats = [
         item
         for item in threat_package.threats
-        if item.evidence_route_ids
+        if item.scope in {"current_direct_threat", "prepared_threat"}
+        and item.evidence_route_ids
         and set(item.evidence_route_ids) <= verified_route_ids
     ]
     plans = [
@@ -294,7 +305,16 @@ def build_analysis_report(
     _require_unique_ids("plan_id", [item.plan_id for item in plans])
 
     material = _material(move)
-    position_facts = _position_facts(move, material.fact_id)
+    interpretation = build_position_interpretation(
+        fact_package,
+        position_facts=move.position_facts,
+        threat_package=threat_package,
+        plan_package=strategic_plan_package,
+    )
+    position_facts = [
+        *_position_facts(move, material.fact_id),
+        *_interpretation_facts(interpretation.themes),
+    ]
     king_ids = [
         item.fact_id for item in position_facts
         if item.type.startswith("king:")
@@ -314,6 +334,7 @@ def build_analysis_report(
     )
     return AnalysisReportPackage(
         report_id=report_id,
+        initiative=assess_initiative(fact_package, threat_package),
         position_overview=PositionOverviewSection(
             evaluation=fact_package.evaluation,
             advantage_side=_advantage_side(fact_package.evaluation),
@@ -347,6 +368,7 @@ def build_analysis_report(
                 ReportThreatItem(
                     threat_id=item.threat_id,
                     type=item.type,
+                    scope=item.scope,
                     side=item.side,
                     target=item.target,
                     supporting_moves=list(item.supporting_moves),
@@ -407,8 +429,13 @@ def build_fallback_report(package: AnalysisReportPackage) -> AnalysisReportPacka
     refs = [report.move_analysis.move_error_id]
     summary_parts = [_fallback_move_summary(report.move_analysis)]
     if report.threat_section.items:
-        refs.append(report.threat_section.items[0].threat_id)
-        summary_parts.append("复盘时还应优先检查程序确认的直接威胁。")
+        first_threat = report.threat_section.items[0]
+        refs.append(first_threat.threat_id)
+        summary_parts.append(
+            "复盘时还应优先检查程序确认的准备型威胁。"
+            if first_threat.scope == "prepared_threat"
+            else "复盘时还应优先检查程序确认的直接威胁。"
+        )
     if report.strategy_section.items:
         refs.append(report.strategy_section.items[0].plan_id)
         summary_parts.append(
@@ -507,7 +534,6 @@ def _position_facts(move: MoveReview, material_id: str) -> list[ReportPositionFa
         for item in (
             *move.position_facts.piece_activity,
             *move.position_facts.pawn_structure,
-            *move.position_facts.key_pieces,
         )
         if item.id
     }
@@ -527,6 +553,42 @@ def _position_facts(move: MoveReview, material_id: str) -> list[ReportPositionFa
         for index, item in enumerate(move.position_facts.king_safety, start=1)
     )
     return _deduplicate_facts(result)
+
+
+def _interpretation_facts(themes: list[ThemeEvidence]) -> list[ReportPositionFact]:
+    result: list[ReportPositionFact] = []
+    for index, theme in enumerate(themes, start=1):
+        evidence = "；".join(theme.evidence[:2]).strip()
+        if not evidence:
+            continue
+        route_scoped = theme.scope == "candidate_route"
+        prefix = "候选路线内部主题" if route_scoped else "当前局面主题"
+        result.append(ReportPositionFact(
+            fact_id=f"interpretation:{index}:{theme.theme}",
+            type=f"{'route_theme' if route_scoped else 'theme'}:{theme.theme}",
+            side=theme.side if theme.side in {"white", "black"} else None,
+            description=f"{prefix}（{_theme_name(theme.theme)}）：{evidence}",
+        ))
+    return result
+
+
+def _theme_name(theme: str) -> str:
+    names = {
+        "double_attack": "双重攻击",
+        "pin": "牵制",
+        "skewer": "串击",
+        "tactical_sacrifice": "战术性牺牲",
+        "seventh_rank_activity": "第七横线重子活动",
+        "current_threat": "当前直接威胁",
+        "prepared_threat": "准备型威胁",
+        "activate_rook": "车的开放线活动",
+        "improve_worst_piece": "改善最差棋子",
+        "create_passed_pawn": "制造通路兵",
+        "attack_weak_pawn": "攻击弱兵",
+        "improve_king_safety": "改善王安全",
+    }
+    base = theme.removeprefix("route_")
+    return names.get(base, base.replace("_", " "))
 
 
 def _report_fact(
@@ -670,15 +732,37 @@ def _fallback_position_text(section: PositionOverviewSection) -> str:
     material_text = (
         f"子力统计为白方{material.white_value}分、黑方{material.black_value}分。"
     )
-    selected = [
+    theme_facts = sorted(
+        [item for item in section.facts if item.type.startswith(("theme:", "route_theme:"))],
+        key=_report_theme_priority,
+    )
+    other_facts = [
         item.description
         for item in section.facts
         if item.fact_id != material.fact_id
-    ][:2]
+        and not item.type.startswith(("theme:", "route_theme:"))
+    ]
+    selected = [item.description for item in theme_facts[:2]]
+    selected.extend(other_facts[: max(0, 2 - len(selected))])
     return evaluation + material_text + "".join(
         text if text.endswith(("。", "！", "？")) else f"{text}。"
         for text in selected
     )
+
+
+def _report_theme_priority(item: ReportPositionFact) -> tuple[int, str]:
+    theme = item.type.split(":", 1)[-1].removeprefix("route_")
+    tactical = {"double_attack", "pin", "skewer", "tactical_sacrifice", "current_threat"}
+    dynamic = {"seventh_rank_activity", "activate_rook", "improve_worst_piece"}
+    if item.type in {"theme:prepared_threat", "theme:seventh_rank_activity"}:
+        rank = 0
+    elif theme in tactical:
+        rank = 0 if item.type.startswith("theme:") else 1
+    elif theme in dynamic:
+        rank = 2
+    else:
+        rank = 3
+    return rank, item.fact_id
 
 
 def _fallback_move_text(section: MoveAnalysisSection) -> str:
@@ -712,6 +796,11 @@ def _fallback_threat_text(item: ReportThreatItem) -> str:
         "center_break": "中心突破",
     }
     target = f"，目标为{item.target}" if item.target else ""
+    if item.scope == "prepared_threat":
+        return (
+            f"程序确认{_side_name(item.side)}存在准备型战术威胁{target}。"
+            "它尚未在当前局面执行，但有界Ignore Test确认对手不能安全忽略其准备步骤。"
+        )
     return (
         f"程序确认{_side_name(item.side)}存在{names.get(item.type, '直接威胁')}{target}。"
         "复盘时应优先检查该威胁的执行条件和应对次序。"

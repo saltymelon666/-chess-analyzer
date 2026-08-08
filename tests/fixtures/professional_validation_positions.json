@@ -382,10 +382,6 @@
       }
     ],
     "expected": {
-      "keyPieceRefs": [
-        "piece:move-1-before:white-pawn-e2",
-        "piece:move-1-before:black-knight-g8"
-      ],
       "mainDanger": "必须引用当前事实或Stockfish路线中的具体证据",
       "strategy": {
         "white": "完成发展并保持中心控制",
@@ -726,10 +722,6 @@
       }
     ],
     "expected": {
-      "keyPieceRefs": [
-        "piece:move-1-before:white-pawn-g2",
-        "piece:move-1-before:black-pawn-b7"
-      ],
       "mainDanger": "必须引用当前事实或Stockfish路线中的具体证据",
       "strategy": {
         "white": "完成发展并保持中心控制",
@@ -1127,10 +1119,6 @@
       }
     ],
     "expected": {
-      "keyPieceRefs": [
-        "piece:move-1-before:white-bishop-f1",
-        "piece:move-1-before:black-knight-g8"
-      ],
       "mainDanger": "必须引用当前事实或Stockfish路线中的具体证据",
       "strategy": {
         "white": "完成发展并保持中心控制",
@@ -1518,10 +1506,6 @@
       }
     ],
     "expected": {
-      "keyPieceRefs": [
-        "piece:move-1-before:white-knight-e5",
-        "piece:move-1-before:black-bishop-b7"
-      ],
       "mainDanger": "必须引用当前事实或Stockfish路线中的具体证据",
       "strategy": {
         "white": "先计算强制走法和子力安全",
@@ -1824,10 +1808,6 @@
       }
     ],
     "expected": {
-      "keyPieceRefs": [
-        "piece:move-1-before:white-rook-d7",
-        "piece:move-1-before:black-queen-c4"
-      ],
       "mainDanger": "必须引用当前事实或Stockfish路线中的具体证据",
       "strategy": {
         "white": "先计算强制走法和子力安全",
@@ -2228,10 +2208,6 @@
       }
     ],
     "expected": {
-      "keyPieceRefs": [
-        "piece:move-1-before:white-pawn-e5",
-        "piece:move-1-before:black-king-g7"
-      ],
       "mainDanger": "必须引用当前事实或Stockfish路线中的具体证据",
       "strategy": {
         "white": "先计算强制走法和子力安全",
@@ -2587,10 +2563,6 @@
       }
     ],
     "expected": {
-      "keyPieceRefs": [
-        "piece:move-1-before:white-pawn-f5",
-        "piece:move-1-before:black-king-e7"
-      ],
       "mainDanger": "必须引用当前事实或Stockfish路线中的具体证据",
       "strategy": {
         "white": "协调进攻子力并检查王区突破",
@@ -2938,10 +2910,6 @@
       }
     ],
     "expected": {
-      "keyPieceRefs": [
-        "piece:move-1-before:white-knight-f3",
-        "piece:move-1-before:black-queen-e6"
-      ],
       "mainDanger": "必须引用当前事实或Stockfish路线中的具体证据",
       "strategy": {
         "white": "协调进攻子力并检查王区突破",
@@ -3274,10 +3242,6 @@
       }
     ],
     "expected": {
-      "keyPieceRefs": [
-        "piece:move-1-before:white-pawn-h2",
-        "piece:move-1-before:black-pawn-g5"
-      ],
       "mainDanger": "必须引用当前事实或Stockfish路线中的具体证据",
       "strategy": {
         "white": "协调进攻子力并检查王区突破",
@@ -3622,10 +3586,6 @@
       }
     ],
     "expected": {
-      "keyPieceRefs": [
-        "piece:move-1-before:white-pawn-e3",
-        "piece:move-1-before:black-knight-f6"
-      ],
       "mainDanger": "必须引用当前事实或Stockfish路线中的具体证据",
       "strategy": {
         "white": "准备中心突破并改善子力协调",
@@ -4001,10 +3961,6 @@
       }
     ],
     "expected": {
-      "keyPieceRefs": [
-        "piece:move-1-before:white-pawn-d4",
-        "piece:move-1-before:black-pawn-e6"
-      ],
       "mainDanger": "必须引用当前事实或Stockfish路线中的具体证据",
       "strategy": {
         "white": "准备中心突破并改善子力协调",
@@ -4369,10 +4325,6 @@
       }
     ],
     "expected": {
-      "keyPieceRefs": [
-        "piece:move-1-before:white-pawn-f2",
-        "piece:move-1-before:black-knight-e7"
-      ],
       "mainDanger": "必须引用当前事实或Stockfish路线中的具体证据",
       "strategy": {
         "white": "在合适一翼扩张并保留中心稳定",
@@ -4738,10 +4690,6 @@
       }
     ],
     "expected": {
-      "keyPieceRefs": [
-        "piece:move-1-before:white-knight-b1",
-        "piece:move-1-before:black-pawn-c7"
-      ],
       "mainDanger": "必须引用当前事实或Stockfish路线中的具体证据",
       "strategy": {
         "white": "在合适一翼扩张并保留中心稳定",
@@ -5099,10 +5047,6 @@
       }
     ],
     "expected": {
-      "keyPieceRefs": [
-        "piece:move-1-before:white-queen-a7",
-        "piece:move-1-before:black-rook-f8"
-      ],
       "mainDanger": "必须引用当前事实或Stockfish路线中的具体证据",
       "strategy": {
         "white": "比较交换后的王和兵结构",
@@ -5502,10 +5446,6 @@
       }
     ],
     "expected": {
-      "keyPieceRefs": [
-        "piece:move-1-before:white-queen-e2",
-        "piece:move-1-before:black-queen-f5"
-      ],
       "mainDanger": "必须引用当前事实或Stockfish路线中的具体证据",
       "strategy": {
         "white": "比较交换后的王和兵结构",

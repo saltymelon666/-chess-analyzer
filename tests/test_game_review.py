@@ -1,7 +1,13 @@
 import chess
 import pytest
 
-from app.game_review import _detect_tactical_motifs, analyze_pgn, parse_pgn_facts
+from app.game_review import (
+    _detect_tactical_motifs,
+    _detect_tactical_sacrifice,
+    _move_facts,
+    analyze_pgn,
+    parse_pgn_facts,
+)
 from app.models import EngineResult, MoveResult
 
 
@@ -153,3 +159,31 @@ def test_verified_fork_and_pin_are_detected_conservatively() -> None:
     pin_board = chess.Board(pin_facts[-1]["before_fen"])
     pin = _detect_tactical_motifs(pin_board, pin_facts[-1]["played_move"])
     assert any(tactic.name == "pin" for tactic in pin)
+
+
+def test_double_attack_can_include_queen_and_pawn_targets() -> None:
+    pgn = """[SetUp "1"]
+[FEN "rnb1kb1r/ppp2ppp/5q2/4p3/4P3/2N5/PPP2PPP/R2QKBNR w KQkq - 0 1"]
+
+1. Nd5"""
+    facts, _ = parse_pgn_facts(pgn, max_plies=10)
+    board = chess.Board(facts[0]["before_fen"])
+    motifs = _detect_tactical_motifs(board, facts[0]["played_move"])
+
+    double_attack = next(item for item in motifs if item.name == "double_attack")
+    assert set(double_attack.squares) >= {"d5", "f6", "c7"}
+
+
+def test_tactical_sacrifice_requires_the_moved_piece_to_be_taken() -> None:
+    board = chess.Board("r4rk1/1pp2ppp/1pn5/4Pq2/1P1P1P2/P4Q2/1B2K2P/2R4R b - - 4 22")
+    played_move = chess.Move.from_uci("c6b4")
+    played = _move_facts(board, played_move)
+    after = board.copy(stack=False)
+    after.push(played_move)
+    reply = _move_facts(after, chess.Move.from_uci("a3b4"))
+
+    tactic = _detect_tactical_sacrifice(board, played, reply)
+
+    assert tactic is not None
+    assert tactic.name == "tactical_sacrifice"
+    assert tactic.move_uci == "c6b4"

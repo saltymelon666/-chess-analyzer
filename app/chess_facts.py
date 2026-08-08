@@ -99,7 +99,8 @@ class ChessFactPackage(BaseModel):
         payload["threats"] = [
             threat
             for threat in payload["threats"]
-            if threat["evidence_route_ids"]
+            if threat["scope"] in {"current_direct_threat", "prepared_threat"}
+            and threat["evidence_route_ids"]
             and set(threat["evidence_route_ids"]) <= verified_route_ids
         ]
         payload["plans"] = [
@@ -157,6 +158,7 @@ class ChessFactPackage(BaseModel):
                 {
                     "threat_id": threat.threat_id,
                     "type": threat.type,
+                    "scope": threat.scope,
                     "evidence_route_ids": threat.evidence_route_ids,
                     "confidence": threat.confidence,
                     "source": threat.source,
@@ -197,7 +199,8 @@ class ChessFactPackage(BaseModel):
         return [
             threat
             for threat in self.threats
-            if threat.evidence_route_ids
+            if threat.scope in {"current_direct_threat", "prepared_threat"}
+            and threat.evidence_route_ids
             and set(threat.evidence_route_ids) <= route_ids
         ]
 

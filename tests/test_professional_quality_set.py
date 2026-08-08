@@ -40,7 +40,6 @@ def test_validation_set_has_required_categories_and_metadata() -> None:
     }
     for item in positions:
         assert item["source"]["description"]
-        assert item["expected"]["keyPieceRefs"]
         assert item["expected"]["mainDanger"]
         assert item["expected"]["strategy"]["white"]
         assert item["expected"]["strategy"]["black"]

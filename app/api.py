@@ -15,6 +15,7 @@ from .analysis_report import (
     GeneratedAnalysisReport,
     build_analysis_report,
 )
+from .book_ground_truth import BookGroundTruthRepository
 from .chess_facts import build_engine_fact_package, build_move_fact_package
 from .config import load_settings
 from .config import OFFICIAL_DEEPSEEK_BASE_URL
@@ -25,7 +26,7 @@ from .narrative_generator import NarrativeGenerator
 from .position_facts import extract_position_facts
 from .professional_analysis import ProfessionalAnalysisService, professional_cache_key
 from .strategic_plans import StrategicPlanAnalyzer
-from .threat_analysis import ThreatAnalyzer, ThreatPackage, position_id
+from .threat_analysis import ThreatAnalyzer
 from .models import (
     GameReviewRequest,
     GameReviewResponse,
@@ -39,6 +40,7 @@ from .models import (
     PositionResult,
     GeneratedProfessionalAnalysis,
     DeepSeekConnectionResult,
+    ProfessionalBookReference,
     ProfessionalAnalysisResponse,
     ReviewRequest,
     ReviewResponse,
@@ -85,6 +87,7 @@ narrative_generator = NarrativeGenerator(
 )
 threat_analyzer = ThreatAnalyzer()
 strategic_plan_analyzer = StrategicPlanAnalyzer()
+book_ground_truth = BookGroundTruthRepository()
 game_cache: OrderedDict[str, list[MoveReview]] = OrderedDict()
 explanation_cache: dict[tuple[str, int], GeneratedMoveExplanation | str] = {}
 explanation_tasks: dict[tuple[str, int], asyncio.Task[GeneratedMoveExplanation | str]] = {}
@@ -329,6 +332,7 @@ async def professional_analysis(request: MoveExplanationRequest) -> Professional
     if request.move_index > len(moves):
         raise HTTPException(status_code=404, detail="找不到这一步的事实数据")
     move = moves[request.move_index - 1]
+    book_references = _professional_book_references(move.before_fen)
     depth = max((line.depth for line in move.candidate_lines), default=settings.game_analysis_depth)
     cache_key = professional_cache_key(
         move,
@@ -340,6 +344,7 @@ async def professional_analysis(request: MoveExplanationRequest) -> Professional
         professional_cache.move_to_end(cache_key)
         return ProfessionalAnalysisResponse(
             analysis=cached.analysis,
+            book_references=book_references,
             complexity_reasons=cached.complexity_reasons,
             validation_warnings=cached.validation_warnings,
             usage=cached.usage,
@@ -350,7 +355,7 @@ async def professional_analysis(request: MoveExplanationRequest) -> Professional
     try:
         task = professional_tasks.get(cache_key)
         if task is None:
-            task = asyncio.create_task(professional_service.analyze(move))
+            task = asyncio.create_task(_generate_professional_analysis(move))
             professional_tasks[cache_key] = task
             created_task = True
         generated = await asyncio.shield(task)
@@ -360,6 +365,7 @@ async def professional_analysis(request: MoveExplanationRequest) -> Professional
             professional_cache.popitem(last=False)
         return ProfessionalAnalysisResponse(
             analysis=generated.analysis,
+            book_references=book_references,
             complexity_reasons=generated.complexity_reasons,
             validation_warnings=generated.validation_warnings,
             usage=generated.usage,
@@ -368,12 +374,14 @@ async def professional_analysis(request: MoveExplanationRequest) -> Professional
     except (httpx.HTTPError, RuntimeError) as exc:
         logger.warning("Professional analysis unavailable: %s", exc)
         return ProfessionalAnalysisResponse(
+            book_references=book_references,
             warning=f"专业分析暂不可用：{exc}",
             cached=False,
         )
     except Exception:
         logger.exception("Unexpected professional analysis error")
         return ProfessionalAnalysisResponse(
+            book_references=book_references,
             warning="专业分析暂不可用，但Stockfish事实包仍然有效",
             cached=False,
         )
@@ -437,12 +445,11 @@ async def analysis_report(request: MoveExplanationRequest) -> AnalysisReportResp
 
 async def _generate_analysis_report(move: MoveReview) -> GeneratedAnalysisReport:
     fact_package = build_move_fact_package(move)
-    threats = threat_analyzer.detect(fact_package)
-    threat_package = ThreatPackage(
-        position_id=position_id(fact_package.position.fen),
-        threats=threats,
+    threat_package = await threat_analyzer.analyze(
+        fact_package,
+        stockfish=stockfish,
     )
-    fact_package.threats = threats
+    fact_package.threats = threat_package.threats
     strategic_plan_package = strategic_plan_analyzer.analyze(
         fact_package,
         position_facts=move.position_facts,
@@ -456,3 +463,38 @@ async def _generate_analysis_report(move: MoveReview) -> GeneratedAnalysisReport
         strategic_plan_package,
     )
     return await narrative_generator.generate(package)
+
+
+async def _generate_professional_analysis(move: MoveReview) -> GeneratedProfessionalAnalysis:
+    fact_package = build_move_fact_package(move)
+    threat_package = await threat_analyzer.analyze(
+        fact_package,
+        stockfish=stockfish,
+    )
+    return await professional_service.analyze(
+        move,
+        threat_package=threat_package,
+    )
+
+
+def _professional_book_references(fen: str) -> list[ProfessionalBookReference]:
+    """Return source prose only for an exact legal-state match."""
+    try:
+        package = book_ground_truth.lookup_exact(fen)
+    except Exception as exc:
+        logger.warning("Optional book ground truth unavailable: %s", exc)
+        return []
+    return [
+        ProfessionalBookReference(
+            positionId=case.position_id,
+            sourceTitle=case.source_title,
+            author=case.author,
+            sourceUrl=case.source_url,
+            locator=case.locator,
+            annotatedMove=case.annotated_move_san,
+            originalComment=case.reference_explanation,
+            extractionStatus=case.extraction_status,
+            authorityScope=case.authority_scope,
+        )
+        for case in package.cases
+    ]

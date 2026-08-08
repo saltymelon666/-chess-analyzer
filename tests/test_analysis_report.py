@@ -16,6 +16,7 @@ from app.chess_facts import FactCandidateRoute, build_move_fact_package
 from app.models import (
     CandidateLine,
     ComplexityFactors,
+    EvidenceFact,
     EvaluationSnapshot,
     MoveFacts,
     MoveReview,
@@ -24,6 +25,7 @@ from app.models import (
 from app.narrative_generator import (
     NarrativeChatResult,
     NarrativeGenerator,
+    apply_narrative_draft,
     parse_narrative_draft,
     validate_narrative_draft,
 )
@@ -227,8 +229,8 @@ def report_package(
 def valid_payload(package: AnalysisReportPackage) -> dict[str, object]:
     return {
         "information_insufficient": False,
-        "position_summary": "程序评价显示白方占优，双方物质保持平衡，子力协调是当前重点。",
-        "move_explanation": "实战选择没有抓住程序确认的主要改进机会，评价方向随后转为不利。",
+        "position_summary": "由程序生成",
+        "move_explanation": "由程序生成",
         "threat_explanation": [
             {
                 "threat_id": item.threat_id,
@@ -514,3 +516,74 @@ def test_program_fallback_is_complete_and_nonblank() -> None:
     assert fallback.position_overview.position_fact_ids
     assert fallback.summary_section.source_refs
     assert validate_report_package(fallback) == []
+
+
+def test_report_surfaces_interpretation_themes_without_losing_route_scope() -> None:
+    move = sample_move_review()
+    move.position_facts.threats.extend([
+        EvidenceFact(
+            id="fact:current-double-attack",
+            category="double_attack",
+            side="white",
+            description="a3后同时攻击两个目标。",
+            evidence=["python-chess验证走法a2a3"],
+            squares=["a3"],
+        ),
+        EvidenceFact(
+            id="fact:route-pin",
+            category="pin",
+            side="black",
+            description="e5后候选路线内形成牵制。",
+            evidence=["python-chess验证走法e7e5"],
+            squares=["e5"],
+        ),
+    ])
+    facts = build_move_fact_package(move)
+    threats = ThreatPackage(position_id=position_id(facts.position.fen), threats=[])
+    plans = StrategicPlanPackage(position_id=position_id(facts.position.fen), plans=[])
+
+    report = build_fallback_report(build_analysis_report(move, facts, threats, plans))
+
+    assert "当前局面主题（双重攻击）" in report.position_overview.text
+    assert "候选路线内部主题（牵制）" in report.position_overview.text
+
+
+def test_narrative_cannot_overwrite_program_owned_position_and_move_facts() -> None:
+    package = report_package()
+    payload = valid_payload(package)
+    payload["position_summary"] = "白方多一兵，黑王准备易位。"
+    payload["move_explanation"] = "实战着与Stockfish首选一致，是最佳着。"
+    draft, errors = parse_narrative_draft(json.dumps(payload, ensure_ascii=False))
+    assert draft is not None
+    assert errors == []
+
+    report = apply_narrative_draft(package, draft)
+
+    assert "白方多一兵" not in report.position_overview.text
+    assert "准备易位" not in report.position_overview.text
+    assert "与程序首选一致" not in report.move_analysis.text
+    assert package.move_analysis.same_as_best is False
+    assert "程序给出的主要改进是" in report.move_analysis.text
+
+
+def test_unknown_initiative_rejects_narrative_claim() -> None:
+    package = report_package()
+    assert package.initiative.side == "unknown"
+    payload = valid_payload(package)
+    payload["final_summary"]["text"] = "白方已经掌握主动权。"
+    draft, errors = parse_narrative_draft(json.dumps(payload, ensure_ascii=False))
+    assert draft is not None
+    assert errors == []
+
+    validation = validate_narrative_draft(draft, package)
+
+    assert any("主动权证据门禁" in error for error in validation)
+
+
+def test_prompt_payload_marks_unknown_initiative() -> None:
+    package = report_package()
+
+    payload = package.prompt_payload()
+
+    assert payload["initiative"]["side"] == "unknown"
+    assert payload["initiative"]["dynamic_source"] is False

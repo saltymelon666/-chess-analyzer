@@ -88,22 +88,6 @@ async def build(source: Path) -> list[dict[str, object]]:
         )
         move = review.moves[0]
         complexity = compute_professional_complexity(move)
-        played_piece_ref = next(
-            item["id"]
-            for item in move.position_facts.pieces
-            if item["square"] == move.played_move.from_square
-        )
-        response_piece_ref = None
-        if move.actual_move_line and move.actual_move_line.moves:
-            response = move.actual_move_line.moves[0]
-            response_piece_ref = next(
-                (
-                    item["id"]
-                    for item in move.position_facts.pieces
-                    if item["square"] == response.from_square
-                ),
-                None,
-            )
         fixtures.append({
             "id": fixture_id,
             "category": category,
@@ -144,7 +128,6 @@ async def build(source: Path) -> list[dict[str, object]]:
                 for line in move.candidate_lines
             ],
             "expected": {
-                "keyPieceRefs": [item for item in [played_piece_ref, response_piece_ref] if item],
                 "mainDanger": "必须引用当前事实或Stockfish路线中的具体证据",
                 "strategy": STRATEGY_BY_CATEGORY[category],
                 "forbiddenConclusions": [

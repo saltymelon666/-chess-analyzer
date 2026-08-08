@@ -15,11 +15,13 @@ from app.models import (
     EvaluationSnapshot,
     GeneratedProfessionalAnalysis,
     EvidenceFact,
+    MoveFacts,
     MoveReview,
     ProfessionalComplexity,
     ProfessionalAnalysisUsage,
     ProfessionalAnalysisDraft,
     ProfessionalEvidenceText,
+    VerifiedTactic,
 )
 from app.position_facts import extract_position_facts
 from app.analysis_focus import select_analysis_focus
@@ -29,10 +31,12 @@ from app.professional_analysis import (
     PROFESSIONAL_PROMPT_VERSION,
     PROFESSIONAL_TOKEN_LIMITS,
     ProfessionalAnalysisService,
+    apply_hard_fact_guard,
     build_professional_payload,
     build_safe_professional_analysis,
     compute_professional_complexity,
     professional_cache_key,
+    professional_system_prompt,
     professional_user_prompt,
     _trim_to_complete_sentence,
 )
@@ -40,17 +44,20 @@ from app.professional_validation import (
     LENGTH_RANGES,
     _narrative_length,
     build_validation_context,
+    normalize_program_owned_claims,
     parse_professional_analysis,
     validate_professional_analysis,
 )
 from app.professional_refs import (
     _complete_display_sentence,
+    _program_direct_purpose,
     build_reference_payload,
     normalize_professional_draft_literals,
     resolve_professional_draft,
     validate_professional_draft,
 )
 from app.strategic_plans import StrategicPlanAnalyzer
+from app.threat_analysis import ThreatFact, ThreatIgnoreTest, ThreatPackage, position_id
 
 
 def _line(board: chess.Board, rank: int, uci_moves: list[str], line_id: str) -> CandidateLine:
@@ -191,7 +198,7 @@ def test_production_professional_draft_cannot_generate_strategic_plans() -> None
     assert any(issue.path == "plans" for issue in issues)
 
 
-def test_validator_rejects_hallucinated_evidence_square_piece_and_route() -> None:
+def test_validator_rejects_hallucinated_evidence_square_and_route() -> None:
     move = professional_review()
     complexity = compute_professional_complexity(move)
     context = build_validation_context(move, complexity.level)
@@ -199,7 +206,6 @@ def test_validator_rejects_hallucinated_evidence_square_piece_and_route() -> Non
     payload["mainDanger"]["description"] = "黑后在h9攻击白王，白方会立即受损。"
     payload["mainDanger"]["sideInDanger"] = "white"
     payload["mainDanger"]["evidenceRefs"] = ["fact:not-real"]
-    payload["keyPieces"][0].update({"side": "black", "piece": "queen", "square": "a1"})
     payload["playedMoveAnalysis"]["move"] = "Qh5"
     payload["playedMoveAnalysis"]["positiveEffects"] = ["实战走法吃掉了黑后。"]
     payload["candidateLines"][0]["firstMove"] = "Qh5"
@@ -209,7 +215,6 @@ def test_validator_rejects_hallucinated_evidence_square_piece_and_route() -> Non
     errors = validate_professional_analysis(analysis, context, enforce_length=False)
     assert any("evidenceRefs" in error for error in errors)
     assert any("棋盘范围外" in error for error in errors)
-    assert any("关键棋子" in error for error in errors)
     assert any("实际走法" in error for error in errors)
     assert any("未验证的吃子" in error for error in errors)
     assert any("firstMove" in error for error in errors)
@@ -280,7 +285,8 @@ def test_professional_api_cache_uses_fact_hash_without_second_service_call(monke
         def __init__(self):
             self.calls = 0
 
-        async def analyze(self, selected):
+        async def analyze(self, selected, *, threat_package=None):
+            assert threat_package is not None
             self.calls += 1
             await asyncio.sleep(0)
             return generated
@@ -297,6 +303,7 @@ def test_professional_api_cache_uses_fact_hash_without_second_service_call(monke
     second = client.post("/api/professional-analysis", json={"analysis_id": analysis_id, "move_index": 1})
     assert first.status_code == 200
     assert first.json()["cached"] is False
+    assert "keyPieces" not in first.json()["analysis"]
     position = first.json()["analysis"]["positionAssessment"]
     assert "material" not in position
     if position["kingSafety"]["isRelevant"] is False:
@@ -320,7 +327,11 @@ def test_compact_prompt_keeps_complete_contract_without_full_pydantic_schema() -
     assert '"material"' not in prompt
     assert '"playedMoveAnalysis"' in prompt
     assert '"candidateLines"' in prompt
-    assert '"pieceRef"' in prompt
+    assert '"keyPieces"' not in prompt
+    assert '"pieceRef"' not in prompt
+    assert "keyPieces" not in json.dumps(
+        ProfessionalAnalysisDraft.model_json_schema(by_alias=True)
+    )
     assert '"lineRef"' in prompt
     assert '"plyRefs"' in prompt
     assert '"positionAfter"' not in prompt
@@ -335,7 +346,6 @@ def test_compact_prompt_keeps_complete_contract_without_full_pydantic_schema() -
 
 def _valid_reference_draft(move: MoveReview) -> ProfessionalAnalysisDraft:
     payload = build_reference_payload(move, "normal", ["fixed test"])
-    pieces = payload["pos"]["pieces"]
     facts = payload["pos"]["facts"]
     routes = payload["lines"]
     actual = payload["actual"]["plies"]
@@ -352,9 +362,6 @@ def _valid_reference_draft(move: MoveReview) -> ProfessionalAnalysisDraft:
             fallback_ref,
         )
 
-    def side_piece(side: str) -> dict:
-        return next(item for item in pieces if item["side"] == side and item["piece"] != "pawn")
-
     def side_ply(side: str) -> str:
         return next(
             ply["id"]
@@ -364,8 +371,6 @@ def _valid_reference_draft(move: MoveReview) -> ProfessionalAnalysisDraft:
         )
 
     danger_ply = routes[0]["plies"][0]
-    white_piece = side_piece("white")
-    black_piece = side_piece("black")
 
     return ProfessionalAnalysisDraft.model_validate(
         {
@@ -377,22 +382,8 @@ def _valid_reference_draft(move: MoveReview) -> ProfessionalAnalysisDraft:
                 "level": "short_term",
                 "dangerRef": danger_ply["id"],
                 "explanation": "首要危险来自候选路线第一步造成的节奏变化。",
-                "consequence": "若忽略这个变化，对手会取得主动。",
+                "consequence": "若忽略这个变化，对手会改善子力位置。",
                 "evidenceRefs": [danger_ply["id"]],
-            },
-            "keyPieces": {
-                "white": {
-                    "pieceRef": white_piece["id"],
-                    "role": "负责协调白方子力并支持下一步计划。",
-                    "futureTask": "它的活动会影响白方能否顺利发展。",
-                    "evidenceRefs": [white_piece["id"]],
-                },
-                "black": {
-                    "pieceRef": black_piece["id"],
-                    "role": "负责协调黑方子力并限制对手计划。",
-                    "futureTask": "它的部署会影响黑方的反击速度。",
-                    "evidenceRefs": [black_piece["id"]],
-                },
             },
             "plans": {
                 "white": [
@@ -451,9 +442,18 @@ def test_reference_draft_resolves_ids_without_model_generated_board_literals() -
 
     resolved = resolve_professional_draft(draft, move, context)
     assert validate_professional_analysis(resolved, context, enforce_length=False) == []
-    assert resolved.key_pieces[0].square in move.pieces_before
+    assert "keyPieces" not in resolved.model_dump(by_alias=True)
     assert [item.rank for item in resolved.candidate_lines] == [1, 2, 3]
     assert resolved.candidate_lines[0].first_move == move.candidate_lines[0].first_move.san
+    assert resolved.candidate_lines[0].direct_purpose == "第一步白兵从e2走到e4（e4），作为这条Stockfish路线的起点。"
+    assert resolved.candidate_lines[0].direct_purpose != draft.candidate_lines[0].direct_purpose
+
+
+def test_program_direct_purpose_uses_only_verified_first_ply_events() -> None:
+    board = chess.Board("4k3/8/8/8/8/8/4r3/4R1K1 w - - 0 1")
+    route = _line(board, 1, ["e1e2", "e8f7"], "line:capture-check")
+
+    assert _program_direct_purpose(route) == "第一步白车从e1走到e2（Rxe2+），并吃掉车、形成将军。"
 
 
 def test_incomplete_display_text_is_dropped_instead_of_kept_as_residue() -> None:
@@ -469,20 +469,15 @@ def test_length_fitting_only_trims_at_complete_sentence_boundary() -> None:
     assert not shortened.endswith(("正在", "准备", "意大", "正"))
 
 
-def test_reference_resolver_rebuilds_incomplete_summary_and_piece_role() -> None:
+def test_reference_resolver_rebuilds_incomplete_summary() -> None:
     move = professional_review()
     payload = _valid_reference_draft(move).model_dump(by_alias=True)
     payload["positionAssessment"]["summary"] = "当前局面为意大。"
-    payload["keyPieces"]["white"]["role"] = "棋子正在"
-    payload["keyPieces"]["black"]["role"] = "黑象正。"
     draft = ProfessionalAnalysisDraft.model_validate(payload)
 
     resolved = resolve_professional_draft(draft, move, build_validation_context(move, "normal"))
 
     assert "意大" not in resolved.position_assessment.summary
-    assert all("_" not in item.role for item in resolved.key_pieces)
-    assert all(item.square in item.role for item in resolved.key_pieces)
-    assert all(item.role.endswith("。") for item in resolved.key_pieces)
 
 
 def test_reference_resolver_removes_unverified_event_words_before_final_validation() -> None:
@@ -501,7 +496,6 @@ def test_reference_resolver_removes_unverified_event_words_before_final_validati
 def test_reference_draft_reports_precise_paths_for_invalid_refs() -> None:
     move = professional_review()
     payload = _valid_reference_draft(move).model_dump(by_alias=True)
-    payload["keyPieces"]["white"]["pieceRef"] = "piece:not-real"
     payload["candidateLines"][1]["lineRef"] = "line:not-real"
     payload["plans"]["black"][0]["evidenceRefs"] = [
         next(
@@ -514,7 +508,6 @@ def test_reference_draft_reports_precise_paths_for_invalid_refs() -> None:
     draft = ProfessionalAnalysisDraft.model_validate(payload)
     issues = validate_professional_draft(draft, move, build_validation_context(move, "normal"))
 
-    assert any(issue.path == "keyPieces.white.pieceRef" and issue.category == "不存在的棋子" for issue in issues)
     assert any(issue.path == "candidateLines[1].lineRef" and issue.category == "不属于Stockfish的走法" for issue in issues)
     assert any(issue.path == "plans.black[0].evidenceRefs" and issue.category == "黑白说反" for issue in issues)
 
@@ -681,7 +674,7 @@ def test_complex_safe_fallback_compacts_variable_fact_text_without_losing_eviden
         analysis,
         build_validation_context(move, "complex"),
     ) == []
-    assert all(item.evidence_refs for item in analysis.key_pieces)
+    assert "keyPieces" not in analysis.model_dump(by_alias=True)
 
 
 def test_nested_extra_fields_are_rejected_in_strict_json() -> None:
@@ -878,6 +871,32 @@ def test_ordinary_pv_capture_is_not_promoted_to_global_threat() -> None:
     assert "fact:test:ordinary-pv-capture" not in {item.id for item in focus.line_events[1]}
 
 
+def test_safe_analysis_does_not_bypass_threat_package_for_legal_check() -> None:
+    move = professional_review()
+    move.position_facts.immediate_checks.append(MoveFacts(
+        id="fact:test:unconfirmed-check",
+        san="Qh5+",
+        uci="d1h5",
+        from_square="d1",
+        to_square="h5",
+        piece="white_queen",
+        capture=False,
+        captured_piece=None,
+        check=True,
+        checkmate=False,
+        castling=False,
+        promotion=None,
+    ))
+
+    focus = select_analysis_focus(move)
+    assert "fact:test:unconfirmed-check" in {item.id for item in focus.global_threats}
+
+    safe = build_safe_professional_analysis(move, compute_professional_complexity(move))
+    assert safe.main_danger.side_in_danger == "none"
+    assert "直接危险来自" not in safe.main_danger.description
+    assert safe.threats == []
+
+
 def test_quiet_position_can_return_empty_weaknesses_and_threats() -> None:
     move = professional_review()
     focus = select_analysis_focus(move)
@@ -914,3 +933,287 @@ def test_direct_piece_loss_is_allowed_only_as_route_consequence() -> None:
     assert [event.scope for event in safe.candidate_lines[1].events] == ["candidate_line_2"]
     assert not safe.candidate_lines[0].events
     assert not safe.candidate_lines[2].events
+
+
+def test_hard_fact_guard_replaces_material_castling_and_best_move_claims() -> None:
+    move = professional_review()
+    move.before_fen = (
+        "rnbq1rk1/pppp1ppp/5n2/4p3/4P3/5N2/"
+        "PPPP1PPP/RNBQK2R w KQ - 4 4"
+    )
+    move.best_move_uci = "d2d4"
+    move.best_move_san = "d4"
+    analysis = build_safe_professional_analysis(
+        move,
+        compute_professional_complexity(move),
+    )
+    analysis.position_assessment.summary = "白方多一兵，黑方准备易位。"
+    analysis.played_move_analysis.evaluation_reason = "实战着与引擎首选一致。"
+
+    guarded = apply_hard_fact_guard(analysis, move)
+
+    assert "双方物质相等" in guarded.position_assessment.summary
+    assert "黑方王位于g8" in guarded.position_assessment.summary
+    assert "仅凭当前局面不能判断此前是否已经易位" in guarded.position_assessment.summary
+    assert "准备易位" not in guarded.position_assessment.summary
+    assert "与Stockfish首选不一致" in guarded.played_move_analysis.evaluation_reason
+
+
+def test_hard_fact_guard_injects_program_verified_tactical_context() -> None:
+    move = professional_review()
+    move.verified_tactics = [
+        VerifiedTactic(
+            name="double_attack",
+            side="white",
+            move_uci=move.played_move.uci,
+            description="e4后该兵同时攻击两个目标。",
+            squares=["e4", "d5", "f5"],
+        ),
+        VerifiedTactic(
+            name="pin",
+            side="black",
+            move_uci=move.actual_move_line.moves[0].uci,
+            description="e5后同时攻击白王（e1）和白马（g1）。",
+            squares=["e5", "e1"],
+        ),
+    ]
+    analysis = build_safe_professional_analysis(
+        move,
+        compute_professional_complexity(move),
+    )
+
+    guarded = apply_hard_fact_guard(analysis, move)
+
+    assert guarded.played_move_analysis.intention == "e4后该兵同时攻击两个目标。"
+    assert "e4后该兵同时攻击两个目标。" in guarded.played_move_analysis.positive_effects
+    assert any("e5后同时攻击白王和白马" in item for item in guarded.played_move_analysis.problems)
+    assert all("白王（e1）" not in item for item in guarded.played_move_analysis.problems)
+    assert all("白马（g1）" not in item for item in guarded.played_move_analysis.problems)
+
+    context = build_validation_context(move, compute_professional_complexity(move).level)
+    assert "DeepSeek自由文本重写了程序控制的硬事实" not in validate_professional_analysis(guarded, context)
+
+
+def test_hard_fact_guard_surfaces_two_rooks_on_seventh_rank() -> None:
+    move = professional_review()
+    move.position_facts.pieces.extend([
+        {"id": "piece:test:white-rook-c7", "side": "white", "piece": "rook", "square": "c7"},
+        {"id": "piece:test:white-rook-d7", "side": "white", "piece": "rook", "square": "d7"},
+    ])
+    analysis = build_safe_professional_analysis(
+        move,
+        compute_professional_complexity(move),
+    )
+
+    guarded = apply_hard_fact_guard(analysis, move)
+
+    assert guarded.position_assessment.piece_activity is not None
+    assert "两辆车已经位于第七横线" in guarded.position_assessment.piece_activity.description
+
+
+def test_safe_professional_analysis_surfaces_program_confirmed_prepared_threat() -> None:
+    move = professional_review()
+    route_id = move.candidate_lines[0].id
+    threat = ThreatFact(
+        threat_id="prepared_threat_test",
+        type="prepared_tactic",
+        scope="prepared_threat",
+        side="white",
+        target="d5、f5",
+        supporting_moves=["e4"],
+        preparation_moves=["e4"],
+        evidence_route_ids=[route_id],
+        evidence=["python-chess确认e4形成双攻"],
+        ignore_test=ThreatIgnoreTest(
+            performed=True,
+            ignored_move="a6、h6",
+            evaluation_before=0.2,
+            evaluation_after=2.1,
+            evaluation_loss=1.9,
+        ),
+        confidence="high",
+        source="python-chess+stockfish+ignore-test",
+    )
+    package = ThreatPackage(
+        position_id=position_id(move.before_fen),
+        threats=[threat],
+        prepared_threats=[threat],
+    )
+
+    safe = build_safe_professional_analysis(
+        move,
+        compute_professional_complexity(move),
+        threat_package=package,
+    )
+
+    assert any("准备型威胁" in item.description for item in safe.threats)
+    assert any("Ignore Test" in item.preparation for item in safe.threats)
+
+
+def test_professional_draft_accepts_context_approved_threat_id() -> None:
+    move = professional_review()
+    threat = ThreatFact(
+        threat_id="prepared_threat_test",
+        type="prepared_tactic",
+        scope="prepared_threat",
+        side="white",
+        target="d5、f5",
+        supporting_moves=["e4"],
+        preparation_moves=["e4"],
+        evidence_route_ids=[move.candidate_lines[0].id],
+        evidence=["python-chess确认e2e4形成双攻"],
+        ignore_test=ThreatIgnoreTest(
+            performed=True,
+            ignored_move="a6、h6",
+            evaluation_before=0.2,
+            evaluation_after=2.1,
+            evaluation_loss=1.9,
+        ),
+        confidence="high",
+        source="python-chess+stockfish+ignore-test",
+    )
+    package = ThreatPackage(
+        position_id=position_id(move.before_fen),
+        threats=[threat],
+        prepared_threats=[threat],
+    )
+    context = build_validation_context(
+        move,
+        "normal",
+        threat_package=package,
+    )
+    payload = _valid_reference_draft(move).model_dump(by_alias=True)
+    payload["mainDanger"]["evidenceRefs"] = [threat.threat_id]
+    draft = ProfessionalAnalysisDraft.model_validate(payload)
+
+    assert validate_professional_draft(draft, move, context) == []
+
+
+def test_prepared_threat_uses_verified_route_for_concrete_danger_squares() -> None:
+    move = professional_review()
+    route = move.candidate_lines[0]
+    preparation = route.moves[0]
+    threat = ThreatFact(
+        threat_id="prepared_threat_route_test",
+        type="tactical_capture",
+        scope="prepared_threat",
+        side=preparation.side,
+        target=route.moves[1].to_square,
+        supporting_moves=[route.moves[1].san],
+        preparation_moves=[preparation.san],
+        evidence_route_ids=[route.id],
+        evidence=["路线中的准备着通过Ignore Test"],
+        ignore_test=ThreatIgnoreTest(
+            performed=True,
+            ignored_move="a6",
+            evaluation_before=0.2,
+            evaluation_after=2.1,
+            evaluation_loss=1.9,
+        ),
+        confidence="high",
+        source="python-chess+stockfish+ignore-test",
+    )
+    package = ThreatPackage(
+        position_id=position_id(move.before_fen),
+        threats=[threat],
+        prepared_threats=[threat],
+    )
+    complexity = compute_professional_complexity(move)
+    guarded = apply_hard_fact_guard(
+        build_safe_professional_analysis(
+            move,
+            complexity,
+            threat_package=package,
+        ),
+        move,
+        threat_package=package,
+    )
+    context = build_validation_context(
+        move,
+        complexity.level,
+        threat_package=package,
+    )
+
+    assert preparation.from_square in guarded.main_danger.description
+    assert preparation.to_square in guarded.main_danger.description
+    assert validate_professional_analysis(guarded, context) == []
+
+
+def test_professional_validation_blocks_occupied_target_and_unknown_initiative() -> None:
+    move = professional_review()
+    complexity = compute_professional_complexity(move)
+    analysis = apply_hard_fact_guard(
+        build_safe_professional_analysis(move, complexity),
+        move,
+    )
+    analysis.main_danger.description = "白方为该棋子让出f1格，并掌握主动权。"
+    context = build_validation_context(
+        move,
+        complexity.level,
+        initiative_side="unknown",
+    )
+
+    errors = validate_professional_analysis(analysis, context)
+
+    assert any("已有棋子" in error for error in errors)
+    assert any("主动权证据门禁" in error for error in errors)
+
+
+def test_program_owned_claim_normalizer_rebuilds_whole_sentences_and_keeps_validation_strict() -> None:
+    move = professional_review()
+    complexity = compute_professional_complexity(move)
+    analysis = apply_hard_fact_guard(
+        build_safe_professional_analysis(move, complexity),
+        move,
+    )
+    analysis.comparison.main_difference = (
+        "第一条路线先处理中心张力。白方拥有明显优势。"
+        "随后再根据对手回应调整部署。"
+    )
+    analysis.main_danger.description = "白方为该棋子让出f1格，并掌握主动权。"
+    context = build_validation_context(
+        move,
+        complexity.level,
+        initiative_side="unknown",
+    )
+
+    before_errors = validate_professional_analysis(
+        analysis,
+        context,
+        enforce_length=False,
+    )
+    normalized, paths = normalize_program_owned_claims(analysis, context)
+    after_errors = validate_professional_analysis(
+        normalized,
+        context,
+        enforce_length=False,
+    )
+
+    assert "DeepSeek自由文本重写了程序控制的硬事实" in before_errors
+    assert any("主动权证据门禁" in error for error in before_errors)
+    assert normalized.comparison.main_difference == (
+        "第一条路线先处理中心张力。随后再根据对手回应调整部署。"
+    )
+    assert normalized.main_danger.description == (
+        "该项不作额外评价，具体结论以程序事实与已验证路线为准。"
+    )
+    assert "comparison.mainDifference" in paths
+    assert "mainDanger.description" in paths
+    assert not any("硬事实" in error or "主动权证据门禁" in error for error in after_errors)
+
+
+def test_professional_prompt_exposes_program_owned_fact_and_initiative_policy() -> None:
+    move = professional_review()
+    complexity = compute_professional_complexity(move)
+    context = build_validation_context(move, complexity.level)
+    payload = build_professional_payload(
+        move,
+        complexity,
+        context.allowed_evidence_ids,
+    )
+    prompt = professional_user_prompt(payload, complexity.level)
+
+    assert payload["interpretationPolicy"]["initiative"]["side"] == "unknown"
+    assert payload["interpretationPolicy"]["hardFacts"] == "program_controlled"
+    assert "Stockfish分数不能直接推出主动权" in professional_system_prompt()
+    assert "物质差、王位置、易位、评价方向、走法质量" in prompt

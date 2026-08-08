@@ -3,11 +3,14 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from pydantic import ValidationError
 
 from .models import MoveReview, ProfessionalAnalysis
+
+if TYPE_CHECKING:
+    from .threat_analysis import ThreatPackage
 
 
 LENGTH_RANGES = {
@@ -16,6 +19,16 @@ LENGTH_RANGES = {
     "complex": (1400, 2200),
 }
 VAGUE_PHRASES = ("加强中心", "注意防守", "改善子力", "形成压力", "准备进攻", "局面复杂")
+PROGRAM_OWNED_CLAIM_PATTERNS = (
+    r"(?:白方|黑方).{0,8}(?:多|少)(?:一|两|二)(?:枚|个)?(?:兵|子|子力)",
+    r"物质.{0,8}(?:领先|落后|相等|均衡|平衡|多|少)",
+    r"(?:白王|黑王|白方的王|黑方的王).{0,6}[a-h][1-8]",
+    r"准备易位|已经易位|尚未易位|完成易位|保留易位权|没有易位权",
+    r"与.{0,8}(?:引擎|程序|Stockfish).{0,8}(?:首选|第一选择).{0,5}(?:一致|相同)",
+    r"(?:白方|黑方).{0,5}(?:占优|优势|领先|更好)|均势|势均力敌|完全平衡",
+    r"(?:实战|本步|走法).{0,8}(?:最佳|优秀|好棋|不精确|失误|严重失误)",
+)
+INITIATIVE_CLAIM_PATTERN = r"主动权|掌握主动|保持主动|占据主动|取得主动|攻势.{0,6}(?:手中|掌控)"
 
 
 @dataclass(frozen=True)
@@ -42,9 +55,18 @@ class ProfessionalValidationContext:
     allows_capture: bool
     allows_check: bool
     allows_checkmate: bool
+    same_as_best: bool
+    initiative_side: str
+    occupied_squares: set[str]
 
 
-def build_validation_context(move: MoveReview, complexity: str) -> ProfessionalValidationContext:
+def build_validation_context(
+    move: MoveReview,
+    complexity: str,
+    *,
+    initiative_side: str = "unknown",
+    threat_package: "ThreatPackage | None" = None,
+) -> ProfessionalValidationContext:
     evidence_ids: set[str] = {
         f"evaluation:before:{move.index}",
         f"evaluation:after:{move.index}",
@@ -84,7 +106,6 @@ def build_validation_context(move: MoveReview, complexity: str) -> ProfessionalV
             position.king_safety,
             position.pawn_structure,
             position.threats,
-            position.key_pieces,
         ):
             for fact in group:
                 if fact.id:
@@ -165,15 +186,68 @@ def build_validation_context(move: MoveReview, complexity: str) -> ProfessionalV
     allowed_moves = set(move.allowed_moves) | actual_moves | immediate_moves
     for values in candidate_moves.values():
         allowed_moves.update(values)
+    if threat_package is not None:
+        seen_threats: set[str] = set()
+        for threat in [
+            *threat_package.threats,
+            *threat_package.prepared_threats,
+            *threat_package.route_events,
+        ]:
+            if threat.threat_id in seen_threats:
+                continue
+            seen_threats.add(threat.threat_id)
+            evidence_ids.add(threat.threat_id)
+            evidence_sides[threat.threat_id] = threat.side
+            threat_squares = set(re.findall(
+                r"(?<![A-Za-z0-9])[a-h][1-8](?![A-Za-z0-9])",
+                "\n".join([
+                    threat.target or "",
+                    *threat.evidence,
+                    threat.ignore_test.ignored_move or "",
+                ]),
+                re.IGNORECASE,
+            ))
+            for uci in re.findall(
+                r"(?<![A-Za-z0-9])([a-h][1-8][a-h][1-8][qrbn]?)(?![A-Za-z0-9])",
+                "\n".join(threat.evidence),
+                re.IGNORECASE,
+            ):
+                threat_squares.update((uci[:2], uci[2:4]))
+                allowed_moves.add(uci)
+            evidence_squares[threat.threat_id] = threat_squares
+            allowed_squares.update(threat_squares)
+            for route_id in threat.evidence_route_ids:
+                evidence_ids.add(route_id)
+                evidence_sides.setdefault(route_id, None)
+                evidence_squares.setdefault(route_id, set()).update(threat_squares)
+            allowed_moves.update(threat.supporting_moves)
+            allowed_moves.update(threat.preparation_moves)
+            if threat.ignore_test.ignored_move:
+                allowed_moves.update(
+                    item.strip()
+                    for item in re.split(r"[、,，]", threat.ignore_test.ignored_move)
+                    if item.strip()
+                )
     allows_capture = (
         move.played_move.capture
         or bool(move.position_facts.immediate_captures)
         or any(item.capture for item in all_variations)
+        or bool(
+            threat_package
+            and any(
+                item.type in {"tactical_capture", "material_win"}
+                for item in threat_package.threats
+            )
+        )
     )
     allows_checkmate = (
         move.played_move.checkmate
         or any(item.checkmate for item in move.position_facts.immediate_checks)
         or any(item.checkmate for item in all_variations)
+        or bool(
+            threat_package
+            and any(item.type == "mate_threat" for item in threat_package.threats)
+        )
     )
     allows_check = (
         allows_checkmate
@@ -204,6 +278,12 @@ def build_validation_context(move: MoveReview, complexity: str) -> ProfessionalV
         allows_capture=allows_capture,
         allows_check=allows_check,
         allows_checkmate=allows_checkmate,
+        same_as_best=bool(
+            move.best_move_uci
+            and move.best_move_uci == move.played_move.uci
+        ),
+        initiative_side=initiative_side,
+        occupied_squares=set(pieces),
     )
 
 
@@ -241,6 +321,29 @@ def validate_professional_analysis(
         errors.append("出现不存在的evidenceRefs：" + "、".join(invalid_refs))
 
     all_text = "\n".join(_all_prose_strings(payload))
+    free_text = _model_controlled_prose(analysis)
+    if any(re.search(pattern, free_text, re.IGNORECASE) for pattern in PROGRAM_OWNED_CLAIM_PATTERNS):
+        errors.append("DeepSeek自由文本重写了程序控制的硬事实")
+
+    for square in re.findall(
+        r"(?:让出|腾出|空出)([a-h][1-8])格?",
+        free_text,
+        re.IGNORECASE,
+    ):
+        if square.lower() in {item.lower() for item in context.occupied_squares}:
+            errors.append(f"目标格{square}已有棋子，不得声称为该棋子让出目标格")
+
+    initiative_claim = re.search(INITIATIVE_CLAIM_PATTERN, all_text)
+    if initiative_claim and context.initiative_side == "unknown":
+        errors.append("主动权证据门禁未通过，不得输出主动权结论")
+    elif initiative_claim and context.initiative_side in {"white", "black"}:
+        expected = "白方" if context.initiative_side == "white" else "黑方"
+        if not re.search(
+            rf"{expected}.{{0,10}}(?:主动权|掌握主动|攻势)",
+            all_text,
+        ):
+            errors.append("主动权归属与程序门禁不一致")
+
     malformed = sorted(set(re.findall(r"(?<![A-Za-z0-9])([A-Za-z][0-9])(?![A-Za-z0-9])", all_text)))
     malformed = [
         item for item in malformed
@@ -264,15 +367,6 @@ def validate_professional_analysis(
     invalid_san = sorted(item for item in mentioned_san if _normal_san(item) not in allowed_san)
     if invalid_san:
         errors.append("出现Stockfish事实包之外的SAN走法：" + "、".join(invalid_san))
-
-    for item in analysis.key_pieces:
-        expected = context.pieces.get(item.square)
-        if expected != (item.side, item.piece):
-            errors.append(f"关键棋子{item.side}_{item.piece}@{item.square}不存在于走棋前FEN")
-        if not _refs_support_side(item.evidence_refs, item.side, context):
-            errors.append(f"关键棋子{item.square}的证据与颜色不符")
-        if not _refs_support_square(item.evidence_refs, item.square, context):
-            errors.append(f"关键棋子{item.square}的证据没有指向该格")
 
     for side, assessment in (
         ("white", analysis.position_assessment.king_safety.white),
@@ -408,11 +502,6 @@ def validate_professional_analysis(
         target_squares = _mentioned_squares(threat.target)
         if target_squares and not _refs_support_any_square(threat.evidence_refs, target_squares, context):
             errors.append(f"{threat.side}威胁目标没有对应证据")
-
-    for side in ("white", "black"):
-        count = sum(1 for item in analysis.key_pieces if item.side == side)
-        if not 1 <= count <= 3:
-            errors.append(f"{side}关键棋子数量应为1—3枚，实际{count}枚")
 
     danger = analysis.main_danger
     if danger.side_in_danger != "none":
@@ -566,6 +655,151 @@ def _is_concrete(sentence: str, context: ProfessionalValidationContext) -> bool:
     has_move = any(move and move in sentence for move in context.allowed_moves)
     has_piece = bool(re.search(r"(?:白|黑)?(?:兵|马|象|车|后|王)|pawn|knight|bishop|rook|queen|king", sentence, re.IGNORECASE))
     return (has_square and has_piece) or has_move
+
+
+def _model_controlled_prose(analysis: ProfessionalAnalysis) -> str:
+    """Collect only prose that may originate from DeepSeek after resolution."""
+    values = [
+        analysis.main_danger.description,
+        analysis.main_danger.consequence,
+        analysis.played_move_analysis.intention,
+        *analysis.played_move_analysis.positive_effects,
+        *analysis.played_move_analysis.problems,
+        analysis.played_move_analysis.resulting_position,
+        *[
+            phase.explanation
+            for phase in analysis.played_move_analysis.continuation_phases
+        ],
+        analysis.comparison.main_difference,
+        analysis.comparison.why_first_line_is_best,
+    ]
+    for side_plans in (analysis.plans.white, analysis.plans.black):
+        for plan in side_plans:
+            values.extend((plan.description, plan.required_preparation))
+    for side_weaknesses in (analysis.weaknesses.white, analysis.weaknesses.black):
+        for weakness in side_weaknesses:
+            values.extend((weakness.description, weakness.exploitation))
+    for line in analysis.candidate_lines:
+        values.extend((
+            line.direct_purpose,
+            line.resulting_position,
+            *line.advantages,
+            *line.risks,
+            line.why_this_rank,
+        ))
+        values.extend(phase.explanation for phase in line.continuation_phases)
+    return "\n".join(value for value in values if value)
+
+
+def normalize_program_owned_claims(
+    analysis: ProfessionalAnalysis,
+    context: ProfessionalValidationContext,
+) -> tuple[ProfessionalAnalysis, list[str]]:
+    """Remove whole model-authored sentences that trespass on program-owned facts."""
+    result = analysis.model_copy(deep=True)
+    normalized_paths: list[str] = []
+
+    def forbidden(sentence: str) -> bool:
+        if any(
+            re.search(pattern, sentence, re.IGNORECASE)
+            for pattern in PROGRAM_OWNED_CLAIM_PATTERNS
+        ):
+            return True
+        if re.search(INITIATIVE_CLAIM_PATTERN, sentence):
+            return True
+        occupied = {
+            square.lower()
+            for square in re.findall(
+                r"(?:让出|腾出|空出)([a-h][1-8])格?",
+                sentence,
+                re.IGNORECASE,
+            )
+        }
+        return bool(occupied.intersection({item.lower() for item in context.occupied_squares}))
+
+    def clean(text: str, path: str) -> str:
+        sentences = [
+            sentence.strip()
+            for sentence in re.split(r"(?<=[。！？!?；;])", text)
+            if sentence.strip()
+        ]
+        kept = [sentence for sentence in sentences if not forbidden(sentence)]
+        if len(kept) == len(sentences):
+            return text
+        normalized_paths.append(path)
+        if kept:
+            return "".join(kept)
+        return "该项不作额外评价，具体结论以程序事实与已验证路线为准。"
+
+    danger = result.main_danger
+    danger.description = clean(danger.description, "mainDanger.description")
+    danger.consequence = clean(danger.consequence, "mainDanger.consequence")
+
+    played = result.played_move_analysis
+    played.intention = clean(played.intention, "playedMoveAnalysis.intention")
+    played.positive_effects = [
+        clean(text, f"playedMoveAnalysis.positiveEffects[{index}]")
+        for index, text in enumerate(played.positive_effects)
+    ]
+    played.problems = [
+        clean(text, f"playedMoveAnalysis.problems[{index}]")
+        for index, text in enumerate(played.problems)
+    ]
+    played.resulting_position = clean(
+        played.resulting_position,
+        "playedMoveAnalysis.resultingPosition",
+    )
+    for index, phase in enumerate(played.continuation_phases):
+        phase.explanation = clean(
+            phase.explanation,
+            f"playedMoveAnalysis.continuationPhases[{index}].explanation",
+        )
+
+    for side in ("white", "black"):
+        for index, plan in enumerate(getattr(result.plans, side)):
+            plan.description = clean(plan.description, f"plans.{side}[{index}].description")
+            plan.required_preparation = clean(
+                plan.required_preparation,
+                f"plans.{side}[{index}].requiredPreparation",
+            )
+        for index, weakness in enumerate(getattr(result.weaknesses, side)):
+            weakness.description = clean(
+                weakness.description,
+                f"weaknesses.{side}[{index}].description",
+            )
+            weakness.exploitation = clean(
+                weakness.exploitation,
+                f"weaknesses.{side}[{index}].exploitation",
+            )
+
+    for line_index, line in enumerate(result.candidate_lines):
+        prefix = f"candidateLines[{line_index}]"
+        line.direct_purpose = clean(line.direct_purpose, f"{prefix}.directPurpose")
+        line.resulting_position = clean(line.resulting_position, f"{prefix}.resultingPosition")
+        line.advantages = [
+            clean(text, f"{prefix}.advantages[{index}]")
+            for index, text in enumerate(line.advantages)
+        ]
+        line.risks = [
+            clean(text, f"{prefix}.risks[{index}]")
+            for index, text in enumerate(line.risks)
+        ]
+        line.why_this_rank = clean(line.why_this_rank, f"{prefix}.whyThisRank")
+        for phase_index, phase in enumerate(line.continuation_phases):
+            phase.explanation = clean(
+                phase.explanation,
+                f"{prefix}.continuationPhases[{phase_index}].explanation",
+            )
+
+    result.comparison.main_difference = clean(
+        result.comparison.main_difference,
+        "comparison.mainDifference",
+    )
+    result.comparison.why_first_line_is_best = clean(
+        result.comparison.why_first_line_is_best,
+        "comparison.whyFirstLineIsBest",
+    )
+    return result, normalized_paths
 
 
 def _all_strings_with_paths(value: Any, path: str = "$") -> list[tuple[str, str]]:

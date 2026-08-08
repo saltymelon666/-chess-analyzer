@@ -169,7 +169,6 @@ class PositionFacts(BaseModel):
     king_safety: list[EvidenceFact] = Field(alias="kingSafety", default_factory=list)
     pawn_structure: list[EvidenceFact] = Field(alias="pawnStructure", default_factory=list)
     threats: list[EvidenceFact] = Field(default_factory=list)
-    key_pieces: list[EvidenceFact] = Field(alias="keyPieces", default_factory=list)
     open_files: list[str] = Field(alias="openFiles", default_factory=list)
     semi_open_files: dict[str, list[str]] = Field(alias="semiOpenFiles", default_factory=dict)
     immediate_checks: list[MoveFacts] = Field(alias="immediateChecks", default_factory=list)
@@ -309,17 +308,6 @@ class ProfessionalMainDanger(BaseModel):
     evidence_refs: list[str] = Field(alias="evidenceRefs", min_length=1)
 
 
-class ProfessionalKeyPiece(BaseModel):
-    model_config = ConfigDict(populate_by_name=True, extra="forbid")
-
-    side: Literal["white", "black"]
-    piece: Literal["pawn", "knight", "bishop", "rook", "queen", "king"]
-    square: str
-    role: str
-    future_task: str = Field(alias="futureTask")
-    evidence_refs: list[str] = Field(alias="evidenceRefs", min_length=1)
-
-
 StrategyTag = Literal[
     "king_attack",
     "improve_king_safety",
@@ -447,7 +435,6 @@ class ProfessionalAnalysis(BaseModel):
     complexity: Literal["simple", "normal", "complex"]
     position_assessment: ProfessionalPositionAssessment = Field(alias="positionAssessment")
     main_danger: ProfessionalMainDanger = Field(alias="mainDanger")
-    key_pieces: list[ProfessionalKeyPiece] = Field(alias="keyPieces", default_factory=list)
     plans: ProfessionalPlans
     weaknesses: ProfessionalWeaknesses
     threats: list[ProfessionalThreat] = Field(default_factory=list)
@@ -470,22 +457,6 @@ class ProfessionalDraftMainDanger(BaseModel):
     explanation: str = Field(default="", max_length=500)
     consequence: str = Field(default="", max_length=500)
     evidence_refs: list[str] = Field(alias="evidenceRefs", default_factory=list, max_length=100)
-
-
-class ProfessionalDraftKeyPiece(BaseModel):
-    model_config = ConfigDict(populate_by_name=True, extra="forbid")
-
-    piece_ref: str = Field(alias="pieceRef")
-    role: str = Field(min_length=4, max_length=400)
-    future_task: str = Field(alias="futureTask", min_length=4, max_length=400)
-    evidence_refs: list[str] = Field(alias="evidenceRefs", default_factory=list, max_length=100)
-
-
-class ProfessionalDraftKeyPieces(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    white: ProfessionalDraftKeyPiece
-    black: ProfessionalDraftKeyPiece
 
 
 class ProfessionalDraftPlan(BaseModel):
@@ -590,7 +561,6 @@ class ProfessionalAnalysisDraft(BaseModel):
     complexity: Literal["simple", "normal", "complex"]
     position_assessment: ProfessionalDraftPositionAssessment = Field(alias="positionAssessment")
     main_danger: ProfessionalDraftMainDanger = Field(alias="mainDanger")
-    key_pieces: ProfessionalDraftKeyPieces = Field(alias="keyPieces")
     plans: ProfessionalDraftPlans = Field(default_factory=ProfessionalDraftPlans)
     plan_explanations: list[ProfessionalDraftPlanExplanation] = Field(
         alias="planExplanations",
@@ -620,8 +590,30 @@ class GeneratedProfessionalAnalysis(BaseModel):
     usage: ProfessionalAnalysisUsage
 
 
+class ProfessionalBookReference(BaseModel):
+    """Book-authored commentary for one exact, fully matching position."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    position_id: str = Field(alias="positionId")
+    source_title: str = Field(alias="sourceTitle")
+    author: str
+    source_url: str = Field(alias="sourceUrl")
+    locator: str
+    annotated_move: str | None = Field(alias="annotatedMove", default=None)
+    original_comment: str = Field(alias="originalComment")
+    extraction_status: str = Field(alias="extractionStatus")
+    authority_scope: str = Field(alias="authorityScope")
+
+
 class ProfessionalAnalysisResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     analysis: ProfessionalAnalysis | None = None
+    book_references: list[ProfessionalBookReference] = Field(
+        alias="bookReferences",
+        default_factory=list,
+    )
     complexity_reasons: list[str] = Field(default_factory=list)
     validation_warnings: list[str] = Field(default_factory=list)
     usage: ProfessionalAnalysisUsage | None = None

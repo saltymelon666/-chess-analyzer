@@ -16,7 +16,6 @@ from .models import (
     ProfessionalComparison,
     ProfessionalContinuationPhase,
     ProfessionalEvidenceText,
-    ProfessionalKeyPiece,
     ProfessionalLineEvent,
     ProfessionalMainDanger,
     ProfessionalPlan,
@@ -34,14 +33,6 @@ from .strategic_plans import StrategicPlanPackage
 VAGUE_CLAIMS = ("加强中心", "注意防守", "改善子力", "形成压力", "准备进攻", "局面复杂")
 
 SIDE_NAMES = {"white": "白方", "black": "黑方"}
-PIECE_NAMES = {
-    "pawn": "兵",
-    "knight": "马",
-    "bishop": "象",
-    "rook": "车",
-    "queen": "后",
-    "king": "王",
-}
 INCOMPLETE_ENDINGS = (
     "正在", "准备", "为了", "通过", "因为", "因此", "意大", "可以让", "正",
     "需要", "能够", "可以", "以及", "同时", "并", "从", "向", "的",
@@ -58,20 +49,6 @@ REFERENCE_OUTPUT_CONTRACT = {
         "explanation": "causal explanation only",
         "consequence": "consequence only",
         "evidenceRefs": ["existing-id"],
-    },
-    "keyPieces": {
-        "white": {
-            "pieceRef": "white piece-id",
-            "role": "strategic meaning",
-            "futureTask": "future task",
-            "evidenceRefs": ["existing-id"],
-        },
-        "black": {
-            "pieceRef": "black piece-id",
-            "role": "strategic meaning",
-            "futureTask": "future task",
-            "evidenceRefs": ["existing-id"],
-        },
     },
     "plans": {
         "white": [],
@@ -122,11 +99,6 @@ class DraftValidationIssue:
 
 def build_reference_payload(move: MoveReview, complexity: str, reasons: list[str]) -> dict[str, Any]:
     focus = select_analysis_focus(move)
-    pieces = [
-        {"id": item["id"], "side": item["side"], "piece": item["piece"], "square": item["square"]}
-        for item in move.position_facts.pieces
-    ]
-    piece_at = {item["square"]: item["id"] for item in pieces}
     facts = [item.prompt_dict() for item in focus.selected_facts]
 
     def compact_ply(item: Any) -> dict[str, Any]:
@@ -176,12 +148,10 @@ def build_reference_payload(move: MoveReview, complexity: str, reasons: list[str
         "pos": {
             "fen": move.before_fen,
             "turn": move.side,
-            "pieces": pieces,
             "facts": _deduplicate_by_id(facts),
         },
         "played": _without_empty({
             "ref": move.played_move.id or f"move:played:{move.index}",
-            "pieceRef": piece_at.get(move.played_move.from_square),
             "san": move.played_move.san,
             "side": move.side,
             "evaluationBefore": move.before.evaluation,
@@ -209,6 +179,9 @@ def parse_professional_draft(content: str) -> tuple[ProfessionalAnalysisDraft | 
         payload = json.loads(cleaned)
     except json.JSONDecodeError as exc:
         return None, [DraftValidationIssue("$", "JSON结构错误", str(exc))]
+    # Strategy tags are labels, not chess facts. Drop unknown model-produced labels
+    # before schema validation; never coerce them into a different valid label.
+    _drop_unknown_strategy_tags(payload)
     try:
         return ProfessionalAnalysisDraft.model_validate(payload), []
     except ValidationError as exc:
@@ -220,6 +193,41 @@ def parse_professional_draft(content: str) -> tuple[ProfessionalAnalysisDraft | 
         return None, issues
 
 
+_ALLOWED_STRATEGY_TAGS = {
+    "king_attack",
+    "improve_king_safety",
+    "center_break",
+    "center_control",
+    "kingside_expansion",
+    "queenside_expansion",
+    "control_open_file",
+    "occupy_weak_square",
+    "improve_worst_piece",
+    "exchange_and_simplify",
+    "create_passed_pawn",
+    "defend_immediate_threat",
+    "pawn_break",
+    "transition_to_endgame",
+}
+
+
+def _drop_unknown_strategy_tags(payload: object) -> None:
+    if not isinstance(payload, dict):
+        return
+    lines = payload.get("candidateLines")
+    if not isinstance(lines, list):
+        return
+    for line in lines:
+        if not isinstance(line, dict):
+            continue
+        tags = line.get("strategyTags")
+        if isinstance(tags, list):
+            line["strategyTags"] = [
+                tag for tag in tags
+                if isinstance(tag, str) and tag in _ALLOWED_STRATEGY_TAGS
+            ]
+
+
 def normalize_professional_draft_literals(
     draft: ProfessionalAnalysisDraft,
     move: MoveReview,
@@ -229,7 +237,7 @@ def normalize_professional_draft_literals(
     allowed_moves = {item.replace("0", "O").rstrip("+#") for item in context.allowed_moves}
     issues: list[DraftValidationIssue] = []
     reference_keys = {
-        "evidenceRefs", "pieceRef", "dangerRef", "targetRef", "moveRef",
+        "evidenceRefs", "dangerRef", "targetRef", "moveRef",
         "strongestReplyRef", "lineRef", "plyRefs", "planId",
     }
     san_pattern = re.compile(
@@ -288,7 +296,10 @@ def normalize_professional_draft_literals(
         return value
 
     payload = walk(draft.model_dump(by_alias=True))
-    source_by_alias, aliases_by_source = _reference_maps(move)
+    source_by_alias, aliases_by_source = _reference_maps(
+        move,
+        context.allowed_evidence_ids,
+    )
     for side in ("white", "black"):
         for index, plan in enumerate(payload["plans"][side]):
             original_refs = list(plan["evidenceRefs"])
@@ -332,7 +343,10 @@ def validate_professional_draft(
     strategic_plan_package: StrategicPlanPackage | None = None,
 ) -> list[DraftValidationIssue]:
     issues: list[DraftValidationIssue] = []
-    source_by_alias, aliases_by_source = _reference_maps(move)
+    source_by_alias, aliases_by_source = _reference_maps(
+        move,
+        context.allowed_evidence_ids,
+    )
 
     def canonical(values: Iterable[str]) -> list[str]:
         return [source_by_alias.get(value, value) for value in values]
@@ -362,23 +376,6 @@ def validate_professional_draft(
             normalized = san.replace("0", "O").rstrip("+#")
             if normalized not in allowed_moves:
                 issues.append(DraftValidationIssue(path, "不属于Stockfish的走法", f"SAN不属于实战或Stockfish路线：{san}"))
-
-    piece_by_id = {aliases_by_source[item["id"]]: item for item in move.position_facts.pieces}
-    seen_pieces: set[str] = set()
-    for side, item in (("white", draft.key_pieces.white), ("black", draft.key_pieces.black)):
-        path = f"keyPieces.{side}.pieceRef"
-        piece = piece_by_id.get(item.piece_ref)
-        if piece is None:
-            issues.append(DraftValidationIssue(path, "不存在的棋子", f"pieceRef不存在：{item.piece_ref}"))
-            continue
-        if item.piece_ref in seen_pieces:
-            issues.append(DraftValidationIssue(path, "其他原因", "关键棋子引用重复"))
-        seen_pieces.add(item.piece_ref)
-        if piece["side"] != side:
-            issues.append(DraftValidationIssue(path, "黑白说反", f"必须引用{side}方棋子"))
-        refs = canonical([item.piece_ref, *item.evidence_refs])
-        if not _refs_support_side(refs, side, context):
-            issues.append(DraftValidationIssue(f"keyPieces.{side}.evidenceRefs", "黑白说反", "证据不支持该棋子颜色"))
 
     for side, plans in (("white", draft.plans.white), ("black", draft.plans.black)):
         for index, plan in enumerate(plans):
@@ -469,8 +466,10 @@ def resolve_professional_draft(
     draft = ProfessionalAnalysisDraft.model_validate(
         _sanitize_draft_event_words(draft.model_dump(by_alias=True))
     )
-    source_by_alias, aliases_by_source = _reference_maps(move)
-    pieces_by_id = {aliases_by_source[item["id"]]: item for item in move.position_facts.pieces}
+    source_by_alias, aliases_by_source = _reference_maps(
+        move,
+        context.allowed_evidence_ids,
+    )
     lines_by_id = {aliases_by_source[line.id]: line for line in move.candidate_lines}
     actual = move.actual_move_line
     all_lines = [*move.candidate_lines, *([actual] if actual else [])]
@@ -487,25 +486,6 @@ def resolve_professional_draft(
             if source and source in context.allowed_evidence_ids and source not in result:
                 result.append(source)
         return result
-
-    key_pieces = []
-    for item in (draft.key_pieces.white, draft.key_pieces.black):
-        piece = pieces_by_id[item.piece_ref]
-        piece_name = f"{SIDE_NAMES.get(piece['side'], '')}{piece['square']}{PIECE_NAMES.get(piece['piece'], '棋子')}"
-        verified_position = f"{piece_name}目前位于{piece['square']}。"
-        role = _complete_display_sentence(item.role)
-        key_pieces.append(ProfessionalKeyPiece(
-            side=piece["side"],
-            piece=piece["piece"],
-            square=piece["square"],
-            role=(
-                f"{verified_position}{role}"
-                if role and piece_name not in role
-                else role or verified_position
-            ),
-            futureTask=_complete_display_sentence(item.future_task) or "",
-            evidenceRefs=refs(item.evidence_refs, item.piece_ref),
-        ))
 
     plans = {"white": [], "black": []}
     if strategic_plan_package is not None:
@@ -654,7 +634,7 @@ def resolve_professional_draft(
             rank=line.rank,
             firstMove=line.first_move.san,
             strategyTags=item.strategy_tags,
-            directPurpose=item.direct_purpose,
+            directPurpose=_program_direct_purpose(line),
             opponentResponse=reply,
             continuationPhases=phase(item.ply_refs, item.continuation_explanation, "Stockfish续算"),
             resultingPosition=result_position(line),
@@ -694,15 +674,7 @@ def resolve_professional_draft(
 
     verified_summary = _complete_display_sentence(draft.position_assessment.summary)
     if not verified_summary:
-        named_pieces = "和".join(
-            f"{SIDE_NAMES.get(item.side, '')}{item.square}{PIECE_NAMES.get(item.piece, '棋子')}"
-            for item in key_pieces[:2]
-        )
-        verified_summary = (
-            f"当前由{SIDE_NAMES.get(move.side, move.side)}行棋。{named_pieces}是系统选出的关键棋子。"
-            if named_pieces
-            else f"当前由{SIDE_NAMES.get(move.side, move.side)}行棋。"
-        )
+        verified_summary = f"当前由{SIDE_NAMES.get(move.side, move.side)}行棋。"
 
     analysis = ProfessionalAnalysis(
         complexity=draft.complexity,
@@ -717,7 +689,6 @@ def resolve_professional_draft(
             pawnStructure=pawn_evidence,
         ),
         mainDanger=main_danger,
-        keyPieces=key_pieces,
         plans=ProfessionalPlans(**plans),
         weaknesses=ProfessionalWeaknesses(**weaknesses),
         threats=threats,
@@ -750,6 +721,42 @@ def _complete_display_sentence(value: str) -> str:
     return text if text.endswith(("。", "！", "？", "；", ".", "!", "?")) else f"{text}。"
 
 
+def _program_direct_purpose(line: Any) -> str:
+    """Describe only the verified first ply; do not infer a strategic story from the PV."""
+    first = line.first_move
+    side = "白" if first.piece.startswith("white_") else "黑"
+    piece_key = first.piece.split("_")[-1]
+    piece_name = {
+        "pawn": "兵",
+        "knight": "马",
+        "bishop": "象",
+        "rook": "车",
+        "queen": "后",
+        "king": "王",
+    }.get(piece_key, "棋子")
+    action = f"第一步{side}{piece_name}从{first.from_square}走到{first.to_square}（{first.san}）"
+    effects: list[str] = []
+    if first.capture:
+        captured_key = (first.captured_piece or "").split("_")[-1]
+        captured_name = {
+            "pawn": "兵",
+            "knight": "马",
+            "bishop": "象",
+            "rook": "车",
+            "queen": "后",
+        }.get(captured_key, "对方棋子")
+        effects.append(f"吃掉{captured_name}")
+    if first.promotion:
+        effects.append("完成升变")
+    if first.checkmate:
+        effects.append("形成将杀")
+    elif first.check:
+        effects.append("形成将军")
+    if effects:
+        return f"{action}，并{'、'.join(effects)}。"
+    return f"{action}，作为这条Stockfish路线的起点。"
+
+
 def _evidence_descriptions(move: MoveReview) -> dict[str, str]:
     result = {
         f"evaluation:before:{move.index}": f"实战前评价{move.before.evaluation}",
@@ -774,7 +781,6 @@ def _evidence_descriptions(move: MoveReview) -> dict[str, str]:
             position.king_safety,
             position.pawn_structure,
             position.threats,
-            position.key_pieces,
         ):
             for fact in group:
                 result[fact.id] = fact.description
@@ -859,7 +865,7 @@ def _normalized_level(value: str) -> str:
 
 def _sanitize_draft_event_words(value: Any, key: str = "") -> Any:
     reference_keys = {
-        "evidenceRefs", "pieceRef", "dangerRef", "targetRef", "moveRef",
+        "evidenceRefs", "dangerRef", "targetRef", "moveRef",
         "strongestReplyRef", "lineRef", "plyRefs", "planId",
     }
     if key in reference_keys:
@@ -971,7 +977,7 @@ def _walk_refs(value: Any, path: str = "") -> Iterable[tuple[str, str]]:
         for key, child in value.items():
             current = f"{path}.{key}" if path else key
             if key in {
-                "evidenceRefs", "pieceRef", "dangerRef", "targetRef", "moveRef",
+                "evidenceRefs", "dangerRef", "targetRef", "moveRef",
                 "strongestReplyRef", "lineRef", "plyRefs",
             }:
                 for index, item in enumerate(child if isinstance(child, list) else [child]):
@@ -986,7 +992,7 @@ def _walk_refs(value: Any, path: str = "") -> Iterable[tuple[str, str]]:
 
 def _walk_free_text(value: Any, path: str = "", key: str = "") -> Iterable[tuple[str, str]]:
     reference_keys = {
-        "evidenceRefs", "pieceRef", "dangerRef", "targetRef", "moveRef",
+        "evidenceRefs", "dangerRef", "targetRef", "moveRef",
         "strongestReplyRef", "lineRef", "plyRefs", "planId",
     }
     if key in reference_keys:
@@ -1012,7 +1018,10 @@ def _format_path(location: Iterable[Any]) -> str:
     return path or "$"
 
 
-def _reference_maps(move: MoveReview) -> tuple[dict[str, str], dict[str, str]]:
+def _reference_maps(
+    move: MoveReview,
+    extra_sources: Iterable[str] = (),
+) -> tuple[dict[str, str], dict[str, str]]:
     source_by_alias: dict[str, str] = {}
     alias_by_source: dict[str, str] = {}
 
@@ -1020,12 +1029,6 @@ def _reference_maps(move: MoveReview) -> tuple[dict[str, str], dict[str, str]]:
         if source and source not in alias_by_source:
             source_by_alias[alias] = source
             alias_by_source[source] = alias
-
-    side_counts = {"white": 0, "black": 0}
-    for piece in move.position_facts.pieces:
-        side = piece["side"]
-        side_counts[side] += 1
-        register(f"p:{side[0]}:{side_counts[side]}", piece["id"])
 
     facts = []
     material_id = str(move.position_facts.material.get("id", ""))
@@ -1036,7 +1039,6 @@ def _reference_maps(move: MoveReview) -> tuple[dict[str, str], dict[str, str]]:
         move.position_facts.king_safety,
         move.position_facts.pawn_structure,
         move.position_facts.threats,
-        move.position_facts.key_pieces,
         move.position_facts.immediate_checks,
         move.position_facts.immediate_captures,
     ):
@@ -1058,6 +1060,12 @@ def _reference_maps(move: MoveReview) -> tuple[dict[str, str], dict[str, str]]:
         register("l:a", move.actual_move_line.id)
         for ply_index, ply in enumerate(move.actual_move_line.moves, 1):
             register(f"l:a:p:{ply_index}", ply.id)
+    # The compact prompt uses aliases for established move and route facts, while
+    # newer program-owned facts (for example prepared threats) appear by their
+    # canonical IDs in ChessFactPackage. Accept a canonical ID only when the
+    # server-side validation context has already approved it.
+    for source in [*alias_by_source, *extra_sources]:
+        source_by_alias.setdefault(source, source)
     return source_by_alias, alias_by_source
 
 

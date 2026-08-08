@@ -4,7 +4,7 @@ import json
 import re
 import time
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -17,6 +17,9 @@ from .analysis_report import (
     build_fallback_report,
     validate_report_package,
 )
+
+if TYPE_CHECKING:
+    from .book_case_transfer import BookCaseTransferPackage
 
 class ThreatNarrativeDraft(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -87,7 +90,12 @@ class NarrativeGenerator:
     def configured(self) -> bool:
         return bool(self.api_key)
 
-    async def generate(self, package: AnalysisReportPackage) -> GeneratedAnalysisReport:
+    async def generate(
+        self,
+        package: AnalysisReportPackage,
+        *,
+        book_context: "BookCaseTransferPackage | None" = None,
+    ) -> GeneratedAnalysisReport:
         if not self.configured:
             return _fallback_result(
                 package,
@@ -98,7 +106,7 @@ class NarrativeGenerator:
         try:
             result = await self._chat(
                 system=narrative_system_prompt(),
-                prompt=narrative_user_prompt(package),
+                prompt=narrative_user_prompt(package, book_context=book_context),
             )
         except (httpx.HTTPError, RuntimeError) as exc:
             return _fallback_result(
@@ -220,14 +228,21 @@ def narrative_system_prompt() -> str:
         "威胁只能通过threat_id解释，计划只能通过plan_id解释，路线只能通过route_id解释。"
         "route_explanation只能说明路线是程序验证的参考变化、用于比较选择且不代表必然发生；"
         "不得在路线解释中提到任何棋子、格子、棋步、威胁或计划。"
-        "position_summary只能复述position_overview内已有评价、物质和fact_id事实。"
+        "position_summary和move_explanation中的评价、物质、王位置、易位、"
+        "引擎首选一致性与走法质量全部由程序生成；这两个字段只返回“由程序生成”。"
+        "不得在其他字段重新表述这些硬事实。"
+        "initiative为unknown时，任何字段都不得声称某方拥有主动权。"
         "final_summary的每个观点都必须由source_refs支持。"
         "不得输出引用ID、内部变量名、证据数量或判断过程作为正文。"
         "如果事实不足，将information_insufficient设为true，不要猜测。"
     )
 
 
-def narrative_user_prompt(package: AnalysisReportPackage) -> str:
+def narrative_user_prompt(
+    package: AnalysisReportPackage,
+    *,
+    book_context: "BookCaseTransferPackage | None" = None,
+) -> str:
     payload = json.dumps(
         package.prompt_payload(),
         ensure_ascii=False,
@@ -235,8 +250,8 @@ def narrative_user_prompt(package: AnalysisReportPackage) -> str:
     )
     contract = {
         "information_insufficient": False,
-        "position_summary": "只组织position_overview中的程序事实",
-        "move_explanation": "只解释已有分类和评价变化，不写棋步",
+        "position_summary": "由程序生成",
+        "move_explanation": "由程序生成",
         "threat_explanation": [
             {"threat_id": "existing-threat-id", "explanation": "只解释该威胁"}
         ],
@@ -251,12 +266,31 @@ def narrative_user_prompt(package: AnalysisReportPackage) -> str:
             "source_refs": ["existing-move-error/threat/plan/route-id"],
         },
     }
+    analogous = ""
+    if book_context is not None and book_context.cases:
+        analogous_payload = json.dumps(
+            book_context.prompt_payload(),
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        analogous = f"""
+
+以下是相似棋书局面的人类分析案例，只能帮助选择观察角度和组织思考顺序：
+{analogous_payload}
+
+棋书案例不是事实引用：
+- 不得把其中的棋子、格子、着法、评价、胜负或威胁写入当前局面；
+- 只有当AnalysisReportPackage已有对应事实、threat_id或plan_id时，才可借鉴其解释角度；
+- 棋书中的变化内部事件不得升级为当前事件；
+- final_summary的source_refs仍只能引用AnalysisReportPackage已有ID，不能引用棋书案例ID。
+"""
     return f"""请把以下AnalysisReportPackage事实载荷组织成六段专业复盘文本：
 {payload}
+{analogous}
 
 严格规则：
 1. 只允许解释输入中已有事实，不得分析棋盘或增加观点。
-2. position_summary只能使用position_overview中的程序评价、物质和facts。优势方向必须逐字遵守advantage_side：white只能写白方占优，black只能写黑方占优，equal只能写均势，不能根据move_analysis重新判断。
+2. position_summary和move_explanation必须逐字返回“由程序生成”。评价方向、物质差、双方王位置、易位边界、实战着是否与首选一致、走法质量由程序模板填写；其他字段也不得重新表述这些硬事实。initiative.side为unknown时，禁止使用“主动权”“掌握主动”“攻势完全在某方手中”等结论。
 3. threat_explanation必须按输入threats顺序完整返回；无威胁时必须返回空数组。
 4. plan_explanation必须按输入plans顺序完整返回；无计划时必须返回空数组。
 5. route_explanation必须按输入routes顺序完整返回。每项只能说明“该路线是程序验证的参考变化，用于比较不同选择，并不代表对局必然如此进行”；不得提到棋子、格子、棋步、威胁或计划。
@@ -357,6 +391,8 @@ def validate_narrative_draft(
 
     errors.extend(_validate_advantage_direction(draft.position_summary, package))
     errors.extend(_validate_global_advantage_claims(draft, package))
+    errors.extend(_validate_hard_fact_claims(draft))
+    errors.extend(_validate_initiative_claims(draft, package))
     errors.extend(_validate_threat_claims(draft, package))
     errors.extend(_validate_plan_claims(draft, package))
     errors.extend(_validate_absent_section_claims(draft, package))
@@ -369,8 +405,9 @@ def apply_narrative_draft(
     draft: NarrativeDraft,
 ) -> AnalysisReportPackage:
     report = package.model_copy(deep=True)
-    report.position_overview.text = draft.position_summary.strip()
-    report.move_analysis.text = draft.move_explanation.strip()
+    controlled = build_fallback_report(package)
+    report.position_overview.text = controlled.position_overview.text
+    report.move_analysis.text = controlled.move_analysis.text
     threat_text = {
         item.threat_id: item.explanation.strip()
         for item in draft.threat_explanation
@@ -579,6 +616,60 @@ def _direction_from_cp(value: int | None) -> str:
     if value < -25:
         return "black"
     return "equal"
+
+
+def _validate_hard_fact_claims(draft: NarrativeDraft) -> list[str]:
+    errors: list[str] = []
+    if draft.position_summary.strip() != "由程序生成":
+        errors.append("position_summary必须由程序模板生成")
+    if draft.move_explanation.strip() != "由程序生成":
+        errors.append("move_explanation必须由程序模板生成")
+    prose = "\n".join([
+        *[item.explanation for item in draft.threat_explanation],
+        *[item.explanation for item in draft.plan_explanation],
+        *[item.explanation for item in draft.route_explanation],
+        draft.final_summary.text,
+    ])
+    protected_patterns = (
+        r"(?:白方|黑方).{0,8}(?:多|少)(?:一|两|二)(?:枚|个)?(?:兵|子|子力)",
+        r"物质.{0,8}(?:领先|落后|相等|均衡|平衡|多|少)",
+        r"(?:白王|黑王|白方的王|黑方的王).{0,6}[a-h][1-8]",
+        r"准备易位|已经易位|尚未易位|完成易位|保留易位权|没有易位权",
+        r"与.{0,8}(?:引擎|程序|Stockfish).{0,8}(?:首选|第一选择).{0,5}(?:一致|相同)",
+        r"(?:白方|黑方).{0,5}(?:占优|优势|领先|更好)|均势|势均力敌|完全平衡",
+        r"(?:实战|本步|走法).{0,8}(?:最佳|优秀|好棋|不精确|失误|严重失误)",
+    )
+    if any(re.search(pattern, prose, re.IGNORECASE) for pattern in protected_patterns):
+        errors.append("Narrative不得自由重写程序控制的硬事实")
+    return errors
+
+
+def _validate_initiative_claims(
+    draft: NarrativeDraft,
+    package: AnalysisReportPackage,
+) -> list[str]:
+    prose = "\n".join([
+        draft.position_summary,
+        draft.move_explanation,
+        *[item.explanation for item in draft.threat_explanation],
+        *[item.explanation for item in draft.plan_explanation],
+        *[item.explanation for item in draft.route_explanation],
+        draft.final_summary.text,
+    ])
+    if not re.search(
+        r"主动权|掌握主动|保持主动|占据主动|取得主动|攻势.{0,6}(?:手中|掌控)",
+        prose,
+    ):
+        return []
+    if package.initiative.side == "unknown":
+        return ["主动权证据门禁未通过，Narrative不得输出主动权结论"]
+    expected = "白方" if package.initiative.side == "white" else "黑方"
+    if not re.search(
+        rf"{expected}.{{0,10}}(?:主动权|掌握主动|攻势)",
+        prose,
+    ):
+        return ["Narrative的主动权归属与程序门禁不一致"]
+    return []
 
 
 THREAT_TERMS = {

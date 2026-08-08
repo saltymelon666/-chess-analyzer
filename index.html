@@ -173,6 +173,7 @@
     .review-best { padding:13px 15px; border-radius:var(--radius-md); background:var(--accent-2); border:1px solid #CEE4E1; }
     .review-best strong { color:#39786A; }
     .review-explanation { display:grid; gap:20px; min-width:0; padding:20px; border-radius:var(--radius-md); background:#FFF8E7; border:1px solid #F0DFB2; }
+    .review-explanation[hidden] { display:none; }
     .researcher-head { display:grid; grid-template-columns:58px minmax(0,1fr) auto; gap:12px; align-items:center; }
     .researcher-title { display:block; font-size:22px; line-height:1.3; }
     .review-mascot { width:58px; height:58px; object-fit:contain; border-radius:18px; background:#fff; }
@@ -182,12 +183,13 @@
     .professional-content p,.professional-content li,.professional-summary { white-space:normal; overflow:visible; overflow-wrap:anywhere; word-break:break-word; height:auto; max-height:none; text-overflow:clip; -webkit-line-clamp:unset; line-clamp:unset; }
     .professional-summary { margin:0; padding:16px; border-radius:15px; background:#fff; border:1px solid var(--line); font-size:18px; line-height:1.8; }
     .professional-section { min-width:0; padding:clamp(16px,2vw,22px); border-radius:17px; background:#fff; border:1px solid var(--line); overflow:visible; }
+    .professional-section.book-reference { background:linear-gradient(145deg,#FFFDF5,#F2FAF5); border-color:#BFD8C8; }
+    .book-reference-meta { color:#4D6B61 !important; font-size:15px !important; }
+    .book-reference-original { white-space:pre-wrap !important; }
     .professional-section.danger { background:#FFF5F5; border-color:#F2CECE; }
     .professional-section h4 { display:flex; align-items:center; gap:7px; margin:0 0 14px; font-size:clamp(20px,2vw,25px); line-height:1.35; }
     .professional-section p { margin:9px 0 0; color:var(--text); font-size:clamp(17px,1.45vw,19px); line-height:1.78; }
-    .professional-position-analysis { background:linear-gradient(145deg,#FFFFFF,#FFFCF5); }
-    .professional-position-analysis h4,.professional-plan-section h4 { font-size:clamp(22px,2.2vw,27px); }
-    .professional-position-analysis p { font-size:clamp(18px,1.55vw,20px); line-height:1.85; }
+    .professional-plan-section h4 { font-size:clamp(22px,2.2vw,27px); }
     .professional-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
     .professional-side { min-width:0; padding:12px; border-radius:13px; background:var(--panel-2); }
     .professional-side strong { display:block; margin-bottom:9px; color:#39786A; font-size:18px; }
@@ -209,7 +211,6 @@
     .professional-moves { color:#765109; font-size:clamp(17px,1.4vw,19px); line-height:1.65; font-weight:900; overflow-wrap:anywhere; }
     .professional-route-notes { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-top:9px; }
     .professional-route-note { padding:12px; border-radius:11px; background:#fff; border:1px solid var(--line); }
-    .professional-route-event { margin-top:12px; padding:12px; border-left:4px solid #F4B942; border-radius:10px; background:#FFF8E1; }
     .professional-route-note.risk { background:#FFF8F8; border-color:#F0D6D6; }
     .professional-loading { display:flex; align-items:center; gap:10px; color:#39786A; font-size:13px; font-weight:800; }
     .professional-loading::before { content:""; width:16px; height:16px; border:3px solid #C7E2DE; border-top-color:#39786A; border-radius:50%; animation:professionalSpin .8s linear infinite; }
@@ -226,7 +227,7 @@
       border: 1px solid var(--line); border-radius: var(--radius-md); padding: 16px;
     }
     .metric strong { font-size: 27px; }
-    .muted, .move-pv, .small { color: var(--muted); font-size: 13px; }
+    .muted, .small { color: var(--muted); font-size: 13px; }
     .move-card { background: #fff; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 13px; margin-top: 9px; }
     .move-line { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
     .move-san { font-weight: 900; font-size: 18px; color: #39786A; }
@@ -392,11 +393,11 @@
           <div class="review-fact"><span>走棋前 → 走棋后</span><strong id="moveReviewEval">-</strong></div>
           <div class="review-fact"><span>评价损失</span><strong id="moveReviewLoss">-</strong></div>
         </div>
-        <div class="review-best"><span class="small">Stockfish 更推荐</span><br><strong id="moveReviewBest">-</strong><div class="small" id="moveReviewPv"></div></div>
+        <div class="review-best"><span class="small">Stockfish 更推荐</span><br><strong id="moveReviewBest">-</strong></div>
         <section class="review-explanation" id="professionalAnalysisPanel" aria-live="polite">
           <div class="researcher-head">
             <img class="review-mascot" src="assets/mascot-pawn-detective-v2.png" alt="小兵研究员">
-            <div><strong class="researcher-title">小兵研究员说</strong><span class="professional-status" id="professionalAnalysisStatus">正在整理专业分析……</span></div>
+            <div><strong class="researcher-title">小兵研究员说</strong><span class="professional-status" id="professionalAnalysisStatus">正在生成结论……</span></div>
             <span class="professional-complexity" id="professionalComplexity">分析中</span>
           </div>
           <div class="professional-content" id="professionalAnalysisContent"></div>
@@ -421,10 +422,6 @@
           <div id="aiAnalysisText" class="ai-copy"></div>
           <div id="aiAnalysisLoading" style="display:none;color:var(--muted);">DeepSeek 正在生成分析...</div>
         </div>
-        <details>
-          <summary>原始分析数据</summary>
-          <pre id="rawJson"></pre>
-        </details>
       </div>
     </section>
   </section>
@@ -979,8 +976,6 @@ function updateMoveReviewPanel() {
   document.getElementById("moveReviewBest").textContent = !review.best_move_san
     ? "Stockfish 未返回完整走法"
     : sameMove ? `${review.best_move_san}（实战就是第一选择）` : review.best_move_san;
-  document.getElementById("moveReviewPv").textContent = review.best_pv?.length
-    ? `主要变化：${review.best_pv.slice(0, 7).join(" → ")}` : "主要变化暂不完整";
   loadProfessionalAnalysis(review);
 }
 
@@ -1044,15 +1039,11 @@ function completeProfessionalSentence(value) {
   return units.map(normalizeProfessionalSentence).filter(item => isCompleteProfessionalSentence(item)).map(item => /[。！？；.!?]$/.test(item) ? item : `${item}。`).join("");
 }
 
-function keyPieceInsight(item) {
-  const side = item.side === "white" ? "白方" : "黑方";
-  const pieceNames = { pawn: "兵", knight: "马", bishop: "象", rook: "车", queen: "后", king: "王" };
-  const piece = pieceNames[item.piece] || "棋子";
-  const square = String(item.square || "");
-  const name = `${side}${square}${piece}`;
-  const role = naturalizeProfessionalText(item.role).replaceAll("该棋子", name);
-  if (usefulProfessionalText(role)) return completeProfessionalSentence(role);
-  return `${name}目前位于${square}。`;
+function professionalPositionSentences(value) {
+  const text = completeProfessionalSentence(value);
+  return (text.match(/[^。！？；.!?]+[。！？；.!?]?/g) || [])
+    .map(item => item.trim())
+    .filter(item => item && !item.includes("易位"));
 }
 
 function expandedProfessionalPoint(value, kind) {
@@ -1081,19 +1072,21 @@ function professionalSide(title, items, formatter) {
 }
 
 async function loadProfessionalAnalysis(review) {
+  const panel = document.getElementById("professionalAnalysisPanel");
   const status = document.getElementById("professionalAnalysisStatus");
   const content = document.getElementById("professionalAnalysisContent");
   const cached = professionalAnalysisCache.get(review.index);
   if (cached) {
     renderProfessionalAnalysis(cached);
-    status.textContent = cached.cached ? "已从分析缓存读取" : "专业分析已完成";
+    status.textContent = cached.cached ? "已读取结论" : "结论已生成";
     return;
   }
 
   const token = ++professionalRequestToken;
-  status.textContent = "DeepSeek 正在整理重点";
+  panel.hidden = false;
+  status.textContent = "正在生成结论";
   document.getElementById("professionalComplexity").textContent = "分析中";
-  content.innerHTML = `<div class="professional-loading">正在判断什么值得讲、应该放在哪里……</div>`;
+  content.innerHTML = `<div class="professional-loading">正在生成结论……</div>`;
   try {
     const response = await fetch(apiUrl("/api/professional-analysis"), {
       method: "POST",
@@ -1106,10 +1099,11 @@ async function loadProfessionalAnalysis(review) {
     professionalAnalysisCache.set(review.index, payload);
     if (token !== professionalRequestToken) return;
     renderProfessionalAnalysis(payload);
-    status.textContent = payload.cached ? "已从分析缓存读取" : "专业分析已完成";
+    status.textContent = payload.cached ? "已读取结论" : "结论已生成";
   } catch (error) {
     if (token !== professionalRequestToken) return;
-    content.innerHTML = `<div class="professional-section danger"><h4>暂时无法生成专业分析</h4><p>${escapeHtml(error.message)}</p></div>`;
+    panel.hidden = false;
+    content.innerHTML = `<p class="professional-summary">结论暂时没有生成，请稍后重试。</p>`;
     status.textContent = "可以稍后重试";
   }
 }
@@ -1117,13 +1111,9 @@ async function loadProfessionalAnalysis(review) {
 function renderProfessionalAnalysis(payload) {
   const analysis = payload.analysis || {};
   const position = analysis.positionAssessment || {};
-  const kingSafety = position.kingSafety || {};
-  const danger = analysis.mainDanger || {};
-  const weaknesses = analysis.weaknesses || {};
   const plans = analysis.plans || {};
-  const threats = analysis.threats || [];
-  const played = analysis.playedMoveAnalysis || {};
   const lines = analysis.candidateLines || [];
+  const played = analysis.playedMoveAnalysis || {};
   const complexityNames = { simple: "简单局面", normal: "普通局面", complex: "复杂局面" };
   const tagNames = {
     king_attack: "进攻王", improve_king_safety: "改善王安全", center_break: "中心突破",
@@ -1133,43 +1123,16 @@ function renderProfessionalAnalysis(payload) {
     pawn_break: "兵突破", transition_to_endgame: "转入残局"
   };
   const parts = [];
+  const positionParagraphs = [
+    position.summary,
+    position.pieceActivity?.description,
+    position.pawnStructure?.description
+  ].flatMap(professionalPositionSentences).filter(usefulProfessionalText).filter((item, index, items) => items.indexOf(item) === index);
+  if (positionParagraphs.length) {
+    parts.push(`<section class="professional-section"><h4>双方子力与局面</h4>${positionParagraphs.map(item => `<p>${escapeHtml(item)}</p>`).join("")}</section>`);
+  }
 
   document.getElementById("professionalComplexity").textContent = complexityNames[analysis.complexity] || "专业分析";
-  const currentParagraphs = [];
-  const addCurrentParagraph = value => {
-    if (!usefulProfessionalText(value)) return;
-    const sentence = completeProfessionalSentence(value);
-    if (sentence && !currentParagraphs.includes(sentence)) currentParagraphs.push(sentence);
-  };
-  addCurrentParagraph(position.summary);
-  addCurrentParagraph(position.pieceActivity?.description);
-  addCurrentParagraph(position.pawnStructure?.description);
-  if (!currentParagraphs.length) {
-    const activeReview = currentStep > 0 ? gameReview?.moves?.[currentStep - 1] : null;
-    currentParagraphs.push(`当前由${activeReview?.side === "black" ? "黑方" : "白方"}行棋。`);
-  }
-  parts.push(`<section class="professional-section professional-position-analysis"><h4>当前局面分析</h4>${currentParagraphs.map(item => `<p>${escapeHtml(item)}</p>`).join("")}</section>`);
-
-  const dangerText = completeProfessionalSentence(danger.description);
-  const dangerConsequence = completeProfessionalSentence(danger.consequence);
-  const noConcreteDanger = [dangerText, dangerConsequence].filter(Boolean).some(text =>
-    /^(?:当前局面)?(?:没有|暂无|无)(?:需要优先处理的)?(?:单一)?(?:直接|明显)?(?:危险|威胁)/.test(text)
-    || /^双方子力安全/.test(text)
-  );
-  if (danger.level && danger.level !== "none" && !noConcreteDanger && (dangerText || dangerConsequence)) {
-    parts.push(`<section class="professional-section danger"><h4>最大危险</h4>${dangerText ? `<p>${escapeHtml(dangerText)}</p>` : ""}${dangerConsequence ? `<p><span class="professional-label">如果不处理：</span>${escapeHtml(dangerConsequence)}</p>` : ""}</section>`);
-  }
-
-  const keyPieces = (analysis.keyPieces || []).map(keyPieceInsight).filter(Boolean);
-  if (keyPieces.length) {
-    parts.push(`<section class="professional-section"><h4>关键棋子</h4>${professionalList(keyPieces, item => escapeHtml(item))}</section>`);
-  }
-
-  if (kingSafety.isRelevant) {
-    const kingItems = [kingSafety.white?.description, kingSafety.black?.description].map(completeProfessionalSentence).filter(Boolean);
-    if (kingItems.length) parts.push(`<section class="professional-section danger"><h4>王的安全</h4>${professionalList(kingItems, item => escapeHtml(item))}</section>`);
-  }
-
   const planFormatter = (item, side) => {
     const description = professionalPlanText(item, side);
     if (!description) return "";
@@ -1177,37 +1140,23 @@ function renderProfessionalAnalysis(payload) {
     return `<div class="professional-plan-name">${escapeHtml(tagNames[item.strategyTag] || "局面计划")}</div><p>${escapeHtml(description)}</p>${preparation ? `<p><span class="professional-label">需要先准备：</span>${escapeHtml(preparation)}</p>` : ""}`;
   };
   const planCards = `${professionalSide("白方计划", plans.white, item => planFormatter(item, "白方"))}${professionalSide("黑方计划", plans.black, item => planFormatter(item, "黑方"))}`;
+
   if (planCards) parts.push(`<section class="professional-section professional-plan-section"><h4>🗺 双方计划</h4><div class="professional-grid">${planCards}</div></section>`);
 
-  const weaknessFormatter = item => {
-    const description = completeProfessionalSentence(item.description);
-    const exploitation = completeProfessionalSentence(item.exploitation);
-    return description ? `${escapeHtml(description)}${exploitation ? `<p><span class="professional-label">对手怎样利用：</span>${escapeHtml(exploitation)}</p>` : ""}` : "";
-  };
-  const weaknessCards = `${professionalSide("白方", weaknesses.white, weaknessFormatter)}${professionalSide("黑方", weaknesses.black, weaknessFormatter)}`;
-  if (weaknessCards) parts.push(`<section class="professional-section"><h4>值得关注的弱点</h4><div class="professional-grid">${weaknessCards}</div></section>`);
-
-  const threatItems = threats.map(item => {
-    const description = completeProfessionalSentence(item.description);
-    const consequence = completeProfessionalSentence(item.consequence);
-    return description ? `${escapeHtml(description)}${consequence ? `<p><span class="professional-label">可能后果：</span>${escapeHtml(consequence)}</p>` : ""}` : "";
-  }).filter(Boolean);
-  if (threatItems.length) parts.push(`<section class="professional-section danger"><h4>潜在威胁</h4>${professionalList(threatItems, item => item)}</section>`);
-
-  if (played.move) {
-    const positives = professionalList(played.positiveEffects, item => escapeHtml(expandedProfessionalPoint(item, "positive")));
-    const problems = professionalList(played.problems, item => escapeHtml(expandedProfessionalPoint(item, "problem")));
-    const intention = expandedProfessionalPoint(played.intention, "intention");
-    const phases = (played.continuationPhases || []).map(phase => {
-      const explanation = completeProfessionalSentence(phase.explanation);
+  const activeReview = currentStep > 0 ? gameReview?.moves?.[currentStep - 1] : null;
+  const needsMoveExplanation = Boolean(activeReview && (String(activeReview.quality_symbol || "").includes("?") || ["inaccuracy", "mistake", "blunder"].includes(activeReview.quality_key)));
+  if (needsMoveExplanation) {
+    const verifiedPhases = (played.continuationPhases || []).map(phase => {
       const moves = (phase.moves || []).join(" → ");
+      const explanation = completeProfessionalSentence(phase.explanation);
       return moves ? `<div class="professional-phase"><div class="professional-moves">${escapeHtml(moves)}</div>${explanation ? `<p>${escapeHtml(explanation)}</p>` : ""}</div>` : "";
-    }).join("");
-    parts.push(`<section class="professional-section"><h4>📝 实战走法分析 · ${escapeHtml(played.move)}</h4>${intention ? `<p><span class="professional-label">意图：</span>${escapeHtml(intention)}</p>` : ""}${positives ? `<div class="professional-side"><strong>积极作用</strong>${positives}</div>` : ""}${problems ? `<div class="professional-side"><strong>需要注意</strong>${problems}</div>` : ""}${played.strongestResponse ? `<p><span class="professional-label">对手最强回应：</span>${escapeHtml(played.strongestResponse)}</p>` : ""}${phases}</section>`);
+    }).filter(Boolean).join("");
+    const finalResult = completeProfessionalSentence(played.resultingPosition);
+    const moveText = completeProfessionalSentence(played.move) || activeReview.san;
+    parts.push(`<section class="professional-section move-quality-section"><h4>实战着分析 · ${escapeHtml(moveText)} ${escapeHtml(activeReview.quality_symbol || "")}</h4>${verifiedPhases ? `<p class="professional-label">验证路线</p>${verifiedPhases}` : ""}${finalResult ? `<p class="professional-label">最终战术结果</p><p>${escapeHtml(finalResult)}</p>` : ""}</section>`);
   }
 
   if (lines.length) {
-    const activeReview = currentStep > 0 ? gameReview?.moves?.[currentStep - 1] : null;
     const routeCards = lines.map(line => {
       const tags = (line.strategyTags || []).map(tag => `<span class="professional-tag">${escapeHtml(tagNames[tag] || tag)}</span>`).join("");
       const phases = (line.continuationPhases || []).map(phase => {
@@ -1220,18 +1169,15 @@ function renderProfessionalAnalysis(payload) {
       const notes = advantages || risks ? `<div class="professional-route-notes">${advantages ? `<div class="professional-route-note"><span class="professional-label">优点</span>${advantages}</div>` : ""}${risks ? `<div class="professional-route-note risk"><span class="professional-label">风险</span>${risks}</div>` : ""}</div>` : "";
       const source = (activeReview?.candidate_lines || []).find(item => item.rank === line.rank);
       const evaluation = source?.mate != null ? `将杀 ${source.mate}` : source?.evaluation != null ? `${source.evaluation >= 0 ? "+" : ""}${(source.evaluation / 100).toFixed(2)}` : "";
-      const purpose = expandedProfessionalPoint(line.directPurpose, "purpose");
-      const events = (line.events || []).map(event => {
-        const description = completeProfessionalSentence(event.description);
-        const significance = completeProfessionalSentence(event.significance);
-        return description ? `<div class="professional-route-event">${escapeHtml(description)}${significance ? `<p>${escapeHtml(significance)}</p>` : ""}</div>` : "";
-      }).join("");
-      return `<article class="professional-route"><div class="professional-route-head"><b class="professional-route-title">路线 ${escapeHtml(line.rank)}</b><span class="professional-route-move">第一步：${escapeHtml(line.firstMove)}</span>${evaluation ? `<span class="professional-route-eval">Stockfish评价：${escapeHtml(evaluation)}</span>` : ""}</div><div class="professional-tags">${tags}</div>${purpose ? `<p><span class="professional-label">直接目的：</span>${escapeHtml(purpose)}</p>` : ""}${line.opponentResponse ? `<p><span class="professional-label">对手回应：</span>${escapeHtml(line.opponentResponse)}</p>` : ""}${phases}${events}${notes}</article>`;
+      const purpose = completeProfessionalSentence(line.directPurpose);
+      return `<article class="professional-route"><div class="professional-route-head"><b class="professional-route-title">路线 ${escapeHtml(line.rank)}</b><span class="professional-route-move">第一步：${escapeHtml(line.firstMove)}</span>${evaluation ? `<span class="professional-route-eval">Stockfish评价：${escapeHtml(evaluation)}</span>` : ""}</div><div class="professional-tags">${tags}</div>${purpose ? `<p><span class="professional-label">第一步作用：</span>${escapeHtml(purpose)}</p>` : ""}${line.opponentResponse ? `<p><span class="professional-label">对手回应：</span>${escapeHtml(line.opponentResponse)}</p>` : ""}${phases}${notes}</article>`;
     }).join("");
     parts.push(`<section class="professional-section"><h4>⭐ Stockfish 三条研究路线</h4><div class="professional-routes">${routeCards}</div></section>`);
   }
 
-  document.getElementById("professionalAnalysisContent").innerHTML = parts.join("") || `<p class="professional-summary">当前没有需要额外展开的专业重点。</p>`;
+  const panel = document.getElementById("professionalAnalysisPanel");
+  panel.hidden = false;
+  document.getElementById("professionalAnalysisContent").innerHTML = parts.join("") || `<p class="professional-summary">局面分析暂时没有生成。</p>`;
 }
 
 function formatStructuredExplanation(details) {
@@ -1343,10 +1289,8 @@ function showResult(reviewData) {
         <div><span class="small">#${i + 1}</span> <span class="move-san">${m.san}</span></div>
         <strong>${scoreStr}</strong>
       </div>
-      <div class="move-pv">${(m.pv || []).slice(0, 6).join(" → ") || "-"}</div>
     </div>`;
   }).join("");
-  document.getElementById("rawJson").textContent = JSON.stringify(reviewData, null, 2);
 
   const aiBox = document.getElementById("aiAnalysis");
   const aiText = document.getElementById("aiAnalysisText");

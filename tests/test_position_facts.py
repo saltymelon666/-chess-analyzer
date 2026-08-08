@@ -38,7 +38,6 @@ def test_representative_positions_only_return_real_squares_and_evidence(fen: str
         result.king_safety,
         result.pawn_structure,
         result.threats,
-        result.key_pieces,
     ):
         for item in group:
             assert item.evidence

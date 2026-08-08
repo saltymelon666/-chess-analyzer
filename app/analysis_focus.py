@@ -80,7 +80,6 @@ class AnalysisFocus:
     weaknesses: dict[str, tuple[FocusFact, ...]]
     global_threats: tuple[FocusFact, ...]
     line_events: dict[int, tuple[FocusFact, ...]]
-    key_piece_facts: dict[str, tuple[FocusFact, ...]]
     display_sections: tuple[str, ...]
     counters: dict[str, int] = field(default_factory=dict)
 
@@ -101,7 +100,6 @@ def select_analysis_focus(move: MoveReview) -> AnalysisFocus:
         *move.position_facts.king_safety,
         *move.position_facts.pawn_structure,
         *move.position_facts.threats,
-        *move.position_facts.key_pieces,
     ]
     facts: list[FocusFact] = []
     counters = {
@@ -119,7 +117,6 @@ def select_analysis_focus(move: MoveReview) -> AnalysisFocus:
     weaknesses: dict[str, list[FocusFact]] = {"white": [], "black": []}
     line_events: dict[int, list[FocusFact]] = {1: [], 2: [], 3: []}
     global_threats: list[FocusFact] = []
-    key_piece_facts: dict[str, list[FocusFact]] = {"white": [], "black": []}
 
     for raw in raw_facts:
         if raw.category in WEAKNESS_CATEGORIES:
@@ -151,7 +148,7 @@ def select_analysis_focus(move: MoveReview) -> AnalysisFocus:
             continue
 
         if raw.category.startswith("immediate_") or raw.category not in {
-            "pv_key_piece", "active_piece", "central_piece", "verified_outpost",
+            "active_piece", "central_piece", "verified_outpost",
             "important_defender", "closed_center", "passed_pawn", "central_pawn",
             "open_file", "half_open_file",
         }:
@@ -163,8 +160,6 @@ def select_analysis_focus(move: MoveReview) -> AnalysisFocus:
 
         scored = _score_strategic_fact(raw, route_usage)
         facts.append(scored)
-        if raw.category == "pv_key_piece" and scored.display and raw.side in key_piece_facts:
-            key_piece_facts[raw.side].append(scored)
 
     # Legal move facts have stronger, current-position scope than narrative route facts.
     for item in move.position_facts.immediate_checks:
@@ -214,9 +209,6 @@ def select_analysis_focus(move: MoveReview) -> AnalysisFocus:
 
     for side in ("white", "black"):
         weaknesses[side] = _deduplicate_focus(weaknesses[side])[:2]
-        key_piece_facts[side] = sorted(
-            key_piece_facts[side], key=lambda item: (-item.importance_score, item.id)
-        )[:2]
     counters["selectedWeaknesses"] = sum(len(items) for items in weaknesses.values())
 
     global_threats = _deduplicate_focus(global_threats)[:2]
@@ -226,7 +218,7 @@ def select_analysis_focus(move: MoveReview) -> AnalysisFocus:
 
     selected_ids = {
         item.id
-        for values in [*weaknesses.values(), *line_events.values(), *key_piece_facts.values()]
+        for values in [*weaknesses.values(), *line_events.values()]
         for item in values
     } | {item.id for item in global_threats}
     position_features = sorted(
@@ -259,14 +251,13 @@ def select_analysis_focus(move: MoveReview) -> AnalysisFocus:
         sections.append("kingSafety")
     if any(weaknesses.values()):
         sections.append("weaknesses")
-    sections.extend(("keyPieces", "plans", "playedMoveAnalysis", "candidateLines", "comparison"))
+    sections.extend(("playedMoveAnalysis", "plans", "candidateLines", "comparison"))
     return AnalysisFocus(
         facts=tuple(finalized),
         king_safety_relevant_sides=frozenset(king_sides),
         weaknesses={side: tuple(items) for side, items in weaknesses.items()},
         global_threats=tuple(global_threats),
         line_events={rank: tuple(items) for rank, items in line_events.items()},
-        key_piece_facts={side: tuple(items) for side, items in key_piece_facts.items()},
         display_sections=tuple(sections),
         counters=counters,
     )
@@ -462,10 +453,7 @@ def _score_current_threat(fact: EvidenceFact, move: MoveReview) -> FocusFact:
 def _score_strategic_fact(fact: EvidenceFact, route_usage: dict[str, Any]) -> FocusFact:
     square = fact.squares[0] if fact.squares else ""
     appearances = route_usage["origin_counts"].get((fact.side, square), 0)
-    if fact.category == "pv_key_piece":
-        score = 4 if appearances >= 3 else 3 if appearances >= 2 else 2
-        section = "keyPieces"
-    elif fact.category in {"closed_center", "verified_outpost", "important_defender"}:
+    if fact.category in {"closed_center", "verified_outpost", "important_defender"}:
         score = 3
         section = "positionAssessment"
     elif fact.category == "passed_pawn" and square and square[1] in {"2", "3", "6", "7"}:
@@ -481,7 +469,7 @@ def _score_strategic_fact(fact: EvidenceFact, route_usage: dict[str, Any]) -> Fo
     return FocusFact(
         id=fact.id,
         scope="current_position",
-        category="key_piece" if fact.category == "pv_key_piece" else "position_feature",
+        category="position_feature",
         description=fact.description,
         importance_score=score,
         decision_impact=(

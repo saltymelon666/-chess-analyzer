@@ -4,14 +4,20 @@ import argparse
 import asyncio
 import json
 import re
+import sys
 import time
 from pathlib import Path
 from typing import Any
 
 from fastapi.testclient import TestClient
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from app import api
 from app.analysis_focus import select_analysis_focus
+from app.chess_facts import build_move_fact_package
 from app.config import load_settings
 from app.engine import StockfishService
 from app.game_review import analyze_pgn
@@ -21,6 +27,7 @@ from app.professional_analysis import (
     professional_cache_key,
 )
 from app.professional_validation import build_validation_context, validate_professional_analysis
+from app.threat_analysis import ThreatAnalyzer, assess_initiative
 
 
 DEFAULT_FIXTURES = Path("tests/fixtures/professional_validation_positions.json")
@@ -74,14 +81,6 @@ def focus_summary(move: Any) -> dict[str, Any]:
             for item in items
         ),
     }
-
-
-def valid_key_pieces(move: Any, analysis: Any) -> bool:
-    pieces = {
-        (item["side"], item["piece"], item["square"])
-        for item in move.position_facts.pieces
-    }
-    return all((item.side, item.piece, item.square) in pieces and item.evidence_refs for item in analysis.key_pieces)
 
 
 def valid_plans(analysis: Any, allowed_refs: set[str]) -> bool:
@@ -180,9 +179,24 @@ async def run_suite(
             **focus_summary(move),
         }
         try:
-            generated = await service.analyze(move, diagnostics=diagnostics)
+            fact_package = build_move_fact_package(move)
+            threat_package = await ThreatAnalyzer().analyze(
+                fact_package,
+                stockfish=engine,
+            )
+            generated = await service.analyze(
+                move,
+                diagnostics=diagnostics,
+                threat_package=threat_package,
+            )
             elapsed_ms = round((time.perf_counter() - started) * 1000)
-            context = build_validation_context(move, generated.analysis.complexity)
+            initiative = assess_initiative(fact_package, threat_package)
+            context = build_validation_context(
+                move,
+                generated.analysis.complexity,
+                initiative_side=initiative.side,
+                threat_package=threat_package,
+            )
             final_errors = validate_professional_analysis(generated.analysis, context)
             accepted_attempt = next((item.attempt for item in diagnostics if item.accepted), None)
             output_text = json.dumps(generated.analysis.model_dump(by_alias=True), ensure_ascii=False)
@@ -200,7 +214,6 @@ async def run_suite(
                 "validationMs": generated.usage.validation_ms,
                 "postprocessMs": generated.usage.postprocess_ms,
                 "chineseChars": len(re.findall(r"[\u4e00-\u9fff]", output_text)),
-                "keyPiecesCorrect": valid_key_pieces(move, generated.analysis),
                 "dangerHasEvidence": valid_danger(generated.analysis, context.allowed_evidence_ids),
                 "plansHaveEvidence": valid_plans(generated.analysis, context.allowed_evidence_ids),
                 "threeRoutesValid": valid_routes(move, generated.analysis),
@@ -240,7 +253,6 @@ async def run_suite(
                 "totalTokens": sum(item.total_tokens or 0 for item in diagnostics),
                 "firstLatencyMs": diagnostics[0].network_ms if diagnostics else None,
                 "totalLatencyMs": round((time.perf_counter() - started) * 1000),
-                "keyPiecesCorrect": False,
                 "dangerHasEvidence": False,
                 "plansHaveEvidence": False,
                 "threeRoutesValid": False,
@@ -282,7 +294,7 @@ def render_report(results: list[dict[str, Any]], cache_ms: int | None, model: st
     for item in results:
         table_rows.append(
             "| {id} | {complexity} | {first} | {retry} | {fallback} | {input} | {output} | "
-            "{latency} | {pieces} | {danger} | {plans} | {routes} |".format(
+            "{latency} | {danger} | {plans} | {routes} |".format(
                 id=item["id"],
                 complexity=item["complexity"],
                 first="是" if item["firstPass"] else "否",
@@ -291,7 +303,6 @@ def render_report(results: list[dict[str, Any]], cache_ms: int | None, model: st
                 input=item.get("inputTokens") or "—",
                 output=item.get("outputTokens") or "—",
                 latency=item.get("firstLatencyMs") or "—",
-                pieces="是" if item["keyPiecesCorrect"] else "否",
                 danger="是" if item["dangerHasEvidence"] else "否",
                 plans="是" if item["plansHaveEvidence"] else "否",
                 routes="是" if item["threeRoutesValid"] else "否",
@@ -366,12 +377,11 @@ def render_report(results: list[dict[str, Any]], cache_ms: int | None, model: st
 旧版复杂局面输入为 80,620 Token，首次响应 75,136ms；两次原始输出均失败并使用安全回退。失败类型包括：
 
 - 第一次：`candidateLines[*].firstMove / continuationPhases[*].moves` 出现不属于三条 Stockfish 路线的 `Bxh7+`、`Qxc3`、`Qxh2+`；`playedMoveAnalysis.positiveEffects` 把实战走法写成未验证吃子；`weaknesses.white[*].evidenceRefs` 引用了错误一方；`mainDanger` 缺少来源格和目标格，且描述了事实包中不存在的将军；正文 2,259 字，超过复杂局面上限。
-- 第二次：多个 `evidenceRefs` 使用不存在的 `centipawnLoss:103` 和 `fact:move-1-after:key:pv_key_piece:black:c7`；候选路线中出现 `Bxe7`、`Bxh7+`、`Qxh2+`、`Rxb7`、`Rxh6`；`keyPieces[*]` 声称存在局面前 FEN 中没有的 `white_bishop@g5`；`weaknesses.white[*].evidenceRefs` 黑白说反；再次描述不存在的将军；正文 2,260 字。
+- 第二次：多个 `evidenceRefs` 使用不存在的引用；候选路线中出现 `Bxe7`、`Bxh7+`、`Qxh2+`、`Rxb7`、`Rxh6`；`weaknesses.white[*].evidenceRefs` 黑白说反；再次描述不存在的将军；正文 2,260 字。
 - 安全回退曾把结果 FEN 的一段 `p7` 误判成棋盘格；现已停止把结果 FEN写入正文，只保留结构化结果事实。
 
 ## 优化方案
 
-- 棋子改用固定的 `keyPieces.white.pieceRef` / `keyPieces.black.pieceRef`。
 - 候选路线只返回 `lineRef`；完整 PV 只返回已有 `plyRefs`，SAN、UCI、格子、棋子与结果局面由后端填充。
 - 提示词不发送 FEN；仅发送 ChessFactPackage 版本/来源清单、去重棋子与事实引用、实战走法引用和三条最多 10 半回合的已验证路线；不发送 legalMoves、positionAfter、重复 evidence 字典、调试字段或整盘历史。
 - 保持严格校验：未知 ID、事实包外格子、路线外 SAN、任何 UCI、黑白颠倒、缺证据结论仍会拒绝。
@@ -379,8 +389,8 @@ def render_report(results: list[dict[str, Any]], cache_ms: int | None, model: st
 
 ## 15 局面结果
 
-| 局面 | 复杂度 | 首次通过 | 重试 | 回退 | 输入Token | 输出Token | 首次耗时ms | 关键棋子正确 | 最大危险有证据 | 双方计划有证据 | 三条路线有效 |
-|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 局面 | 复杂度 | 首次通过 | 重试 | 回退 | 输入Token | 输出Token | 首次耗时ms | 最大危险有证据 | 双方计划有证据 | 三条路线有效 |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 {chr(10).join(table_rows)}
 
 ## 汇总
