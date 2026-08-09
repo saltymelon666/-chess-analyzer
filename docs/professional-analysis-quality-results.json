@@ -59,15 +59,15 @@
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 6854,
-    "outputTokens": 1789,
-    "totalTokens": 8643,
-    "firstLatencyMs": 18405,
-    "totalLatencyMs": 18977,
-    "networkMs": 18405,
-    "validationMs": 11,
-    "postprocessMs": 42,
-    "chineseChars": 845,
+    "inputTokens": 6906,
+    "outputTokens": 1580,
+    "totalTokens": 8486,
+    "firstLatencyMs": 12949,
+    "totalLatencyMs": 13388,
+    "networkMs": 12949,
+    "validationMs": 10,
+    "postprocessMs": 25,
+    "chineseChars": 862,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
     "threeRoutesValid": true,
@@ -87,7 +87,7 @@
       },
       {
         "attempt": 1,
-        "path": "candidateLines[1].risks[1]",
+        "path": "candidateLines[2].risks[0]",
         "category": "硬事实保护",
         "message": "已整句重建越界的程序专属结论"
       }
@@ -150,15 +150,15 @@
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 6060,
-    "outputTokens": 1635,
-    "totalTokens": 7695,
-    "firstLatencyMs": 17114,
-    "totalLatencyMs": 17215,
-    "networkMs": 17114,
-    "validationMs": 12,
-    "postprocessMs": 62,
-    "chineseChars": 908,
+    "inputTokens": 6112,
+    "outputTokens": 1871,
+    "totalTokens": 7983,
+    "firstLatencyMs": 15713,
+    "totalLatencyMs": 15763,
+    "networkMs": 15713,
+    "validationMs": 6,
+    "postprocessMs": 25,
+    "chineseChars": 899,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
     "threeRoutesValid": true,
@@ -166,7 +166,13 @@
     "normalizations": [
       {
         "attempt": 1,
-        "path": "candidateLines[1].risks[0]",
+        "path": "playedMoveAnalysis.continuationPhases[0].explanation",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      },
+      {
+        "attempt": 1,
+        "path": "candidateLines[1].continuationPhases[0].explanation",
         "category": "硬事实保护",
         "message": "已整句重建越界的程序专属结论"
       }
@@ -238,15 +244,15 @@
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 7522,
-    "outputTokens": 1782,
-    "totalTokens": 9304,
-    "firstLatencyMs": 18592,
-    "totalLatencyMs": 19216,
-    "networkMs": 18592,
-    "validationMs": 8,
-    "postprocessMs": 67,
-    "chineseChars": 831,
+    "inputTokens": 7574,
+    "outputTokens": 1656,
+    "totalTokens": 9230,
+    "firstLatencyMs": 13916,
+    "totalLatencyMs": 14367,
+    "networkMs": 13916,
+    "validationMs": 4,
+    "postprocessMs": 13,
+    "chineseChars": 815,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
     "threeRoutesValid": true,
@@ -260,7 +266,19 @@
       },
       {
         "attempt": 1,
-        "path": "comparison.whyFirstLineIsBest",
+        "path": "candidateLines[1].advantages[1]",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      },
+      {
+        "attempt": 1,
+        "path": "candidateLines[1].risks[0]",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      },
+      {
+        "attempt": 1,
+        "path": "candidateLines[2].risks[0]",
         "category": "硬事实保护",
         "message": "已整句重建越界的程序专属结论"
       }
@@ -338,33 +356,20 @@
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 8372,
-    "outputTokens": 2143,
-    "totalTokens": 10515,
-    "firstLatencyMs": 21585,
-    "totalLatencyMs": 22329,
-    "networkMs": 21585,
-    "validationMs": 15,
-    "postprocessMs": 72,
-    "chineseChars": 1507,
+    "inputTokens": 8424,
+    "outputTokens": 1773,
+    "totalTokens": 10197,
+    "firstLatencyMs": 15372,
+    "totalLatencyMs": 15818,
+    "networkMs": 15372,
+    "validationMs": 9,
+    "postprocessMs": 21,
+    "chineseChars": 1447,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
     "threeRoutesValid": true,
     "issues": [],
-    "normalizations": [
-      {
-        "attempt": 1,
-        "path": "candidateLines[0].continuationPhases[0].explanation",
-        "category": "硬事实保护",
-        "message": "已整句重建越界的程序专属结论"
-      },
-      {
-        "attempt": 1,
-        "path": "candidateLines[1].risks[0]",
-        "category": "硬事实保护",
-        "message": "已整句重建越界的程序专属结论"
-      }
-    ],
+    "normalizations": [],
     "finalErrors": []
   },
   {
@@ -440,15 +445,15 @@
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 8652,
-    "outputTokens": 1959,
-    "totalTokens": 10611,
-    "firstLatencyMs": 19360,
-    "totalLatencyMs": 19928,
-    "networkMs": 19360,
-    "validationMs": 15,
-    "postprocessMs": 20,
-    "chineseChars": 1510,
+    "inputTokens": 8704,
+    "outputTokens": 1815,
+    "totalTokens": 10519,
+    "firstLatencyMs": 15756,
+    "totalLatencyMs": 16178,
+    "networkMs": 15756,
+    "validationMs": 9,
+    "postprocessMs": 9,
+    "chineseChars": 1445,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
     "threeRoutesValid": true,
@@ -456,7 +461,7 @@
     "normalizations": [
       {
         "attempt": 1,
-        "path": "mainDanger.description",
+        "path": "mainDanger.consequence",
         "category": "硬事实保护",
         "message": "已整句重建越界的程序专属结论"
       },
@@ -468,13 +473,7 @@
       },
       {
         "attempt": 1,
-        "path": "candidateLines[1].risks[1]",
-        "category": "硬事实保护",
-        "message": "已整句重建越界的程序专属结论"
-      },
-      {
-        "attempt": 1,
-        "path": "comparison.whyFirstLineIsBest",
+        "path": "candidateLines[0].continuationPhases[0].explanation",
         "category": "硬事实保护",
         "message": "已整句重建越界的程序专属结论"
       }
@@ -557,15 +556,15 @@
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 8179,
-    "outputTokens": 1876,
-    "totalTokens": 10055,
-    "firstLatencyMs": 21730,
-    "totalLatencyMs": 22478,
-    "networkMs": 21730,
-    "validationMs": 10,
-    "postprocessMs": 21,
-    "chineseChars": 1499,
+    "inputTokens": 8231,
+    "outputTokens": 1531,
+    "totalTokens": 9762,
+    "firstLatencyMs": 13267,
+    "totalLatencyMs": 13791,
+    "networkMs": 13267,
+    "validationMs": 8,
+    "postprocessMs": 8,
+    "chineseChars": 1381,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
     "threeRoutesValid": true,
@@ -573,7 +572,13 @@
     "normalizations": [
       {
         "attempt": 1,
-        "path": "candidateLines[0].advantages[0]",
+        "path": "candidateLines[0].advantages[1]",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      },
+      {
+        "attempt": 1,
+        "path": "candidateLines[1].risks[0]",
         "category": "硬事实保护",
         "message": "已整句重建越界的程序专属结论"
       },
@@ -664,15 +669,15 @@
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 7274,
-    "outputTokens": 1625,
-    "totalTokens": 8899,
-    "firstLatencyMs": 17011,
-    "totalLatencyMs": 17074,
-    "networkMs": 17011,
-    "validationMs": 14,
-    "postprocessMs": 16,
-    "chineseChars": 1324,
+    "inputTokens": 7326,
+    "outputTokens": 1673,
+    "totalTokens": 8999,
+    "firstLatencyMs": 14782,
+    "totalLatencyMs": 14814,
+    "networkMs": 14782,
+    "validationMs": 8,
+    "postprocessMs": 7,
+    "chineseChars": 1442,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
     "threeRoutesValid": true,
@@ -680,25 +685,7 @@
     "normalizations": [
       {
         "attempt": 1,
-        "path": "playedMoveAnalysis.continuationPhases[0].explanation",
-        "category": "硬事实保护",
-        "message": "已整句重建越界的程序专属结论"
-      },
-      {
-        "attempt": 1,
-        "path": "candidateLines[0].continuationPhases[0].explanation",
-        "category": "硬事实保护",
-        "message": "已整句重建越界的程序专属结论"
-      },
-      {
-        "attempt": 1,
         "path": "candidateLines[1].continuationPhases[0].explanation",
-        "category": "硬事实保护",
-        "message": "已整句重建越界的程序专属结论"
-      },
-      {
-        "attempt": 1,
-        "path": "candidateLines[2].continuationPhases[0].explanation",
         "category": "硬事实保护",
         "message": "已整句重建越界的程序专属结论"
       }
@@ -776,20 +763,39 @@
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 7646,
-    "outputTokens": 1604,
-    "totalTokens": 9250,
-    "firstLatencyMs": 21131,
-    "totalLatencyMs": 21711,
-    "networkMs": 21131,
-    "validationMs": 23,
-    "postprocessMs": 34,
-    "chineseChars": 1421,
+    "inputTokens": 7698,
+    "outputTokens": 1812,
+    "totalTokens": 9510,
+    "firstLatencyMs": 16530,
+    "totalLatencyMs": 16974,
+    "networkMs": 16530,
+    "validationMs": 8,
+    "postprocessMs": 9,
+    "chineseChars": 1506,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
     "threeRoutesValid": true,
     "issues": [],
-    "normalizations": [],
+    "normalizations": [
+      {
+        "attempt": 1,
+        "path": "mainDanger.description",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      },
+      {
+        "attempt": 1,
+        "path": "playedMoveAnalysis.continuationPhases[0].explanation",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      },
+      {
+        "attempt": 1,
+        "path": "candidateLines[0].advantages[0]",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      }
+    ],
     "finalErrors": []
   },
   {
@@ -854,15 +860,15 @@
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 5744,
-    "outputTokens": 1828,
-    "totalTokens": 7572,
-    "firstLatencyMs": 22083,
-    "totalLatencyMs": 22657,
-    "networkMs": 22083,
-    "validationMs": 10,
-    "postprocessMs": 15,
-    "chineseChars": 1295,
+    "inputTokens": 5796,
+    "outputTokens": 1703,
+    "totalTokens": 7499,
+    "firstLatencyMs": 14591,
+    "totalLatencyMs": 15026,
+    "networkMs": 14591,
+    "validationMs": 4,
+    "postprocessMs": 4,
+    "chineseChars": 1279,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
     "threeRoutesValid": true,
@@ -870,13 +876,13 @@
     "normalizations": [
       {
         "attempt": 1,
-        "path": "playedMoveAnalysis.continuationPhases[0].explanation",
+        "path": "candidateLines[1].advantages[0]",
         "category": "硬事实保护",
         "message": "已整句重建越界的程序专属结论"
       },
       {
         "attempt": 1,
-        "path": "candidateLines[1].continuationPhases[0].explanation",
+        "path": "candidateLines[2].risks[0]",
         "category": "硬事实保护",
         "message": "已整句重建越界的程序专属结论"
       }
@@ -950,24 +956,49 @@
       ]
     },
     "meaninglessWeaknessStillDisplayed": false,
-    "firstPass": false,
+    "firstPass": true,
     "retried": false,
-    "fallback": true,
+    "fallback": false,
     "finalValid": true,
-    "inputTokens": null,
-    "outputTokens": null,
-    "totalTokens": null,
-    "firstLatencyMs": 11143,
-    "totalLatencyMs": 11143,
-    "networkMs": 0,
+    "inputTokens": 7744,
+    "outputTokens": 1603,
+    "totalTokens": 9347,
+    "firstLatencyMs": 13697,
+    "totalLatencyMs": 14115,
+    "networkMs": 13697,
     "validationMs": 7,
-    "postprocessMs": 28,
-    "chineseChars": 1368,
+    "postprocessMs": 9,
+    "chineseChars": 1484,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
     "threeRoutesValid": true,
     "issues": [],
-    "normalizations": [],
+    "normalizations": [
+      {
+        "attempt": 1,
+        "path": "plans.white[0].description",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      },
+      {
+        "attempt": 1,
+        "path": "candidateLines[1].advantages[1]",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      },
+      {
+        "attempt": 1,
+        "path": "candidateLines[2].risks[1]",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      },
+      {
+        "attempt": 1,
+        "path": "comparison.whyFirstLineIsBest",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      }
+    ],
     "finalErrors": []
   },
   {
@@ -1033,15 +1064,15 @@
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 7079,
-    "outputTokens": 1473,
-    "totalTokens": 8552,
-    "firstLatencyMs": 18353,
-    "totalLatencyMs": 18971,
-    "networkMs": 18353,
-    "validationMs": 12,
-    "postprocessMs": 17,
-    "chineseChars": 1271,
+    "inputTokens": 7131,
+    "outputTokens": 1551,
+    "totalTokens": 8682,
+    "firstLatencyMs": 12784,
+    "totalLatencyMs": 13239,
+    "networkMs": 12784,
+    "validationMs": 7,
+    "postprocessMs": 9,
+    "chineseChars": 1276,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
     "threeRoutesValid": true,
@@ -1049,43 +1080,7 @@
     "normalizations": [
       {
         "attempt": 1,
-        "path": "playedMoveAnalysis.continuationPhases[0].explanation",
-        "category": "硬事实保护",
-        "message": "已整句重建越界的程序专属结论"
-      },
-      {
-        "attempt": 1,
-        "path": "candidateLines[0].risks[1]",
-        "category": "硬事实保护",
-        "message": "已整句重建越界的程序专属结论"
-      },
-      {
-        "attempt": 1,
         "path": "candidateLines[1].advantages[0]",
-        "category": "硬事实保护",
-        "message": "已整句重建越界的程序专属结论"
-      },
-      {
-        "attempt": 1,
-        "path": "candidateLines[1].advantages[1]",
-        "category": "硬事实保护",
-        "message": "已整句重建越界的程序专属结论"
-      },
-      {
-        "attempt": 1,
-        "path": "candidateLines[1].risks[1]",
-        "category": "硬事实保护",
-        "message": "已整句重建越界的程序专属结论"
-      },
-      {
-        "attempt": 1,
-        "path": "candidateLines[1].continuationPhases[0].explanation",
-        "category": "硬事实保护",
-        "message": "已整句重建越界的程序专属结论"
-      },
-      {
-        "attempt": 1,
-        "path": "candidateLines[2].advantages[0]",
         "category": "硬事实保护",
         "message": "已整句重建越界的程序专属结论"
       },
@@ -1154,27 +1149,20 @@
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 5406,
-    "outputTokens": 1439,
-    "totalTokens": 6845,
-    "firstLatencyMs": 13315,
-    "totalLatencyMs": 13366,
-    "networkMs": 13315,
-    "validationMs": 7,
-    "postprocessMs": 25,
-    "chineseChars": 873,
+    "inputTokens": 5458,
+    "outputTokens": 1488,
+    "totalTokens": 6946,
+    "firstLatencyMs": 12393,
+    "totalLatencyMs": 12437,
+    "networkMs": 12393,
+    "validationMs": 6,
+    "postprocessMs": 19,
+    "chineseChars": 881,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
     "threeRoutesValid": true,
     "issues": [],
-    "normalizations": [
-      {
-        "attempt": 1,
-        "path": "candidateLines[2].advantages[1]",
-        "category": "硬事实保护",
-        "message": "已整句重建越界的程序专属结论"
-      }
-    ],
+    "normalizations": [],
     "finalErrors": []
   },
   {
@@ -1239,15 +1227,15 @@
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 5802,
-    "outputTokens": 1441,
-    "totalTokens": 7243,
-    "firstLatencyMs": 18840,
-    "totalLatencyMs": 19458,
-    "networkMs": 18840,
-    "validationMs": 9,
-    "postprocessMs": 12,
-    "chineseChars": 1196,
+    "inputTokens": 5854,
+    "outputTokens": 1733,
+    "totalTokens": 7587,
+    "firstLatencyMs": 15267,
+    "totalLatencyMs": 15706,
+    "networkMs": 15267,
+    "validationMs": 6,
+    "postprocessMs": 7,
+    "chineseChars": 1359,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
     "threeRoutesValid": true,
@@ -1324,15 +1312,15 @@
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 7642,
-    "outputTokens": 1470,
-    "totalTokens": 9112,
-    "firstLatencyMs": 19674,
-    "totalLatencyMs": 20214,
-    "networkMs": 19674,
-    "validationMs": 13,
-    "postprocessMs": 15,
-    "chineseChars": 1332,
+    "inputTokens": 7694,
+    "outputTokens": 1411,
+    "totalTokens": 9105,
+    "firstLatencyMs": 11591,
+    "totalLatencyMs": 12014,
+    "networkMs": 11591,
+    "validationMs": 4,
+    "postprocessMs": 4,
+    "chineseChars": 1181,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
     "threeRoutesValid": true,
@@ -1340,19 +1328,25 @@
     "normalizations": [
       {
         "attempt": 1,
-        "path": "candidateLines[0].advantages[1]",
+        "path": "playedMoveAnalysis.continuationPhases[0].explanation",
         "category": "硬事实保护",
         "message": "已整句重建越界的程序专属结论"
       },
       {
         "attempt": 1,
-        "path": "candidateLines[1].risks[1]",
+        "path": "candidateLines[0].continuationPhases[0].explanation",
         "category": "硬事实保护",
         "message": "已整句重建越界的程序专属结论"
       },
       {
         "attempt": 1,
         "path": "candidateLines[1].continuationPhases[0].explanation",
+        "category": "硬事实保护",
+        "message": "已整句重建越界的程序专属结论"
+      },
+      {
+        "attempt": 1,
+        "path": "candidateLines[2].risks[0]",
         "category": "硬事实保护",
         "message": "已整句重建越界的程序专属结论"
       }
@@ -1420,45 +1414,20 @@
     "retried": false,
     "fallback": false,
     "finalValid": true,
-    "inputTokens": 6454,
-    "outputTokens": 1604,
-    "totalTokens": 8058,
-    "firstLatencyMs": 19716,
-    "totalLatencyMs": 20261,
-    "networkMs": 19716,
-    "validationMs": 13,
-    "postprocessMs": 17,
-    "chineseChars": 1267,
+    "inputTokens": 6506,
+    "outputTokens": 1367,
+    "totalTokens": 7873,
+    "firstLatencyMs": 12390,
+    "totalLatencyMs": 12846,
+    "networkMs": 12390,
+    "validationMs": 6,
+    "postprocessMs": 9,
+    "chineseChars": 1063,
     "dangerHasEvidence": true,
     "plansHaveEvidence": true,
     "threeRoutesValid": true,
     "issues": [],
-    "normalizations": [
-      {
-        "attempt": 1,
-        "path": "candidateLines[1].advantages[1]",
-        "category": "硬事实保护",
-        "message": "已整句重建越界的程序专属结论"
-      },
-      {
-        "attempt": 1,
-        "path": "candidateLines[1].risks[1]",
-        "category": "硬事实保护",
-        "message": "已整句重建越界的程序专属结论"
-      },
-      {
-        "attempt": 1,
-        "path": "candidateLines[2].advantages[1]",
-        "category": "硬事实保护",
-        "message": "已整句重建越界的程序专属结论"
-      },
-      {
-        "attempt": 1,
-        "path": "candidateLines[2].risks[0]",
-        "category": "硬事实保护",
-        "message": "已整句重建越界的程序专属结论"
-      }
-    ],
+    "normalizations": [],
     "finalErrors": []
   }
 ]

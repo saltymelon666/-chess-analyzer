@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "phase8c-kling-review-2.0",
+  "exportedAt": "2026-08-09T05:53:36.262Z",
+  "results": [
+    {"id":"KH2-001","file":"image_0026_00.jpeg","verdict":"correct","correctedPlacement":"8/8/3pkp2/8/8/3PKP2/8/8","notes":""},
+    {"id":"KH2-002","file":"image_0033_00.jpeg","verdict":"correct","correctedPlacement":"8/8/3Kpkp1/5p2/8/8/4PP2/8","notes":""},
+    {"id":"KH2-003","file":"image_0072_00.jpeg","verdict":"correct","correctedPlacement":"6bk/3p4/3Np2K/4Pp2/5P2/8/8/8","notes":""},
+    {"id":"KH2-004","file":"image_0083_00.jpeg","verdict":"correct","correctedPlacement":"8/8/8/8/3B4/2N5/1pK5/k1b5","notes":""},
+    {"id":"KH2-005","file":"image_0106_00.jpeg","verdict":"correct","correctedPlacement":"6bk/8/8/6K1/8/8/1R5P/8","notes":""},
+    {"id":"KH2-006","file":"image_0155_00.jpeg","verdict":"correct","correctedPlacement":"3r4/3PK3/2k5/8/8/2p5/3R4/8","notes":""},
+    {"id":"KH2-007","file":"image_0156_00.jpeg","verdict":"correct","correctedPlacement":"8/8/3K4/8/8/Pk6/1P5R/2r5","notes":""},
+    {"id":"KH2-008","file":"image_0168_00.jpeg","verdict":"correct","correctedPlacement":"8/8/8/8/8/4k3/3pp2Q/1K6","notes":""},
+    {"id":"KH2-009","file":"image_0172_00.jpeg","verdict":"correct","correctedPlacement":"8/3KP1q1/8/8/8/4Q3/k7/8","notes":""},
+    {"id":"KH2-010","file":"image_0174_00.jpeg","verdict":"correct","correctedPlacement":"1k6/3q4/3P4/3K4/5Q2/8/8/8","notes":""},
+    {"id":"KH2-011","file":"image_0182_00.jpeg","verdict":"correct","correctedPlacement":"6k1/5q2/3Pp2K/8/8/8/8/7Q","notes":""},
+    {"id":"KH2-012","file":"image_0212_00.jpeg","verdict":"correct","correctedPlacement":"4q3/8/8/8/3N1N2/3K2R1/7k/8","notes":""}
+  ]
+}

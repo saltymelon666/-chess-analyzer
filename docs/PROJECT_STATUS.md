@@ -1,6 +1,6 @@
 # 棋盘研究所项目状态
 
-更新时间：2026-08-06
+更新时间：2026-08-09
 
 本文档是继续开发时的首要状态来源。内容只依据当前代码、Git 状态、自动化测试、仓库内质量报告和部署配置；无法从这些材料确认的内容均标为“待确认”。
 
@@ -119,13 +119,87 @@
 - 完整测试：`267 passed, 2 warnings`；页面内联JavaScript语法通过，`git diff --check`无内容错误。
 - 报告：`docs/research/chess-analysis-phase7i-public-domain-book-expansion-report.md`；清单：`docs/research/phase7i-book-ground-truth-manifest.json`。
 
+### Phase 8A 开局路径与残局来源扩展
+
+- 已从 Lichess `chess-openings` CC0 数据建立独立开局路径目录：3,810 条全部通过 `python-chess` 逐着合法性验证，拒绝 0 条；覆盖 500 个 ECO 编码、149 个开局家族，最长 36 个半回合。
+- 每条开局记录保留完整体系名、变例层级、PGN、SAN、UCI、终点 FEN、完整局面键、父分支和转置关联字段；DeepSeek 不参与开局命名和走法恢复。
+- 当前 5,021 条棋书原评中按现有阶段规则归为残局的只有 542 条，七子及以下只有 38 条，残局覆盖确实不足。
+- 已审计并下载研究副本：`Chess Openings Ancient and Modern`、`Synopsis of Chess Openings`、`Chess Studies; or, Endings of Games`、`Chess: Theory and Practice`；均为旧式记谱或图像棋盘，尚未通过 FEN/行棋方/解答合法性门禁，不强行进入正式真值库。
+- Project Gutenberg 三子与四子将杀数据分别有 580 和 551,739 个合法 FEN，但全部为已经将杀的终局，只适合终局识别测试，不作为解释知识数量灌入。
+- 开局目录仍是离线知识数据，尚未接入生产 API、前端或 DeepSeek Prompt；残局下一步需要独立真值结构并用 Syzygy 校验七子及以下结论。
+- 产物：`docs/research/phase8a-opening-path-catalog.json`、`docs/research/phase8a-opening-path-manifest.json`、`docs/research/chess-analysis-phase8a-opening-endgame-corpus-report.md`。
+
+### Phase 8B 开局只读识别层
+
+- 新增 `OpeningKnowledgeRepository` 与 `POST /api/opening-lookup`，支持使用 PGN、精确 FEN 或二者一致性校验查询开局身份。
+- 返回 ECO、完整体系名、家族、变例路径、标准 PGN/SAN/UCI、匹配深度和后续命名分支；匹配类型区分完全路线、最长命名前缀、转置局面、精确 FEN和未命中。
+- PGN 主线和每一步合法性由 `python-chess` 验证；PGN终点与同时提交的FEN不一致时返回422。
+- 开局接口不调用Stockfish或DeepSeek，不判断路线好坏，不把历史开局路线表述为当前最佳着或优势来源。
+- 2.5 MB压缩运行目录位于`app/data/opening-path-catalog.json`，会随Docker中的`app/`复制进入部署环境，不依赖本地研究目录。
+- 阶段报告：`docs/research/chess-analysis-phase8b-opening-lookup-report.md`。
+
+### Phase 8C Kling/Horwitz 残局图盘恢复门禁
+
+- 已下载并拆分1851年 `Chess Studies; or, Endings of Games` EPUB：共185张JPEG，其中绝大多数是单独裁切的残局棋盘。
+- 使用MIT许可的本地 `fenshot` ONNX模型进行离线棋盘识别；针对原书斜线底纹和装饰外框增加了多边界候选及置信度仲裁，图片不上传外部服务。
+- 185张中183张生成了书本边界候选；严格门禁要求双王完整、棋盘至少对一个行棋方合法、最低格置信度不低于0.70、平均置信度不低于0.90。
+- 只有16张通过严格门禁；其余169张全部拒绝进入正式残局库。第一题已正确恢复为黑王d8、黑兵d7、白王d6、白兵d2。
+- 已生成16题左右对照人工审核页`docs/research/phase8c-kling-endgame-review-boards.html`；左侧为原书棋盘，右侧为Unicode棋子恢复棋盘，只审核棋子格子、颜色和种类，不审核行棋方、胜负或解答。
+- 本轮人工审核通过后，审核过的同版式棋子图可作为模板继续恢复剩余低置信度图；未经审核的数据不会进入`EndgameKnowledgeRepository`。
+- 第一批16题审核已导出：13题按页面显示通过，KH-005、KH-012、KH-016被标为错误。裁决确认前两类根因分别为错误旋转180度和候选择优漏子；三题修正后均通过python-chess合法棋盘检查。
+- 已保留每张图的20个边界候选，并用第一批审核结果校准本书固定版式的棋盘边界选择。16题逐题留一恢复为16/16，但样本仍小，只作为进入下一人工门禁的依据。
+- 183张有候选的图片中，校准后43张具备双王且至少对一个行棋方合法；排除第一批后，12张通过第二批平均置信度、候选分差和合法性门禁。
+- 第二批审核页为`docs/research/phase8c-kling-round2-review-boards.html`；完成前不恢复解答、不写入正式残局知识库。
+- 第二批12题已全部通过人工棋盘审核；两轮共28个棋盘均已裁决。
+- 图注与结果恢复后，20题同时具备明确行棋方、原书结论和七子表一致性，并保留合法关键首着；3题超过七子，仅由Stockfish Depth 20/MultiPV 3支持；4题缺少行棋方或完整目标；KH-007原书称白先胜但Syzygy精确判和。
+- 新增只读`EndgameKnowledgeRepository`与`POST /api/endgame-lookup`。运行时只导出20个`exact_verified`局面，必须棋子摆放与行棋方完全一致；不返回相似局面、冲突题、缺失题或仅有普通引擎支持的题。
+- 残局查询不调用Stockfish或DeepSeek，尚未接入专业分析Prompt或前端。完整研究数据为`docs/research/phase8c-kling-endgame-dataset.json`，运行时数据为`app/data/endgame-knowledge.json`。
+
+### Phase 8D 多棋书七子残局扩充
+
+- 从现有棋书真值集筛出38个七子以内候选，并逐题使用Lichess Syzygy重新验证胜和负、距离字段和关键首着。
+- 33个候选通过准确性与教学内容门禁，5个源范围冲突、书库冲突或无有效教学内容的候选保留在研究审计中但不进入产品查询。
+- 与Phase 8C的20题合并后，`app/data/endgame-knowledge.json`现有53个精确残局局面，来源扩展到Kling/Horwitz及另外8本棋书。
+- 运行时结构升级为多来源记录；每条可独立保存书名、作者、年份、定位、来源链接、表库关键着和书中着。旧版单来源数据仍兼容。
+- 棋书原评仍只绑定完全相同局面；胜和负及程序关键着由Syzygy负责，DeepSeek不参与硬事实生成。
+- 《残局教科书》已列为下一优先来源；当前尚未取得实际电子文件，取得后使用同一门禁导入，不从非授权网页抓取正文。
+- 报告：`docs/research/chess-analysis-phase8d-endgame-expansion-report.md`；审计：`docs/research/phase8d-endgame-expansion-audit.json`。
+
+### Phase 8E 开局人类解释层
+
+- 使用通过官方MD5校验的Wikimedia Wikibooks快照提取《Chess Opening Theory》；发现3,010个页面，2,948个页面标题可恢复为合法走法路径。
+- 清除空页、纯谱表、模板、引用和导航后保留1,896段有实质内容的人类开局解释。
+- 现有3,810条Lichess开局目录全部能命中同路径或最深祖先路径解释，覆盖149个家族；801条为完全同路径解释，平均匹配深度6.19个半回合。
+- `/api/opening-lookup`新增可选`humanExplanation`，包含原文、匹配深度、来源页面、固定修订号、CC BY-SA/GFDL许可和署名。
+- Lichess CC0名称/路径与Wikibooks人类解释保持独立；解释不提供当前评价或最佳着，也尚未进入DeepSeek Prompt或前端。
+- 报告：`docs/research/chess-analysis-phase8e-opening-human-explanations-report.md`；数据：`docs/research/phase8e-opening-explanations.json`；运行时：`app/data/opening-explanations.json`。
+
+### Phase 8E Wikibooks 开局解释研究数据
+
+- 工作区现有未提交的Wikibooks `Chess Opening Theory`英文解释数据：60条合法走法路径解释，按最长前缀覆盖3,578/3,810条开局目录记录（93.91%）和135个开局家族。
+- 每条解释保留页面标题、URL、修订ID、许可与署名；`OpeningKnowledgeRepository`只按已验证UCI路径精确或最长前缀查找，不让文本参与开局命名。
+- 英文原文只描述其来源路径，不是当前Stockfish评价、最佳着、当前威胁或当前计划的事实来源；当前“双方子力与局面”不直接展示或发送这些原文。
+- 运行时数据为`app/data/opening-explanations.json`；构建脚本与门禁测试分别为`scripts/build_phase8e_opening_explanations.py`和`tests/test_phase8e_opening_explanations.py`。
+
+### Phase 8F 开局识别接入“双方子力与局面”
+
+- 专业分析会使用当前选中节点及此前全部已验证UCI走法查询`OpeningKnowledgeRepository`；开局身份、ECO和变例完全由程序确定，DeepSeek不参与命名。
+- 展示采用保守门禁：至少匹配4个半回合；最长前缀匹配还必须覆盖当前序列至少75%，且最多偏离2个半回合。浅层随机前缀不会触发开局卡片。
+- 开局卡片嵌入现有“双方子力与局面”，不新增独立开局模块；未命中、低置信度或缺少受控中文资料时保持原有界面和生成逻辑。
+- 当前受控中文资料覆盖意大利开局、西班牙开局、西西里防御、法兰西防御、卡罗-康防御、后翼弃兵、英国式开局和王印度防御；其他数据库名称不会为了扩大显示率而自由生成说明。
+- 已确认开局作为`confirmedOpening`传入专业分析Prompt；Prompt禁止DeepSeek重新判断名称、补写变例，或把开局常见思路直接升级为当前局面的事实、计划、评价或威胁。
+- 根目录`index.html`与发布版`docs/index.html`保持同步；开局卡片在手机布局下改为单列，避免横向溢出。
+- 完整单元测试为`327 passed, 2 warnings`；15局面真实DeepSeek质量套件首次通过与最终严格通过均为15/15、安全回退0/15；另有1个携带“意大利开局 · 吉奥科钢琴变化”的真实请求首次通过且严格校验错误为0。
+
 ### 当前未提交的业务相关修改
 
 已修改：
 
+- `app/api.py`
 - `app/analysis_focus.py`
 - `app/analysis_report.py`
 - `app/models.py`
+- `app/opening_knowledge.py`
 - `app/position_facts.py`
 - `app/professional_analysis.py`
 - `app/professional_refs.py`
@@ -137,6 +211,7 @@
 - `scripts/run_professional_quality_suite.py`
 - `tests/fixtures/professional_validation_positions.json`
 - `tests/test_position_facts.py`
+- `tests/test_opening_knowledge.py`
 - `tests/test_professional_analysis.py`
 - `tests/test_professional_frontend.py`
 - `tests/test_professional_quality_set.py`
@@ -164,7 +239,6 @@
 - 用户账号、云端棋局库、社交或课程系统。
 - 新模型训练。
 - 专业分析后的独立“儿童化翻译第二阶段”。该方向讨论过，但尚未实施。
-- 可靠 ECO/开局库识别。页面有示例开局，但后端没有可确认的 ECO 数据源；不能自由补写开局名称。
 
 ## 3. 当前技术架构
 
@@ -488,12 +562,10 @@ P0 验收结果：
 - 专业分析缓存是服务端内存缓存，服务重启后失效。
 - 游戏分析缓存同样为内存状态，前端持有的 `analysis_id` 在后端重启后不可继续使用。
 - MVP 没有数据库、用户账户或持久化分析记录。
-- 不存在可靠开局名称数据源。
 
 ## 9. 仅讨论过但尚未实施的想法
 
 - 在专业分析之后增加独立儿童化翻译流程。
-- 建立更完整的开局/ECO 名称识别。
 - 用户账户、棋局历史、课程与训练计划。
 - 将本地开发服务做成开机自动运行或桌面启动器。
 

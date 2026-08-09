@@ -1,0 +1,1146 @@
+{
+  "schemaVersion": "phase8d-endgame-expansion-audit-1.0",
+  "authorityBoundary": "棋书文字只绑定完全相同的源局面；胜和负与关键着由Syzygy决定。冲突、范围错配和无教学内容的记录不进入产品查询。",
+  "summary": {
+    "candidateCount": 38,
+    "exactVerifiedCount": 33,
+    "excludedCount": 5
+  },
+  "cases": [
+    {
+      "id": "BB-AUTO-G013-P136",
+      "placement": "8/r7/6P1/1pk2K2/6R1/8/8/8",
+      "sideToMove": "b",
+      "pieceCount": 6,
+      "outcome": "draw",
+      "sourcePhrase": "This was ill-judged. He should have played Rg7, or Ra8.",
+      "source": {
+        "title": "The Blue Book of Chess",
+        "author": "Howard Staunton and later editors",
+        "year": 1897,
+        "locator": "The Blue Book of Chess, Game III., p. 80",
+        "url": "https://www.gutenberg.org/ebooks/16377",
+        "rightsBoundary": "Project Gutenberg marks public domain in the USA; other markets require review"
+      },
+      "tablebase": {
+        "category": "draw",
+        "dtz": 0,
+        "dtm": 0,
+        "computedWhiteOutcome": "draw"
+      },
+      "keyMove": {
+        "uci": "b5b4",
+        "san": "b4"
+      },
+      "bookMove": {
+        "uci": "b5b4",
+        "san": "b4"
+      },
+      "admissionStatus": "exact_verified",
+      "verificationMethod": "live_lichess_syzygy"
+    },
+    {
+      "id": "CC-AUTO-007",
+      "placement": "8/8/8/8/8/3q3k/5R2/4rNK1",
+      "sideToMove": "b",
+      "pieceCount": 6,
+      "outcome": "black_win",
+      "sourcePhrase": "If it were Black's move he would easily win. In fact he has two different ways of checkmating White in three moves. One of them would be to take the Knight with the Rook, attacking the King and forcing White's Rook to recapture as the King has no square to go to; then to give check with the Queen on g3 forcing White's King to h1 and enabling the mate with the Queen on g2 or h2. The other way would be to start with the check on g3. As White's Knight is pinned he cannot capture the Queen. +---------------------------------------+ 8 | | | | | | | #K | | |---------------------------------------| 7 | | | | | | | #P | | |---------------------------------------| 6 | | | | | | | | | |---------------------------------------| 5 | | | | | | | | | |---------------------------------------| 4 | | | | | ^Q | | | | |---------------------------------------| 3 | | #Q | | | | | ^P | | |---------------------------------------| 2 | #P | | | | | | | ^P | |---------------------------------------| 1 | | | | | | | | ^K | +---------------------------------------+ a b c d e f g h",
+      "source": {
+        "title": "Chess and Checkers: The Way to Mastership",
+        "author": "Edward Lasker",
+        "year": 1918,
+        "locator": "Diagram 7",
+        "url": "https://www.gutenberg.org/ebooks/4913",
+        "rightsBoundary": "Project Gutenberg marks public domain in the USA; other markets require review"
+      },
+      "tablebase": {
+        "category": "win",
+        "dtz": 1,
+        "dtm": 5,
+        "computedWhiteOutcome": "black_win"
+      },
+      "keyMove": {
+        "uci": "e1f1",
+        "san": "Rxf1+"
+      },
+      "bookMove": null,
+      "admissionStatus": "exact_verified",
+      "verificationMethod": "live_lichess_syzygy"
+    },
+    {
+      "id": "CC-AUTO-010",
+      "placement": "8/8/N7/8/8/7p/5K1k/8",
+      "sideToMove": "w",
+      "pieceCount": 4,
+      "outcome": "white_win",
+      "sourcePhrase": "There are possibilities of a player mating his opponent with only King and Knight or King and Bishop, but then there must be a man of the opponent blocking the escape of the King. Diagram 10 is an example of such a case. White plays (1) Kt-c5, K-h1; (2) Kt-e4. Now Black cannot continue with P-h2, as White would checkmate with Kt-g3. Therefore, he must play (2) ..., K-h2. White then gets the Knight in such a position as to deprive Black's King of the escape to h2 and to keep the square g3 accessible to the Knight: (3) Kt-d2 (not Kt-g3, which would stalemate Black's King), K-h1; (4) Kt-f1. The only move left to Black is now P-h2, and White mates by (5) Kt-g3. If it were Black's move in the position of the Diagram the game would be a draw, for after (1) ..., K-h1; (2) Kt-c5, P-h2 Black is stalemate unless White moves his King so as to make the square g1 accessible to Black. However, he will not do that as it would enable Black to queen the Pawn and to win the game. In the case of King and Bishop against King and another man a mate can only occur through a blunder. Supposing for instance White has the King on f3 and a Bishop on d5 and Black has the King on h1 and a Bishop or a Pawn on h2, then White on the move would mate by K-f2. But it is evident that Black must have made a blunder, for on the move preceding the position of the Diagram he must have either played his King into the corner or moved the Bishop or Pawn to h2, both moves which were in no way forced. To checkmate with King and two Bishops against King or with Bishop and Knight against King offers no difficulty. +---------------------------------------+ 8 | #K | | | | | | | | |---------------------------------------| 7 | | | | | | | | | |---------------------------------------| 6 | | | | | | | | | |--------------",
+      "source": {
+        "title": "Chess and Checkers: The Way to Mastership",
+        "author": "Edward Lasker",
+        "year": 1918,
+        "locator": "Diagram 10",
+        "url": "https://www.gutenberg.org/ebooks/4913",
+        "rightsBoundary": "Project Gutenberg marks public domain in the USA; other markets require review"
+      },
+      "tablebase": {
+        "category": "win",
+        "dtz": 8,
+        "dtm": 9,
+        "computedWhiteOutcome": "white_win"
+      },
+      "keyMove": {
+        "uci": "a6c5",
+        "san": "Nc5"
+      },
+      "bookMove": null,
+      "admissionStatus": "exact_verified",
+      "verificationMethod": "live_lichess_syzygy"
+    },
+    {
+      "id": "CC-AUTO-012",
+      "placement": "1k6/8/K7/3N4/8/2B5/8/8",
+      "sideToMove": "w",
+      "pieceCount": 4,
+      "outcome": "white_win",
+      "sourcePhrase": "White's Bishop being only capable of commanding black squares the Knight will have to be used to drive the King from white squares. For instance: K-c8; (4) K-c6, K-d8; (5) Kt-g6, K-c8; (6) Kt-e7, K-d8; (7) K-d6, K-e8; (8) K-e6, K-d8; (9) B-h2. A waiting move. White wants to place the Bishop on c7 so as to make d8 inaccessible to Black. (9) K-e8; (10) B-c7, K-f8; (11) Kt-f5, K- e8; (12) Kt-g7, K-f8; (13) K-f6, K-g8; (14) K-g6, K-f8; (15) B- d6, K-g8; (16) Kt-f5, K-h8; (17) +---------------------------------------+ 8 | | #K | | | | | | | |---------------------------------------| 7 | | | | | | | | | |---------------------------------------| 6 | | ^K | | ^Kt| | | | | |---------------------------------------| 5 | | | ^Kt| | | | | | |---------------------------------------| 4 | | | | | | | | | |---------------------------------------| 3 | | | | | | | | | |---------------------------------------| 2 | | | | | | | | | |---------------------------------------| 1 | | | | | | | | | --------------------------------------- a b c d e f g h",
+      "source": {
+        "title": "Chess and Checkers: The Way to Mastership",
+        "author": "Edward Lasker",
+        "year": 1918,
+        "locator": "Diagram 12",
+        "url": "https://www.gutenberg.org/ebooks/4913",
+        "rightsBoundary": "Project Gutenberg marks public domain in the USA; other markets require review"
+      },
+      "tablebase": {
+        "category": "win",
+        "dtz": 37,
+        "dtm": 37,
+        "computedWhiteOutcome": "white_win"
+      },
+      "keyMove": {
+        "uci": "c3e5",
+        "san": "Be5+"
+      },
+      "bookMove": null,
+      "admissionStatus": "exact_verified",
+      "verificationMethod": "live_lichess_syzygy"
+    },
+    {
+      "id": "CC-AUTO-014",
+      "placement": "8/8/8/8/q3P3/1k6/8/2Q3K1",
+      "sideToMove": "b",
+      "pieceCount": 5,
+      "outcome": "draw",
+      "sourcePhrase": "White is a Pawn ahead and it will be his object to Queen it. The beginner, in his haste to advance the Pawn, will probably play P- e5 at once and lose the Pawn, as Black can answer Q-d4 check with simultaneous attack on the Pawn. The correct way to play for White is (1) Q-d1+, K-a3 or b4; (2) Qxa4, Kxa4. Now that the Queens are exchanged White need not any longer worry about any interference with his plans to queen the Pawn except maneuvers of the black King, which might still lead to the capture or the blockade of the Pawn. A rash advance of the Pawn would again be the wrong thing. The right way of playing is indicated by a simple calculation. The Pawn needs four moves to reach the queening square. But the black King arrives there in the same number of moves, so that he can capture the Pawn the moment he queens. Consequently White will only be able to enforce the safe queening of his Pawn if he can gain control of the queening square with his own King, thus protecting the Pawn at the time of queening. Now, White needs three moves to bring his King up to his Pawn on f4. In the meantime Black will have reached the square d6 and after White's (4) K-f5 Black will block the further advance of White's King by K-e7. However, White can force Black to give the way free. The maneuver by which he does this is one which occurs in a similar form in nearly all Pawn endings and its thorough grasp is therefore essential. Diagram 15 shows the critical position. +---------------------------------------+ 8 | | | | | | | | | |---------------------------------------| 7 | | | | | #K | | | | |---------------------------------------| 6 | | | | | | | | | |---------------------------------------| 5 | | | | | | ^K | | | |---------------------------------------| 4 | | | | | ^P | | | | |----------",
+      "source": {
+        "title": "Chess and Checkers: The Way to Mastership",
+        "author": "Edward Lasker",
+        "year": 1918,
+        "locator": "Diagram 14",
+        "url": "https://www.gutenberg.org/ebooks/4913",
+        "rightsBoundary": "Project Gutenberg marks public domain in the USA; other markets require review"
+      },
+      "tablebase": {
+        "category": "draw",
+        "dtz": 0,
+        "dtm": 0,
+        "computedWhiteOutcome": "draw"
+      },
+      "keyMove": {
+        "uci": "a4e4",
+        "san": "Qxe4"
+      },
+      "bookMove": null,
+      "admissionStatus": "source_scope_conflict",
+      "verificationMethod": "live_lichess_syzygy"
+    },
+    {
+      "id": "CC-AUTO-015",
+      "placement": "8/4k3/8/5K2/4P3/8/8/8",
+      "sideToMove": "w",
+      "pieceCount": 3,
+      "outcome": "white_win",
+      "sourcePhrase": "White can win the game only by playing (5) K-e5. The technical term for this move is \"going into OPPOSITION.\" The Kings oppose each other in one line on squares of the same color and the one who has to move out of opposition--in this case Black's King--is compelled to allow the advance of the opposing King to the next line. If Black plays K-d7, White answers (6) K-f6, and if Black plays K-f7, (6) K-d6 would follow. Then, after Black's K-e8, White repeats the maneuver by taking the opposition with (7) K- e6, and again Black must back out with either K-d8 or K-f8, so that White can advance to either f7 or d7. This clears the way for the Pawn who now advances unimpeded to the queening square. The important role which the opposition of the Kings play in Pawn endings is still more strikingly illustrated by the situations which would result if in the position of Diagram 15 White played (5) P-e5 instead of K-e5. Black would then draw the game by maintaining the opposition himself. He would play K-f7 and although after (6) P-e6, K-e7; (7) K-e5 White has regained the opposition he cannot keep it if Black continues correctly. The move which saves the game for Black is K-e8. K-d8 or K-f8 lose, as then White could go into opposition by K-d6 or K-f6. The play in these three cases would be this: A: (7) ..., K-e8, (8) K-f6, K-f8; (9) P-e7+, K-e8; (10) K-e6 and Black is stalemate, the game is drawn. B: (7) ..., K-d8; (8) K-d6, K-e8; (9) P-e7 and Black must move K-f7 enabling White to obtain control of the queening square by (10) K-d7. C: (7) ..., K-f8, (8) K-f6, K-e8, etc., similar to the play in B. To sum up the investigation of this Pawn ending: The deciding factor is the opposition of the Kings on the 6th and 8th ranks. If the weaker party succeeds in obtaining that opposition with ",
+      "source": {
+        "title": "Chess and Checkers: The Way to Mastership",
+        "author": "Edward Lasker",
+        "year": 1918,
+        "locator": "Diagram 15",
+        "url": "https://www.gutenberg.org/ebooks/4913",
+        "rightsBoundary": "Project Gutenberg marks public domain in the USA; other markets require review"
+      },
+      "tablebase": {
+        "category": "win",
+        "dtz": 5,
+        "dtm": 29,
+        "computedWhiteOutcome": "white_win"
+      },
+      "keyMove": {
+        "uci": "f5e5",
+        "san": "Ke5"
+      },
+      "bookMove": null,
+      "admissionStatus": "exact_verified",
+      "verificationMethod": "live_lichess_syzygy"
+    },
+    {
+      "id": "CC-AUTO-016",
+      "placement": "8/8/6p1/2k2p2/8/1P3P2/2K3P1/8",
+      "sideToMove": "w",
+      "pieceCount": 7,
+      "outcome": "white_win",
+      "sourcePhrase": "White's King, however, is free to go wherever he likes without any immediate danger. There is consequently nothing to hinder him attacking and capturing the black Pawns, for if Black's King tries to stop White's advance, White's passed Pawn marches on and compels the opposing King to catch him, thereby giving the way free to his own King. According to this scheme play could proceed like this: (1) K-d3, K-d5; (2) K-e3, K-e5; (3) P-b4, P-g5; (4) P- b5, K-d5; (5) P-b6, K-c6; (6) K-d4, Kxb6; (7) K-e5, P-f4; (8) K- f5, K-c6; (9) Kxg5, K-d6; (10) Kxf4, K-e6; (11) K-g5, K-f7. Now White would win even without the Pawn g2 by playing (12) K-f5 and so on as explained on Diagram 15. From the foregoing it will be clear to the beginner that if a player succeeds in winning a Pawn he can win the game if he is able to exchange all pieces so that only the Pawns are left. However, he will not yet see the way in which this exchange of pieces can be forced. It is evident that the player who has lost the Pawn will try to avoid the exchange, hoping that he may be able to regain the Pawn with his pieces. Therefore, he will permit his opponent an exchange only if, in avoiding it, he would sustain an additional loss. The position of Diagram 17 offers a simple example. White on the move will play R-e5, offering the exchange of Rooks. If Black tried to avoid the exchange by playing R-b6, White would capture the Pawn f5 with the Rook and after Black's King moves out of check he would take the Pawn g4 too. Therefore Black has to make the offered exchange of Rooks, and White then wins by advancing the c-Pawn which forces Black's King over to the Queen's wing and leaves the Pawns of the King's wing unprotected. +---------------------------------------+ 8 | | | | | | | | | |----------------------------",
+      "source": {
+        "title": "Chess and Checkers: The Way to Mastership",
+        "author": "Edward Lasker",
+        "year": 1918,
+        "locator": "Diagram 16",
+        "url": "https://www.gutenberg.org/ebooks/4913",
+        "rightsBoundary": "Project Gutenberg marks public domain in the USA; other markets require review"
+      },
+      "tablebase": {
+        "category": "win",
+        "dtz": 1,
+        "dtm": null,
+        "computedWhiteOutcome": "white_win"
+      },
+      "keyMove": {
+        "uci": "g2g3",
+        "san": "g3"
+      },
+      "bookMove": null,
+      "admissionStatus": "exact_verified",
+      "verificationMethod": "live_lichess_syzygy"
+    },
+    {
+      "id": "CF-AUTO-10",
+      "placement": "8/p6p/4k3/8/4K3/8/P5PP/8",
+      "sideToMove": "w",
+      "pieceCount": 7,
+      "outcome": "white_win",
+      "sourcePhrase": "EXAMPLE 10.--In these cases the general rule is to _act immediately on the side where you have the superior forces_. Thus we have: 1. P - K Kt 4. It is generally advisable to advance the Pawn that is free from opposition. 1. ........ P - Q R 4. Black makes an advance on the other side, and now White considers whether or not he should stop the advance. In this case either way wins, but generally the advance should be stopped when the opposing King is far away. 2. P - Q R 4, K - B 3; 3. P - R 4, K - K 3. If 3...K - Kt 3, then simple counting will show that White goes to the other side with his King, wins the P at Q R 4, and then Queens his single Pawn long before Black can do the same. 4. P - Kt 5, K - B 2; 5. K - B 5, K - Kt 2; 6. P - R 5, K - B 2. If 6...P - R 3; 7 P - Kt 6, and then the two Pawns defend themselves and White can go to the other side with his King, to win the other Pawn. 7. K - K 5. Now it is time to go to the other side with the King, win the Black Pawn and Queen the single Pawn. This is typical of all such endings and should be worked out by the student in this case and in similar cases which he can put up. * * * * * 4. SOME WINNING POSITIONS IN THE MIDDLE-GAME By the time the student has digested all that has been previously explained, he, no doubt, is anxious to get to the actual game and play with all the pieces. However, before considering the openings, we shall devote a little time to some combinations that often arise during the game, and which will give the reader some idea of the beauty of the game, once he becomes better acquainted with it.",
+      "source": {
+        "title": "Chess Fundamentals",
+        "author": "Jose Raul Capablanca",
+        "year": 1921,
+        "locator": "Example 10",
+        "url": "https://www.gutenberg.org/ebooks/33870",
+        "rightsBoundary": "Project Gutenberg marks public domain in the USA; other markets require review"
+      },
+      "tablebase": {
+        "category": "win",
+        "dtz": 1,
+        "dtm": null,
+        "computedWhiteOutcome": "white_win"
+      },
+      "keyMove": {
+        "uci": "a2a3",
+        "san": "a3"
+      },
+      "bookMove": null,
+      "admissionStatus": "exact_verified",
+      "verificationMethod": "live_lichess_syzygy"
+    },
+    {
+      "id": "CF-AUTO-2",
+      "placement": "8/8/8/4k3/8/8/8/4K2R",
+      "sideToMove": "w",
+      "pieceCount": 3,
+      "outcome": "white_win",
+      "sourcePhrase": "EXAMPLE 2. Since the Black King is in the centre of the board, the best way to proceed is to advance your own King thus: 1 K - K 2, K - Q 4; 2 K - K 3. As the Rook has not yet come into play, it is better to advance the King straight into the centre of the board, not in front, but to one side of the other King. Should now the Black King move to K 4, the Rook drives it back by R - R 5 ch. On the other hand, if 2... K - B 5 instead, then also 3 R - R 5. If now 3... K - Kt 5, there follows 4 K - Q 3; but if instead 3... K - B 6; then 4 R - R 4, keeping the King confined to as few squares as possible. Now the ending may continue: 4...K - B 7; 5 R - B 4 ch, K - Kt 6; 6 K - Q 3, K - Kt 7; 7 R - Kt 4 ch, K - R 6; 8 K - B 3, K - R 7. It should be noticed how often the White King has moved next to the Rook, not only to defend it, but also to reduce the mobility of the opposing King. Now White mates in three moves thus: 9 R - R 4 ch, K - Kt 8; 10 R - any square on the Rook's file, forcing the Black King in front of the White, K - B 8; 11 R - R 1 mate. It has taken eleven moves to mate, and, under any conditions, I believe it should be done in under twenty. While it may be monotonous, it is worth while for the beginner to practice such things, as it will teach him the proper handling of his pieces.",
+      "source": {
+        "title": "Chess Fundamentals",
+        "author": "Jose Raul Capablanca",
+        "year": 1921,
+        "locator": "Example 2",
+        "url": "https://www.gutenberg.org/ebooks/33870",
+        "rightsBoundary": "Project Gutenberg marks public domain in the USA; other markets require review"
+      },
+      "tablebase": {
+        "category": "win",
+        "dtz": 27,
+        "dtm": 27,
+        "computedWhiteOutcome": "white_win"
+      },
+      "keyMove": {
+        "uci": "h1h5",
+        "san": "Rh5+"
+      },
+      "bookMove": null,
+      "admissionStatus": "exact_verified",
+      "verificationMethod": "live_lichess_syzygy"
+    },
+    {
+      "id": "CF-AUTO-23",
+      "placement": "8/6p1/7p/8/4k3/8/6KP/8",
+      "sideToMove": "w",
+      "pieceCount": 5,
+      "outcome": "black_win",
+      "sourcePhrase": "EXAMPLE 23.--In this position White's best line of defence consists in keeping his Pawn where it stands at R 2. As soon as the Pawn is advanced it becomes easier for Black to win. On the other hand, Black's plan to win (supposing that White does not advance his Pawn) may be divided into three parts. The first part will be to get his King to K R 6, at the same time keeping intact the position of his Pawns. (This is all important, since, in order to win the game, it is essential at the end that Black may be able to advance his rearmost Pawn one or two squares according to the position of the White King.) 1. K - Kt 3 K - K 6 2. K - Kt 2 If 2 K - Kt 4, K - B 7; 3 P - R 4, P - Kt 3 will win. 2. ........ K - B 5 3. K - B 2 K - Kt 5 4. K - Kt 2 K - R 5 5. K - Kt 1 K - R 6 The first part has been completed. The second part will be short and will consist in advancing the R P up the K. 6. K - R 1 P - R 4 7. K - Kt 1 P - R 5 This ends the second part. The third part will consist in timing the advance of the Kt P so as to play P - Kt 6 when the White King is at R 1. It now becomes evident how necessary it is to be able to move the Kt P either one or two squares according to the position of the White King, as indicated previously.[2] In this case, as it is White's move, the Pawn will be advanced two squares since the White King will be in the corner, but if it were now Black's move the Kt P should only be advanced one square since the White King is at Kt 1. 8. K - R 1 P - Kt 4 9. K - Kt 1 P - Kt 5 10. K - R 1 P - Kt 6 11. P x P If K - Kt 1, P - Kt 7. 11. ........ P x P 12. K - Kt 1 P - Kt 7 13. K - B 2 K - R 7 and wins. It is in this analytical way that the student should try to learn. He will thus train his mind to follow a logical sequence in reasoning out any position. This example is excellent training, since it is easy to divide it into three stages and to explain the main point of each part. The next subject we shall study is the simple opposition, but before we devote our time to it I wish to call attention to two things. * * * * * 11. OBTAINING A PASSED PAWN When three or more Pawns are opposed to each other in some such position as the one in Example 24, there is always a chance for one side or the other of obtaining a passed Pawn.",
+      "source": {
+        "title": "Chess Fundamentals",
+        "author": "Jose Raul Capablanca",
+        "year": 1921,
+        "locator": "Example 23",
+        "url": "https://www.gutenberg.org/ebooks/33870",
+        "rightsBoundary": "Project Gutenberg marks public domain in the USA; other markets require review"
+      },
+      "tablebase": {
+        "category": "loss",
+        "dtz": -8,
+        "dtm": -46,
+        "computedWhiteOutcome": "black_win"
+      },
+      "keyMove": {
+        "uci": "g2g3",
+        "san": "Kg3"
+      },
+      "bookMove": null,
+      "admissionStatus": "exact_verified",
+      "verificationMethod": "live_lichess_syzygy"
+    },
+    {
+      "id": "CF-AUTO-25",
+      "placement": "8/p5kp/8/1P6/8/1K6/P7/8",
+      "sideToMove": "w",
+      "pieceCount": 6,
+      "outcome": "white_win",
+      "sourcePhrase": "EXAMPLE 25.--In this position whoever moves first wins. The first thing is to find out, by counting, whether the opposing King can be in time to stop the passed Pawn from Queening. When, as in this case, it cannot be done, the point is to count which Pawn comes in first. In this case the time is the same, but the Pawn that reaches the eighth square first and becomes a Queen is in a position to capture the adversary's Queen when he makes one. Thus: 1. P - R 4 P - K R 4 2. P - R 5 P - R 5 3. P - Kt 6 P x P Now comes a little calculation. White can capture the Pawn, but if he does so, he will not, when Queening, command the square where Black will also Queen his Pawn. Therefore, instead of taking, he plays: 4. P - R 6 P - R 6 5. P - R 7 P - R 7 6. P - R 8 (Q), and wins. The student would do well to acquaint himself with various simple endings of this sort, so as to acquire the habit of counting, and thus be able to know with ease when he can or cannot get there first. Once again I must call attention to the fact that a book cannot by itself teach how to play. It can only serve as a guide, and the rest must be learned by experience, and if a teacher can be had at the same time, so much the faster will the student be able to learn. * * * * * 13. THE OPPOSITION When Kings have to be moved, and one player can, by force, bring his King into a position similar to the one shown in the following diagram, so that his adversary is forced to move and make way for him, the player obtaining that advantage is said to have _the opposition_.",
+      "source": {
+        "title": "Chess Fundamentals",
+        "author": "Jose Raul Capablanca",
+        "year": 1921,
+        "locator": "Example 25",
+        "url": "https://www.gutenberg.org/ebooks/33870",
+        "rightsBoundary": "Project Gutenberg marks public domain in the USA; other markets require review"
+      },
+      "tablebase": {
+        "category": "win",
+        "dtz": 1,
+        "dtm": 33,
+        "computedWhiteOutcome": "white_win"
+      },
+      "keyMove": {
+        "uci": "a2a4",
+        "san": "a4"
+      },
+      "bookMove": null,
+      "admissionStatus": "exact_verified",
+      "verificationMethod": "live_lichess_syzygy"
+    },
+    {
+      "id": "CF-AUTO-26",
+      "placement": "8/8/4k3/1p5p/1P2K2P/8/8/8",
+      "sideToMove": "w",
+      "pieceCount": 6,
+      "outcome": "draw",
+      "sourcePhrase": "EXAMPLE 26.--Suppose in the above position White plays 1. K - Q 4 Now Black has the option of either opposing the passage of the White King by playing K - Q 3 or, if he prefers, he can _pass_ with his own King by replying K - B 4. Notice that the Kings are directly opposed to each other, and the number of intervening squares between them is odd--one in this case. The opposition can take the form shown above, which can be called actual or close frontal opposition; or this form: which can be called actual or close diagonal opposition, or, again, this form: which can be called actual or close lateral opposition. In practice they are all one and the same. The Kings are always on squares of the same colour, there is only one intervening square between the Kings, and the player who has moved last \"_has the opposition_.\" Now, if the student will take the trouble of moving each King backwards as in a game in the same frontal, diagonal or lateral line respectively shown in the diagrams, we shall have what may be called _distant_ frontal, diagonal and lateral opposition respectively. The matter of the opposition is highly important, and takes at times somewhat complicated forms, all of which can be solved mathematically; but, for the present, the student should only consider the most simple forms. (An examination of some of the examples of King and Pawns endings already given will show several cases of close opposition.) In all simple forms of opposition, _when the Kings are on the same line and the number of intervening squares between them is even, the player who has the move has the opposition_.",
+      "source": {
+        "title": "Chess Fundamentals",
+        "author": "Jose Raul Capablanca",
+        "year": 1921,
+        "locator": "Example 26",
+        "url": "https://www.gutenberg.org/ebooks/33870",
+        "rightsBoundary": "Project Gutenberg marks public domain in the USA; other markets require review"
+      },
+      "tablebase": {
+        "category": "draw",
+        "dtz": 0,
+        "dtm": 0,
+        "computedWhiteOutcome": "draw"
+      },
+      "keyMove": {
+        "uci": "e4d4",
+        "san": "Kd4"
+      },
+      "bookMove": null,
+      "admissionStatus": "exact_verified",
+      "verificationMethod": "live_lichess_syzygy"
+    },
+    {
+      "id": "CF-AUTO-27",
+      "placement": "4k3/8/8/1p5p/1P5P/8/8/4K3",
+      "sideToMove": "w",
+      "pieceCount": 6,
+      "outcome": "white_win",
+      "sourcePhrase": "EXAMPLE 27.--The above position shows to advantage the enormous value of the opposition. The position is very simple. Very little is left on the board, and the position, to a beginner, probably looks absolutely even. It is not the case, however. _Whoever has the move wins._ Notice that the Kings are directly in front of one another, and that the number of intervening squares is _even_. Now as to the procedure to win such a position. The proper way to begin is to move straight up. Thus: 1. K - K 2 K - K 2 2. K - K 3 K - K 3 3. K - K 4 K - B 3 Now White can exercise the option of either playing K - Q 5 and thus passing with his King, or of playing K - B 4 and prevent the Black King from passing, thereby keeping the opposition. Mere counting will show that the former course will only lead to a draw, therefore White takes the latter course and plays: 4. K - B 4 K - Kt 3 If 4...K - K 3; 5 K - Kt 5 will win. 5. K - K 5 K - Kt 2 Now by counting it will be seen that White wins by capturing Black's Knight Pawn. The process has been comparatively simple in the variation given above, but Black has other lines of defence more difficult to overcome. Let us begin anew. 1. K - K 2 K - Q 1 Now if 2 K - Q 3, K - Q 2, or if 2 K - K 3, K - K 2, and Black obtains the opposition in both cases. (When the Kings are directly in front of one another, and the number of intervening squares between the Kings is _odd_, the player who has moved last has the opposition.) Now in order to win, the White King must advance. There is only one other square where he can go, B 3, and that is the right place. Therefore it is seen that in such cases when the opponent makes a so-called waiting move, you must advance, leaving a rank or file free between the Kings. Therefore we have-- 2. K - B 3 K - K 2 Now, it would be bad to advance, because then Black, by bringing up his King in front of your King, would obtain the opposition. It is White's turn to play a similar move to Black's first move, viz.: 3. K - K 3 which brings the position back to the first variation shown. The student would do well to familiarise himself with the handling of the King in all examples of opposition. It often means the winning or losing of a game. EXAMPLE 28.--The following position is an excellent proof of the value of the opposition as a means of defence. White is a Pawn behind and apparently lost, yet he can manage to dr",
+      "source": {
+        "title": "Chess Fundamentals",
+        "author": "Jose Raul Capablanca",
+        "year": 1921,
+        "locator": "Example 27",
+        "url": "https://www.gutenberg.org/ebooks/33870",
+        "rightsBoundary": "Project Gutenberg marks public domain in the USA; other markets require review"
+      },
+      "tablebase": {
+        "category": "win",
+        "dtz": 17,
+        "dtm": 61,
+        "computedWhiteOutcome": "white_win"
+      },
+      "keyMove": {
+        "uci": "e1e2",
+        "san": "Ke2"
+      },
+      "bookMove": null,
+      "admissionStatus": "exact_verified",
+      "verificationMethod": "live_lichess_syzygy"
+    },
+    {
+      "id": "CF-AUTO-29",
+      "placement": "k7/8/1K1N4/7p/7N/8/8/8",
+      "sideToMove": "w",
+      "pieceCount": 5,
+      "outcome": "white_win",
+      "sourcePhrase": "EXAMPLE 29.--In the above position White cannot win, although the Black King is cornered, but in the following position, in which Black has a Pawn, White wins with or without the move. Thus: 1. Kt - Kt 6 P - R 5 White cannot take the Pawn because the game will be drawn, as explained before. 2. Kt - K 5 P - R 6 3. Kt - B 6 P - R 7 4. Kt - Kt 5 P - R 8 (Q) 5. Kt - B 7 mate The reason for this peculiarity in chess is evident. _White with the two Knights can only stalemate the King, unless Black has a Pawn which can be moved._",
+      "source": {
+        "title": "Chess Fundamentals",
+        "author": "Jose Raul Capablanca",
+        "year": 1921,
+        "locator": "Example 29",
+        "url": "https://www.gutenberg.org/ebooks/33870",
+        "rightsBoundary": "Project Gutenberg marks public domain in the USA; other markets require review"
+      },
+      "tablebase": {
+        "category": "win",
+        "dtz": 6,
+        "dtm": 9,
+        "computedWhiteOutcome": "white_win"
+      },
+      "keyMove": {
+        "uci": "h4f3",
+        "san": "Nf3"
+      },
+      "bookMove": null,
+      "admissionStatus": "book_tablebase_conflict",
+      "verificationMethod": "live_lichess_syzygy"
+    },
+    {
+      "id": "CF-AUTO-3",
+      "placement": "7k/8/8/8/8/8/8/2B1KB2",
+      "sideToMove": "w",
+      "pieceCount": 4,
+      "outcome": "white_win",
+      "sourcePhrase": "EXAMPLE 3.--Now we come to two Bishops and King against King. Since the Black King is in the corner, White can play 1 B - Q 3, K - Kt 2; 2 B - K Kt 5, K - B 2; 3 B - B 5, and already the Black King is confined to a few squares. If the Black King, in the original position, had been in the centre of the board, or away from the last row, White should have advanced his King, and then, with the aid of his Bishops, restricted the Black King's movements to as few squares as possible. We might now continue: 3...K - Kt 2; 4 K - B 2. In this ending the Black King must not only be driven to the edge of the board, but he must also be forced into a corner, and, before a mate can be given, the White King must be brought to the sixth rank and, at the same time, in one of the last two files; in this case either K R 6, K Kt 6, K B 7, K B 8, and as K R 6 and K Kt 6 are the nearest squares, it is to either of these squares that the King ought to go. 4...K - B 2; 5 K - Kt 3, K - Kt 2; 6 K - R 4, K - B 2; 7 K - R 5, K - Kt 2; 8 B - Kt 6, K - Kt 1; 9 K - R 6, K - B 1. White must now mark time and move one of the Bishops, so as to force the Black King to go back; 10 B - R 5, K - Kt 1; 11 B - K 7, K - R 1. Now the White Bishop must take up a position from which it can give check next move along the White diagonal, when the Black King moves back to Kt 1. 12 B - K Kt 4, K - Kt 1; 13 B - K 6 ch, K - R 1; 14 B - B 6 mate. It has taken fourteen moves to force the mate and, in any position, it should be done in under thirty. In all endings of this kind, care must be taken not to drift into a stale mate. In this particular ending one should remember that the King must not only be driven to the edge of the board, but also into a corner. In all such endings, however, it is immaterial whether the King is forced on to the last rank, or to an outside file, e.g. K R 5 or Q R 4, K 1 or Q 8.",
+      "source": {
+        "title": "Chess Fundamentals",
+        "author": "Jose Raul Capablanca",
+        "year": 1921,
+        "locator": "Example 3",
+        "url": "https://www.gutenberg.org/ebooks/33870",
+        "rightsBoundary": "Project Gutenberg marks public domain in the USA; other markets require review"
+      },
+      "tablebase": {
+        "category": "win",
+        "dtz": 25,
+        "dtm": 25,
+        "computedWhiteOutcome": "white_win"
+      },
+      "keyMove": {
+        "uci": "c1g5",
+        "san": "Bg5"
+      },
+      "bookMove": null,
+      "admissionStatus": "exact_verified",
+      "verificationMethod": "live_lichess_syzygy"
+    },
+    {
+      "id": "CF-AUTO-30",
+      "placement": "7k/8/8/6K1/8/3B4/7P/8",
+      "sideToMove": "w",
+      "pieceCount": 4,
+      "outcome": "draw",
+      "sourcePhrase": "EXAMPLE 30.--Although he is a Bishop and a Pawn ahead the following position cannot be won by White. It is the greatest weakness of the Bishop, that when the Rook's Pawn Queens on a square of opposite colour and the opposing King is in front of the Pawn, the Bishop is absolutely worthless. All that Black has to do is to keep moving his King close to the corner square.",
+      "source": {
+        "title": "Chess Fundamentals",
+        "author": "Jose Raul Capablanca",
+        "year": 1921,
+        "locator": "Example 30",
+        "url": "https://www.gutenberg.org/ebooks/33870",
+        "rightsBoundary": "Project Gutenberg marks public domain in the USA; other markets require review"
+      },
+      "tablebase": {
+        "category": "draw",
+        "dtz": 0,
+        "dtm": 0,
+        "computedWhiteOutcome": "draw"
+      },
+      "keyMove": {
+        "uci": "h2h3",
+        "san": "h3"
+      },
+      "bookMove": null,
+      "admissionStatus": "exact_verified",
+      "verificationMethod": "live_lichess_syzygy"
+    },
+    {
+      "id": "CF-AUTO-31",
+      "placement": "8/8/5Np1/8/8/7p/5K2/7k",
+      "sideToMove": "b",
+      "pieceCount": 5,
+      "outcome": "white_win",
+      "sourcePhrase": "EXAMPLE 31.--In the above position White with or without the move can win. Take the most difficult variation. 1. ........ K - R 7 2. Kt - Kt 4 ch K - R 8 3. K - B 1 P - Kt 4 4. K - B 2 P - R 7 5. Kt - K 3 P - Kt 5 6. Kt - B 1 P - Kt 6 ch 7. Kt x P mate Now that we have seen these exceptional cases, we can analyse the different merits and the relative value of the Knight and the Bishop. It is generally thought by amateurs that the Knight is the more valuable piece of the two, the chief reason being that, unlike the Bishop, the Knight can command both Black and White squares. However, the fact is generally overlooked that the Knight, at any one time, has the choice of one colour only. It takes much longer to bring a Knight from one wing to the other. Also, as shown in the following Example, a Bishop can stalemate a Knight; a compliment which the Knight is unable to return.",
+      "source": {
+        "title": "Chess Fundamentals",
+        "author": "Jose Raul Capablanca",
+        "year": 1921,
+        "locator": "Example 31",
+        "url": "https://www.gutenberg.org/ebooks/33870",
+        "rightsBoundary": "Project Gutenberg marks public domain in the USA; other markets require review"
+      },
+      "tablebase": {
+        "category": "loss",
+        "dtz": -5,
+        "dtm": -12,
+        "computedWhiteOutcome": "white_win"
+      },
+      "keyMove": {
+        "uci": "h1h2",
+        "san": "Kh2"
+      },
+      "bookMove": null,
+      "admissionStatus": "exact_verified",
+      "verificationMethod": "live_lichess_syzygy"
+    },
+    {
+      "id": "CF-AUTO-32",
+      "placement": "7k/8/8/N2b4/8/8/7K/8",
+      "sideToMove": "w",
+      "pieceCount": 4,
+      "outcome": "draw",
+      "sourcePhrase": "EXAMPLE 32. The weaker the player the more terrible the Knight is to him, but as a player increases in strength the value of the Bishop becomes more evident to him, and of course there is, or should be, a corresponding decrease in his estimation of the value of the Knight as compared to the Bishop. In this respect, as in many others, the masters of to-day are far ahead of the masters of former generations. While not so long ago some of the very best amongst them, like Pillsbury and Tchigorin, preferred Knights to Bishops, there is hardly a master of to-day who would not completely agree with the statements made above.",
+      "source": {
+        "title": "Chess Fundamentals",
+        "author": "Jose Raul Capablanca",
+        "year": 1921,
+        "locator": "Example 32",
+        "url": "https://www.gutenberg.org/ebooks/33870",
+        "rightsBoundary": "Project Gutenberg marks public domain in the USA; other markets require review"
+      },
+      "tablebase": {
+        "category": "draw",
+        "dtz": 0,
+        "dtm": 0,
+        "computedWhiteOutcome": "draw"
+      },
+      "keyMove": {
+        "uci": "a5b3",
+        "san": "Nb3"
+      },
+      "bookMove": null,
+      "admissionStatus": "exact_verified",
+      "verificationMethod": "live_lichess_syzygy"
+    },
+    {
+      "id": "CF-AUTO-39",
+      "placement": "4k3/8/8/8/8/8/8/2B1K1N1",
+      "sideToMove": "w",
+      "pieceCount": 4,
+      "outcome": "white_win",
+      "sourcePhrase": "EXAMPLE 39.--In this example we must mate either at Q R 1 or K R 8. The ending can be divided into two parts. Part one consists in driving the Black King to the last line. We might begin, as is generally done in all such cases, by advancing the King to the centre of the board: 1. K - K 2 K - Q 2 Black, in order to make it more difficult, goes towards the white-squared corner: 2. K - Q 3 K - B 3 3. B - B 4 K - Q 4 4. Kt - K 2 K - B 4 5. Kt - B 3 K - Kt 5 6. K - Q 4 K - R 4 7. K - B 5 K - R 3 8. K - B 6 K - R 2 9. Kt - Q 5 K - R 1 The first part is now over; the Black King is in the white-squared corner. The second and last part will consist in driving the Black King now from Q R 8 to Q R 1 or K R 8 in order to mate him. Q R 1 will be the quickest in this position. 10. Kt - Kt 6 ch K - R 2 11. B - B 7 K - R 3 12. B - Kt 8 K - R 4 13. Kt - Q 5 K - R 5 Black tries to make for K R 1 with his King. White has two ways to prevent that, one by 14 B - K 5, K - Kt 6; 15 Kt - K 3, and the other which I give as the text, and which I consider better for the student to learn, because it is more methodical and more in accord with the spirit of all these endings, _by using the King as much as possible_. 14. K - B 5 ! K - Kt 6 15. Kt - Kt 4 K - B 6 16. B - B 4 K - Kt 6 17. B - K 5 K - R 5 18. K - B 4 K - R 4 19. B - B 7 ch K - R 5 20. Kt - Q 3 K - R 6 21. B - Kt 6 K - R 5 22. Kt - Kt 2 ch K - R 6 23. K - B 3 K - R 7 24. K - B 2 K - R 6 25. B - B 5 ch K - R 7 26. Kt - Q 3 K - R 8 27. B - Kt 4 K - R 7 28. Kt - B 1 ch K - R 8 29. B - B 3 mate It will be seen that the ending is rather laborious. There are two outstanding features: the close following by the King, and the controlling of the squares of opposite colour to the Bishop by the combined action of the Knight and King. The student would do well to exercise himself methodically in this ending, as it gives a very good idea of the actual power of the pieces, and it requires foresight in order to accomplish the mate within the fifty moves which are granted by the rules. * * * * * 16. QUEEN AGAINST ROOK This is one of the most difficult endings without Pawns. The resources of the defence are many, and when used skilfully only a very good player will prevail within the limit of fifty moves allowed by the rules. (The rule is that at any moment you may demand that your opponent mate you within fifty moves. However, every time a pi",
+      "source": {
+        "title": "Chess Fundamentals",
+        "author": "Jose Raul Capablanca",
+        "year": 1921,
+        "locator": "Example 39",
+        "url": "https://www.gutenberg.org/ebooks/33870",
+        "rightsBoundary": "Project Gutenberg marks public domain in the USA; other markets require review"
+      },
+      "tablebase": {
+        "category": "win",
+        "dtz": 57,
+        "dtm": 57,
+        "computedWhiteOutcome": "white_win"
+      },
+      "keyMove": {
+        "uci": "e1d2",
+        "san": "Kd2"
+      },
+      "bookMove": null,
+      "admissionStatus": "exact_verified",
+      "verificationMethod": "live_lichess_syzygy"
+    },
+    {
+      "id": "CF-AUTO-4",
+      "placement": "8/8/8/4k3/8/8/8/4K2Q",
+      "sideToMove": "w",
+      "pieceCount": 3,
+      "outcome": "white_win",
+      "sourcePhrase": "EXAMPLE 4.--We now come to Queen and King against King. As the Queen combines the power of the Rook and the Bishop, it is the easiest mate of all and should always be accomplished in under ten moves. Take the following position: A good way to begin is to make the first move with the Queen, trying to limit the Black King's mobility as much as possible. Thus: 1 Q - B 6, K - Q 5; 2 K - Q 2. Already the Black King has only one available square 2...K - K 4; 3 K - K 3, K - B 4; 4 Q - Q 6, K - Kt 4. (Should Black play K - Kt 5, then Q - Kt 6 ch); 5 Q - K 6, K - R 5 (if K - R 4, K - B 4 and mate next move); 6 Q - K Kt 6, K - R 6; 7 K - B 3, K moves; 8 Q mates. In this ending, as in the case of the Rook, the Black King must be forced to the edge of the board; only the Queen being so much more powerful than the Rook, the process is far easier and shorter. These are the three elementary endings and in all of these the principle is the same. In each case the co-operation of the King is needed. In order to force a mate without the aid of the King, at least two Rooks are required. * * * * * 2. PAWN PROMOTION The gain of a Pawn is the smallest material advantage that can be obtained in a game; and it often is sufficient to win, even when the Pawn is the only remaining unit, apart from the Kings. It is essential, speaking generally, that _the King should be in front of his Pawn, with at least one intervening square_. If the opposing King is directly in front of the Pawn, then the game cannot be won. This can best be explained by the following examples.",
+      "source": {
+        "title": "Chess Fundamentals",
+        "author": "Jose Raul Capablanca",
+        "year": 1921,
+        "locator": "Example 4",
+        "url": "https://www.gutenberg.org/ebooks/33870",
+        "rightsBoundary": "Project Gutenberg marks public domain in the USA; other markets require review"
+      },
+      "tablebase": {
+        "category": "win",
+        "dtz": 13,
+        "dtm": 13,
+        "computedWhiteOutcome": "white_win"
+      },
+      "keyMove": {
+        "uci": "h1c6",
+        "san": "Qc6"
+      },
+      "bookMove": null,
+      "admissionStatus": "exact_verified",
+      "verificationMethod": "live_lichess_syzygy"
+    },
+    {
+      "id": "CF-AUTO-40",
+      "placement": "1k6/1r6/2K5/Q7/8/8/8/8",
+      "sideToMove": "w",
+      "pieceCount": 4,
+      "outcome": "white_win",
+      "sourcePhrase": "EXAMPLE 40.--This is one of the standard positions which Black can often bring about. Now, it is White's move. If it were Black's move it would be simple, as he would have to move his Rook away from the King (find out why), and then the Rook would be comparatively easy to win. We deduce from the above that the main object is to force the Black Rook away from the defending King, and that, in order to compel Black to do so, we must bring about the position in the diagram with _Black_ to move. Once we know what is required, the way to proceed becomes easier to find. Thus: 1. Q - K 5 ch Not 1 Q - R 6, because R - B 2 ch; 2 K - Kt 6, R - B 3 ch; 3 K x R. Stalemate. (The beginner will invariably fall into this trap.) 1. ........ K to R 1 or to R 2 2. Q - R 1 ch K - Kt 1 3. Q - R 5 In a few moves we have accomplished our object. The first part is concluded. Now we come to the second part. The Rook can only go to a White square, otherwise the first check with the Queen will win it. Therefore 3. ........ R - Kt 6 4. Q - K 5 ch K - R 1 best 5. Q - R 8 ch K - R 2 6. Q - Kt 7 ch K - R 1 7. Q - Kt 8 ch R - Kt 1 8. Q - R 2 mate (The student should find out by himself how to win when 3...R - Kt 8; 4 Q - K 5 ch, K - R 2.)",
+      "source": {
+        "title": "Chess Fundamentals",
+        "author": "Jose Raul Capablanca",
+        "year": 1921,
+        "locator": "Example 40",
+        "url": "https://www.gutenberg.org/ebooks/33870",
+        "rightsBoundary": "Project Gutenberg marks public domain in the USA; other markets require review"
+      },
+      "tablebase": {
+        "category": "win",
+        "dtz": 15,
+        "dtm": 19,
+        "computedWhiteOutcome": "white_win"
+      },
+      "keyMove": {
+        "uci": "a5d5",
+        "san": "Qd5"
+      },
+      "bookMove": null,
+      "admissionStatus": "exact_verified",
+      "verificationMethod": "live_lichess_syzygy"
+    },
+    {
+      "id": "CF-AUTO-41",
+      "placement": "8/k7/2K5/4Q3/8/8/8/1r6",
+      "sideToMove": "w",
+      "pieceCount": 4,
+      "outcome": "white_win",
+      "sourcePhrase": "EXAMPLE 41.--The procedure here is very similar. The things to bear in mind are that the Rook must be prevented from interposing at Kt 1 because of an immediate mate, and in the same way the King must be prevented from going either to R 3 or B 1.",
+      "source": {
+        "title": "Chess Fundamentals",
+        "author": "Jose Raul Capablanca",
+        "year": 1921,
+        "locator": "Example 41",
+        "url": "https://www.gutenberg.org/ebooks/33870",
+        "rightsBoundary": "Project Gutenberg marks public domain in the USA; other markets require review"
+      },
+      "tablebase": {
+        "category": "win",
+        "dtz": 7,
+        "dtm": 11,
+        "computedWhiteOutcome": "white_win"
+      },
+      "keyMove": {
+        "uci": "e5d4",
+        "san": "Qd4+"
+      },
+      "bookMove": null,
+      "admissionStatus": "exact_verified",
+      "verificationMethod": "live_lichess_syzygy"
+    },
+    {
+      "id": "CF-AUTO-42",
+      "placement": "8/5rk1/8/5Q1K/8/8/8/8",
+      "sideToMove": "w",
+      "pieceCount": 4,
+      "outcome": "white_win",
+      "sourcePhrase": "EXAMPLE 42.--We shall now examine a more difficult position. Many players would be deceived by this position. The most likely looking move is not the best. Thus suppose we begin 1. Q - K 5 ch K - B 1 2. K - Kt 6 R - Q 2 The only defence, but, unfortunately, a very effective one, which makes it very difficult for White, since he cannot play 3 Q - K 6 because of 3...R - Kt 2 ch; 4 K - B 6, R - Kt 3 ch draws. Nor can he win quickly by 3 Q - Q B 5 ch because 3...K - K 1, 4 K - B 6, R - Q 3 ch ! driving back the White King. Now that we have seen the difficulties of the situation let us go back. The best move is 1. Q - Kt 5 ch ! K - R 1 If K - R 2; 2 Q - Kt 6 ch, K - R 1; 3 K - R 6 ! 2. Q - K 5 ch ! K - R 2 best 3. K - Kt 5 R - R 2 ! best If 3...R - Kt 2 ch; 4 K - B 6 leads to a position similar to those in Examples 40 and 41. 4. Q - K 4 ch K - Kt 1 5. Q - B 4 ch K - R 2 6. K - B 6 R - K Kt 2 7. Q - R 4 ch K - Kt 1 8. Q - R 5 and we have the position of Example 40 with Black to move. Let us go back again. 1. Q - Kt 5 ch K - B 1 2. Q - Q 8 ch K - Kt 2 3. K - Kt 5 R - B 6 The best place for the Rook away from the King. 3...K - R 2; 4 Q - Q 4, R - Kt 2 ch; 5 K - B 6 would lead to positions similar to those already seen. 4. Q - Q 4 ch K - B 1 5. K - Kt 6 5 Q - Q 6 ch, K - Kt 2; 6 Q - K 5 ch, K - B 1; 7 K - Kt 6 would also win the Rook. The text move, however, is given to show the finesse of such endings. White now threatens mate at Q 8. 5. ........ R - Kt 6 ch 6. K - B 6 R - B 6 ch 7. K - K 6 R - K R 6 White threatened mate at K R 8. 8. Q - B 4 ch and the Rook is lost. Note, in these examples, that the checks at long range along the diagonals have often been the key to all the winning manoeuvres. Also that the Queen and King are often kept on different lines. The student should carefully go over these positions and consider all the possibilities not given in the text. He should once more go through everything already written before proceeding further with the book. * * * * * CHAPTER III PLANNING A WIN IN MIDDLE-GAME PLAY I shall now give a few winning positions taken from my own games. I have selected those that I believe can be considered as _types_, i.e. positions that may easily occur again in a somewhat similar form. A knowledge of such positions is of great help; in fact, one cannot know too many. It often may help the player to find, with little effort, the righ",
+      "source": {
+        "title": "Chess Fundamentals",
+        "author": "Jose Raul Capablanca",
+        "year": 1921,
+        "locator": "Example 42",
+        "url": "https://www.gutenberg.org/ebooks/33870",
+        "rightsBoundary": "Project Gutenberg marks public domain in the USA; other markets require review"
+      },
+      "tablebase": {
+        "category": "win",
+        "dtz": 21,
+        "dtm": 31,
+        "computedWhiteOutcome": "white_win"
+      },
+      "keyMove": {
+        "uci": "f5e5",
+        "san": "Qe5+"
+      },
+      "bookMove": null,
+      "admissionStatus": "exact_verified",
+      "verificationMethod": "live_lichess_syzygy"
+    },
+    {
+      "id": "CF-AUTO-5",
+      "placement": "8/8/8/8/4k3/8/3KP3/8",
+      "sideToMove": "w",
+      "pieceCount": 3,
+      "outcome": "draw",
+      "sourcePhrase": "EXAMPLE 5. The position is drawn, and the way to proceed is for Black to keep the King always directly in front of the Pawn, and when it cannot be done, as for instance in this position because of the White King, then the Black King must be kept in front of the White King. The play would proceed thus: 1 P - K 3, K - K 4; 2 K - Q 3, K - Q 4. This is a very important move. Any other move would lose, as will be shown later. As the Black King cannot be kept close up to the Pawn, it must be brought as far forward as possible and, at the same time, in front of the White King. 3 P - K 4 ch, K - K 4; 4 K - K 3, K - K 3; 5 K - B 4, K - B 3. Again the same case. As the White King comes up, the Black King must be kept in front of it, since it cannot be brought up to the Pawn. 6 P - K 5 ch, K - K 3; 7 K - K 4, K - K 2; 8 K - Q 5, K - Q 2; 9 P - K 6 ch, K - K 2; 10 K - K 5, K - K 1; 11 K - Q 6, K - Q 1. If now White advances the Pawn, the Black King gets in front of it and White must either give up the Pawn or play K - K 6, and a stale mate results. If instead of advancing the Pawn White withdraws his King, Black brings his King up to the Pawn and, when forced to go back, he moves to K _in front_ of the Pawn ready to come up again or to move in front of the White King, as before, should the latter advance. The whole mode of procedure is very important and the student should become thoroughly conversant with its details; for it involves principles to be taken up later on, and because many a beginner has lost identical positions from lack of proper knowledge. At this stage of the book I cannot lay too much stress on its importance.",
+      "source": {
+        "title": "Chess Fundamentals",
+        "author": "Jose Raul Capablanca",
+        "year": 1921,
+        "locator": "Example 5",
+        "url": "https://www.gutenberg.org/ebooks/33870",
+        "rightsBoundary": "Project Gutenberg marks public domain in the USA; other markets require review"
+      },
+      "tablebase": {
+        "category": "draw",
+        "dtz": 0,
+        "dtm": 0,
+        "computedWhiteOutcome": "draw"
+      },
+      "keyMove": {
+        "uci": "e2e3",
+        "san": "e3"
+      },
+      "bookMove": null,
+      "admissionStatus": "exact_verified",
+      "verificationMethod": "live_lichess_syzygy"
+    },
+    {
+      "id": "CF-AUTO-6",
+      "placement": "8/8/5k2/8/5K2/8/4P3/8",
+      "sideToMove": "w",
+      "pieceCount": 3,
+      "outcome": "white_win",
+      "sourcePhrase": "EXAMPLE 6.--In this position White wins, as the King is in front of his Pawn and there is one intervening square. The method to follow is to _advance the King as far as is compatible with the safety of the Pawn and never to advance the Pawn until it is essential to its own safety_. Thus: 1. K - K 4, K - K 3. Black does not allow the White King to advance, therefore White is now compelled to advance his Pawn so as to force Black to move away. He is then able to advance his own King. 2. P - K3, K - B 3; 3. K - Q 5, K - K 2. If Black had played 3...K - B 4, then White would be forced to advance the Pawn to K 4, since he could not advance his King without leaving Black the opportunity to play K - K 5, winning the Pawn. Since he has not done so, it is better for White not to advance the Pawn yet, since its own safety does not require it, but to try to bring the King still further forward. Thus: 4. K - K 5, K - Q 2; 5. K - B 6, K - K 1. Now the White Pawn is too far back and it may be brought up within protection of the King. 6. P - K 4, K - Q 2. Now it would not do to play K - B 7, because Black would play K - Q 3, and White would have to bring back his King to protect the Pawn. Therefore he must continue. 7. P - K 5, K - K 1. Had he moved anywhere else, White could have played K - B 7, followed by the advance of the Pawn to K 6, K 7, K 8; all these squares being protected by the King. As Black tries to prevent that, White must now force him to move away, at the same time always keeping the King in front of the Pawn. Thus: 8. K - K 6. P - K 6 would make it a draw, as Black would then play K - B, and we would have a position similar to the one explained in connection with Example 5. 8...K - B 1; 9. K - Q 7. King moves and the White Pawn advances to K 8, becomes a Queen, and it is all over. This ending is like the previous one, and for the same reasons should be thoroughly understood before proceeding any further. * * * * * 3. PAWN ENDINGS I shall now give a couple of simple endings of two Pawns against one, or three against two, that the reader may see how they can be won. Fewer explanations will be given, as it is up to the student to work things out for himself. Furthermore, nobody can learn how to play well merely from the study of a book; it can only serve as a guide and the rest must be done by the teacher, if the student has one; if not, the student must rea",
+      "source": {
+        "title": "Chess Fundamentals",
+        "author": "Jose Raul Capablanca",
+        "year": 1921,
+        "locator": "Example 6",
+        "url": "https://www.gutenberg.org/ebooks/33870",
+        "rightsBoundary": "Project Gutenberg marks public domain in the USA; other markets require review"
+      },
+      "tablebase": {
+        "category": "win",
+        "dtz": 1,
+        "dtm": 39,
+        "computedWhiteOutcome": "white_win"
+      },
+      "keyMove": {
+        "uci": "e2e3",
+        "san": "e3"
+      },
+      "bookMove": null,
+      "admissionStatus": "exact_verified",
+      "verificationMethod": "live_lichess_syzygy"
+    },
+    {
+      "id": "CF-AUTO-7",
+      "placement": "5k2/6p1/4K1P1/5P2/8/8/8/8",
+      "sideToMove": "w",
+      "pieceCount": 5,
+      "outcome": "white_win",
+      "sourcePhrase": "EXAMPLE 7. In this position White cannot win by playing 1 P - B 6, because Black plays, not P x P, which would lose, but 1...K - Kt 1, and if then 2 P x P, K x P, and draws, as shown in a previous case. If 2 P - B 7 ch, K - B 1, and White will never be able to Queen his Pawn without losing it. If 2 K - K 7, P x P; 3 K x P, K - B 1, and draws. White, however, can win the position given in the diagram by playing: 1 K - Q 7, K - Kt 1; 2 K - K 7, K - R 1; 3 P - B 6, P x P. If 3...K - Kt 1; 4 P - B 7 ch, K - R 1; 5 P - B 8 (Q) mate. 4 K - B 7, P - B 4; 5 P - Kt 7 ch, K - R 2; 6 P - Kt 8 (Q) ch, K - R 3; 7 Q - Kt 6 mate.",
+      "source": {
+        "title": "Chess Fundamentals",
+        "author": "Jose Raul Capablanca",
+        "year": 1921,
+        "locator": "Example 7",
+        "url": "https://www.gutenberg.org/ebooks/33870",
+        "rightsBoundary": "Project Gutenberg marks public domain in the USA; other markets require review"
+      },
+      "tablebase": {
+        "category": "win",
+        "dtz": 5,
+        "dtm": 13,
+        "computedWhiteOutcome": "white_win"
+      },
+      "keyMove": {
+        "uci": "e6d7",
+        "san": "Kd7"
+      },
+      "bookMove": null,
+      "admissionStatus": "exact_verified",
+      "verificationMethod": "live_lichess_syzygy"
+    },
+    {
+      "id": "CF-AUTO-8",
+      "placement": "8/6p1/3k4/8/3K1PP1/8/8/8",
+      "sideToMove": "w",
+      "pieceCount": 5,
+      "outcome": "white_win",
+      "sourcePhrase": "EXAMPLE 8.--In the above position White can't win by 1 P - B 5. Black's best answer would be P - Kt 3 draws. (The student should work this out.) He cannot win by 1 P - Kt 5, because P - Kt 3 draws. (This, because of the principle of the \"_opposition_\" which governs this ending as well as all the Pawn-endings already given, and which will be explained more fully later on.) White can win, however, by playing: 1 K - K 4, K - K 3. (If 1...P - Kt 3; 2 K - Q 4, K - K 3; 3 K - B 5, K - B 3; 4 K - Q 6, K - B 2; 5 P - Kt 5, K - Kt 2; 6 K - K 7, K - Kt 1; 7 K - B 6, K - R 2; 8 K - B 7 and White wins the Pawn.) 2 P - B 5 ch, K - B 3; 3 K - B 4, P - Kt 3. (If this Pawn is kept back we arrive at the ending shown in Example 7.) 4 P - Kt 5 ch, K - B 2; 5 P - B 6, K - K 3; 6 K - K 4, K - B 2; 7 K - K 5, K - B 1. White cannot force his Bishop's Pawn into Q (find out why), but by giving his Pawn up he can win the other Pawn and the game. Thus: 8 P - B 7, K x P; 9 K - Q 6, K - B 1; 10 K - K 6, K - Kt 2; 11 K - K 7, K - Kt 1; 12 K - B 6, K - R 2; 13 K - B 7, K - R 1; 14 K x P , K - Kt 1. There is still some resistance in Black's position. In fact, the only way to win is the one given here, as will easily be seen by experiment. 15 K - R 6 (if K - B 6, K - R 2; and in order to win White must get back to the actual position, as against 16 P - Kt 6 ch, K - R 1 draws), K - R 1; 16 P - Kt 6, K - Kt 1; 17 P - Kt 7, K - B 2; 18 K - R 7, and White queens the Pawn and wins. This ending, apparently so simple, should show the student the enormous difficulties to be surmounted, even when there are hardly any pieces left, when playing against an adversary who knows how to use the resources at his disposal, and it should show the student, also, the necessity of paying strict attention to these elementary things which form the basis of true mastership in Chess.",
+      "source": {
+        "title": "Chess Fundamentals",
+        "author": "Jose Raul Capablanca",
+        "year": 1921,
+        "locator": "Example 8",
+        "url": "https://www.gutenberg.org/ebooks/33870",
+        "rightsBoundary": "Project Gutenberg marks public domain in the USA; other markets require review"
+      },
+      "tablebase": {
+        "category": "win",
+        "dtz": 1,
+        "dtm": 49,
+        "computedWhiteOutcome": "white_win"
+      },
+      "keyMove": {
+        "uci": "f4f5",
+        "san": "f5"
+      },
+      "bookMove": null,
+      "admissionStatus": "exact_verified",
+      "verificationMethod": "live_lichess_syzygy"
+    },
+    {
+      "id": "CF-AUTO-9",
+      "placement": "8/6pp/3k4/8/3K1PPP/8/8/8",
+      "sideToMove": "w",
+      "pieceCount": 7,
+      "outcome": "white_win",
+      "sourcePhrase": "EXAMPLE 9.--In this ending White can win by advancing any of the three Pawns on the first move, but it is convenient to follow the general rule, whenever there is no good reason against it, of _advancing the Pawn that has no Pawn opposing it_. Thus we begin by-- 1. P - B 5, K - K 2. If P - Kt 3, P - B 6; and we have a similar ending to one of those shown above. If 1...P - R 3; 2 P - Kt 5. 2. K - K 5, K - B 2; 3. P - Kt 5, K - K 2. If 3...P - Kt 3; 4 P - B 6, and if 3...P - R 3; 4 P - Kt 6 ch, and in either case we have a similar ending to one of those already shown. 4. P - R 5, and by following it up with P - Kt 6 we have the same ending previously shown. Should Black play 4...P - Kt 3, then R P x P, P x P; P - B 6 ch with the same result. Having now seen the cases when the Pawns are all on one side of the board we shall now examine a case when there are Pawns on both sides of the board.",
+      "source": {
+        "title": "Chess Fundamentals",
+        "author": "Jose Raul Capablanca",
+        "year": 1921,
+        "locator": "Example 9",
+        "url": "https://www.gutenberg.org/ebooks/33870",
+        "rightsBoundary": "Project Gutenberg marks public domain in the USA; other markets require review"
+      },
+      "tablebase": {
+        "category": "win",
+        "dtz": 1,
+        "dtm": null,
+        "computedWhiteOutcome": "white_win"
+      },
+      "keyMove": {
+        "uci": "f4f5",
+        "san": "f5"
+      },
+      "bookMove": null,
+      "admissionStatus": "exact_verified",
+      "verificationMethod": "live_lichess_syzygy"
+    },
+    {
+      "id": "CLASSIC-83bb03b151be9eed",
+      "placement": "8/5k2/8/7P/1p4K1/8/P7/8",
+      "sideToMove": "b",
+      "pieceCount": 5,
+      "outcome": "draw",
+      "sourcePhrase": "Drawn game. Black's King arrives just in time to stop White's Q R P, e.g.: 60. K—B 4, K—R 3; 61. K—K 4, K×P; 62. K—Q 4, K—Kt 4; 63. K—B 4, K—B 4; 64. K×P, K—K 3; 65. K—Kt 5, K—Q 2; 66. K—Kt 6, K—B 1, etc. A splendid example of Réti's careful defence.",
+      "source": {
+        "title": "My Best Games of Chess 1908–1923 (1927)",
+        "author": "Alexander Alekhine",
+        "year": 1927,
+        "locator": "Alekhine, Alexander - Reti, Richard, move 61...",
+        "url": "https://archive.org/details/mybestgamesofche0000alex_f6z2",
+        "rightsBoundary": "Classic Chess marks this annotation public-domain; the linked source predates 1931, and other jurisdictions still require review"
+      },
+      "tablebase": {
+        "category": "draw",
+        "dtz": 0,
+        "dtm": 0,
+        "computedWhiteOutcome": "draw"
+      },
+      "keyMove": {
+        "uci": "f7g7",
+        "san": "Kg7"
+      },
+      "bookMove": {
+        "uci": "f7g7",
+        "san": "Kg7"
+      },
+      "admissionStatus": "exact_verified",
+      "verificationMethod": "live_lichess_syzygy"
+    },
+    {
+      "id": "CLASSIC-858f7899cff4394b",
+      "placement": "8/4pp2/8/8/8/6pN/2K2k2/8",
+      "sideToMove": "b",
+      "pieceCount": 6,
+      "outcome": "black_win",
+      "sourcePhrase": "A very difficult and interesting game in all its phases.",
+      "source": {
+        "title": "My Best Games of Chess 1908–1923 (1927)",
+        "author": "Alexander Alekhine",
+        "year": 1927,
+        "locator": "Selezniev, Alexey Sergeevich - Alekhine, Alexander, move 74...",
+        "url": "https://archive.org/details/mybestgamesofche0000alex_f6z2",
+        "rightsBoundary": "Classic Chess marks this annotation public-domain; the linked source predates 1931, and other jurisdictions still require review"
+      },
+      "tablebase": {
+        "category": "win",
+        "dtz": 3,
+        "dtm": 29,
+        "computedWhiteOutcome": "black_win"
+      },
+      "keyMove": {
+        "uci": "f2e3",
+        "san": "Ke3"
+      },
+      "bookMove": {
+        "uci": "f2f1",
+        "san": "Kf1"
+      },
+      "admissionStatus": "non_instructional_comment",
+      "verificationMethod": "live_lichess_syzygy"
+    },
+    {
+      "id": "CLASSIC-5b9bea2aab27a270",
+      "placement": "6k1/6p1/7p/2R5/8/1r6/7K/8",
+      "sideToMove": "w",
+      "pieceCount": 6,
+      "outcome": "black_win",
+      "sourcePhrase": "A few more moves “ for fun.”",
+      "source": {
+        "title": "Chess Strategy (1921)",
+        "author": "Edward Lasker",
+        "year": 1921,
+        "locator": "Blackburne, Joseph Henry - Lasker, Emanuel, move 47.",
+        "url": "https://archive.org/details/chessstrategy00lask",
+        "rightsBoundary": "Classic Chess marks this annotation public-domain; the linked source predates 1931, and other jurisdictions still require review"
+      },
+      "tablebase": {
+        "category": "loss",
+        "dtz": -4,
+        "dtm": -74,
+        "computedWhiteOutcome": "black_win"
+      },
+      "keyMove": {
+        "uci": "c5c1",
+        "san": "Rc1"
+      },
+      "bookMove": {
+        "uci": "c5c6",
+        "san": "Rc6"
+      },
+      "admissionStatus": "non_instructional_comment",
+      "verificationMethod": "live_lichess_syzygy"
+    },
+    {
+      "id": "CLASSIC-9d3aadd17e5678af",
+      "placement": "8/5k2/3P4/pnN1K3/8/8/7P/8",
+      "sideToMove": "w",
+      "pieceCount": 7,
+      "outcome": "white_win",
+      "sourcePhrase": "Rubinstein's conduct of this end game is most pleasing.",
+      "source": {
+        "title": "The International Chess Congress, St. Petersburg, 1909 (1910)",
+        "author": "Emanuel Lasker",
+        "year": 1910,
+        "locator": "Rubinstein, Akiba - Mieses, Jacques, move 44.",
+        "url": "https://archive.org/details/internationalche00lask",
+        "rightsBoundary": "Classic Chess marks this annotation public-domain; the linked source predates 1931, and other jurisdictions still require review"
+      },
+      "tablebase": {
+        "category": "win",
+        "dtz": 1,
+        "dtm": null,
+        "computedWhiteOutcome": "white_win"
+      },
+      "keyMove": {
+        "uci": "h2h3",
+        "san": "h3"
+      },
+      "bookMove": {
+        "uci": "c5b7",
+        "san": "Nb7"
+      },
+      "admissionStatus": "non_instructional_comment",
+      "verificationMethod": "live_lichess_syzygy"
+    },
+    {
+      "id": "CLASSIC-bb22a7d17d792b1c",
+      "placement": "3K3q/1P3k2/3Q4/8/7p/8/8/8",
+      "sideToMove": "w",
+      "pieceCount": 6,
+      "outcome": "white_win",
+      "sourcePhrase": "White has played the ending in grand style. In addition to the error of his 36th move, Black has committed the other one, to approach the hostile Pawn too closely with his King.",
+      "source": {
+        "title": "The International Chess Congress, St. Petersburg, 1909 (1910)",
+        "author": "Emanuel Lasker",
+        "year": 1910,
+        "locator": "Bernstein, Ossip Samuel - Perlis, Julius, move 79.",
+        "url": "https://archive.org/details/internationalche00lask",
+        "rightsBoundary": "Classic Chess marks this annotation public-domain; the linked source predates 1931, and other jurisdictions still require review"
+      },
+      "tablebase": {
+        "category": "win",
+        "dtz": 5,
+        "dtm": 23,
+        "computedWhiteOutcome": "white_win"
+      },
+      "keyMove": {
+        "uci": "d8d7",
+        "san": "Kd7"
+      },
+      "bookMove": {
+        "uci": "d8d7",
+        "san": "Kd7"
+      },
+      "admissionStatus": "exact_verified",
+      "verificationMethod": "live_lichess_syzygy"
+    },
+    {
+      "id": "CLASSIC-6555c9b264a420ce",
+      "placement": "Q7/8/8/5p1p/1K3P2/7p/8/6k1",
+      "sideToMove": "w",
+      "pieceCount": 7,
+      "outcome": "white_win",
+      "sourcePhrase": "And wins. For if 48. ... P. to R's 7th; 49. Q. to K. Kt's 3rd (ch.), K. to R's sq; 50. Q. to K. B's 2nd, mating next move.",
+      "source": {
+        "title": "Morphy's Games of Chess (1860)",
+        "author": "J. Löwenthal",
+        "year": 1860,
+        "locator": "Morphy, Paul - Harrwitz, Daniel, move 48.",
+        "url": "https://archive.org/details/morphysgamesofch00morpiala",
+        "rightsBoundary": "Classic Chess marks this annotation public-domain; the linked source predates 1931, and other jurisdictions still require review"
+      },
+      "tablebase": {
+        "category": "win",
+        "dtz": 3,
+        "dtm": null,
+        "computedWhiteOutcome": "white_win"
+      },
+      "keyMove": {
+        "uci": "a8f3",
+        "san": "Qf3"
+      },
+      "bookMove": {
+        "uci": "a8f3",
+        "san": "Qf3"
+      },
+      "admissionStatus": "exact_verified",
+      "verificationMethod": "live_lichess_syzygy"
+    },
+    {
+      "id": "CLASSIC-a171f7fd262e9713",
+      "placement": "8/8/2P5/1P6/KP1k4/8/8/7r",
+      "sideToMove": "w",
+      "pieceCount": 6,
+      "outcome": "white_win",
+      "sourcePhrase": "By the accompanying diagram the reader will see that the march of the Pawns cannot be arrested.",
+      "source": {
+        "title": "Morphy's Games of Chess (1860)",
+        "author": "J. Löwenthal",
+        "year": 1860,
+        "locator": "Morphy, Paul - Paulsen, Louis, move 62.",
+        "url": "https://archive.org/details/morphysgamesofch00morpiala",
+        "rightsBoundary": "Classic Chess marks this annotation public-domain; the linked source predates 1931, and other jurisdictions still require review"
+      },
+      "tablebase": {
+        "category": "win",
+        "dtz": 1,
+        "dtm": 47,
+        "computedWhiteOutcome": "white_win"
+      },
+      "keyMove": {
+        "uci": "c6c7",
+        "san": "c7"
+      },
+      "bookMove": {
+        "uci": "c6c7",
+        "san": "c7"
+      },
+      "admissionStatus": "exact_verified",
+      "verificationMethod": "live_lichess_syzygy"
+    },
+    {
+      "id": "CLASSIC-b6d9c02120828c69",
+      "placement": "7r/8/5k2/6R1/6K1/6Pp/7P/8",
+      "sideToMove": "w",
+      "pieceCount": 7,
+      "outcome": "white_win",
+      "sourcePhrase": "And wins.",
+      "source": {
+        "title": "Morphy's Games of Chess (1860)",
+        "author": "J. Löwenthal",
+        "year": 1860,
+        "locator": "Harrwitz, Daniel - Morphy, Paul, move 55.",
+        "url": "https://archive.org/details/morphysgamesofch00morpiala",
+        "rightsBoundary": "Classic Chess marks this annotation public-domain; the linked source predates 1931, and other jurisdictions still require review"
+      },
+      "tablebase": {
+        "category": "win",
+        "dtz": 3,
+        "dtm": null,
+        "computedWhiteOutcome": "white_win"
+      },
+      "keyMove": {
+        "uci": "g5h5",
+        "san": "Rh5"
+      },
+      "bookMove": {
+        "uci": "g5h5",
+        "san": "Rh5"
+      },
+      "admissionStatus": "exact_verified",
+      "verificationMethod": "live_lichess_syzygy"
+    },
+    {
+      "id": "CLASSIC-8dc12926395a9e3b",
+      "placement": "8/6p1/3k4/6R1/2K1p3/3r3P/8/8",
+      "sideToMove": "b",
+      "pieceCount": 7,
+      "outcome": "black_win",
+      "sourcePhrase": "Not good. R—Kt5 which would have compelled Black to retreat R—R2 in order to maintain his P was by far better, and gave him good hopes of a draw.",
+      "source": {
+        "title": "The Modern Chess Instructor (1889)",
+        "author": "William Steinitz",
+        "year": 1889,
+        "locator": "Chigorin, Mikhail Ivanovich - Steinitz, William, move 52...",
+        "url": "https://archive.org/details/modernchessinstr00steirich",
+        "rightsBoundary": "Classic Chess marks this annotation public-domain; the linked source predates 1931, and other jurisdictions still require review"
+      },
+      "tablebase": {
+        "category": "win",
+        "dtz": 1,
+        "dtm": null,
+        "computedWhiteOutcome": "black_win"
+      },
+      "keyMove": {
+        "uci": "g7g6",
+        "san": "g6"
+      },
+      "bookMove": {
+        "uci": "d3d1",
+        "san": "Rd1"
+      },
+      "admissionStatus": "exact_verified",
+      "verificationMethod": "live_lichess_syzygy"
+    },
+    {
+      "id": "CLASSIC-e3371b827babc400",
+      "placement": "8/6p1/3k4/6R1/2K1p3/7P/8/3r4",
+      "sideToMove": "w",
+      "pieceCount": 7,
+      "outcome": "black_win",
+      "sourcePhrase": "A little better was 53 R—Kt6 ch., 53 K—K4; 54 R×P, but Black would also soon win, even in that case, by first driving the adverse King further off with 54…R—B8 ch.; and then advancing the P.",
+      "source": {
+        "title": "The Modern Chess Instructor (1889)",
+        "author": "William Steinitz",
+        "year": 1889,
+        "locator": "Chigorin, Mikhail Ivanovich - Steinitz, William, move 53.",
+        "url": "https://archive.org/details/modernchessinstr00steirich",
+        "rightsBoundary": "Classic Chess marks this annotation public-domain; the linked source predates 1931, and other jurisdictions still require review"
+      },
+      "tablebase": {
+        "category": "loss",
+        "dtz": -6,
+        "dtm": null,
+        "computedWhiteOutcome": "black_win"
+      },
+      "keyMove": {
+        "uci": "g5g4",
+        "san": "Rg4"
+      },
+      "bookMove": {
+        "uci": "g5g7",
+        "san": "Rxg7"
+      },
+      "admissionStatus": "exact_verified",
+      "verificationMethod": "live_lichess_syzygy"
+    }
+  ]
+}
