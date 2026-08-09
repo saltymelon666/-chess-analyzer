@@ -1,0 +1,1282 @@
+{
+  "schemaVersion": "phase8c-kling-endgame-1.0",
+  "sourceTitle": "Chess Studies; or, Endings of Games",
+  "sourceYear": 1851,
+  "authorityBoundary": "原书结论只属于其精确源局面；七子及以下胜和结果由Syzygy验证。原书与表库冲突、行棋方不明或超过七子的局面不得作为已验证结果进入产品。",
+  "summary": {
+    "exact_verified": 20,
+    "source_assertion_incomplete": 2,
+    "source_side_unknown": 2,
+    "book_tablebase_conflict": 1,
+    "engine_supported_not_tablebase_exact": 3
+  },
+  "cases": [
+    {
+      "id": "KH-001",
+      "file": "image_0017_00.jpeg",
+      "sourcePage": 17,
+      "placement": "3k4/3p4/3K4/8/8/8/3P4/8",
+      "sideToMove": "w",
+      "bookClaim": "draw",
+      "sourcePhrase": "White can only draw.",
+      "pieceCount": 4,
+      "tablebase": {
+        "category": "draw",
+        "dtz": 0,
+        "dtm": 0,
+        "computedWhiteOutcome": "draw"
+      },
+      "verifiedRoute": [
+        {
+          "ply": 1,
+          "side": "white",
+          "uci": "d2d3",
+          "san": "d3",
+          "resultingCategoryForOpponent": null,
+          "resultingDtz": null
+        }
+      ],
+      "verificationMethod": "lichess_syzygy_root_audit_2026-08-09",
+      "admissionStatus": "exact_verified"
+    },
+    {
+      "id": "KH-002",
+      "file": "image_0020_00.jpeg",
+      "sourcePage": 20,
+      "placement": "3k4/3p4/8/3P4/3P4/3K4/8/8",
+      "sideToMove": null,
+      "bookClaim": null,
+      "sourcePhrase": "原图未保留结果图注；正文只保留着法和对王说明。",
+      "pieceCount": 5,
+      "tablebase": null,
+      "verifiedRoute": [],
+      "admissionStatus": "source_assertion_incomplete"
+    },
+    {
+      "id": "KH-003",
+      "file": "image_0036_00.jpeg",
+      "sourcePage": 36,
+      "placement": "8/8/6k1/8/4p2P/5pP1/5K1P/8",
+      "sideToMove": "w",
+      "bookClaim": "white_win",
+      "sourcePhrase": "White to move and win.",
+      "pieceCount": 7,
+      "tablebase": {
+        "category": "win",
+        "dtz": 1,
+        "dtm": null,
+        "computedWhiteOutcome": "white_win"
+      },
+      "verifiedRoute": [
+        {
+          "ply": 1,
+          "side": "white",
+          "uci": "g3g4",
+          "san": "g4",
+          "resultingCategoryForOpponent": null,
+          "resultingDtz": null
+        }
+      ],
+      "verificationMethod": "lichess_syzygy_root_audit_2026-08-09",
+      "admissionStatus": "exact_verified"
+    },
+    {
+      "id": "KH-004",
+      "file": "image_0045_00.jpeg",
+      "sourcePage": 45,
+      "placement": "8/8/8/8/8/5p1k/4p1p1/4B1K1",
+      "sideToMove": null,
+      "bookClaim": "black_win",
+      "sourcePhrase": "Black wins.",
+      "pieceCount": 6,
+      "tablebase": null,
+      "verifiedRoute": [],
+      "admissionStatus": "source_side_unknown"
+    },
+    {
+      "id": "KH-005",
+      "file": "image_0046_00.jpeg",
+      "sourcePage": 46,
+      "placement": "3B4/4P3/8/8/8/3K4/p7/1k6",
+      "sideToMove": "w",
+      "bookClaim": "white_win",
+      "sourcePhrase": "White to move and win.",
+      "pieceCount": 5,
+      "tablebase": {
+        "category": "win",
+        "dtz": 1,
+        "dtm": 17,
+        "computedWhiteOutcome": "white_win"
+      },
+      "verifiedRoute": [
+        {
+          "ply": 1,
+          "side": "white",
+          "uci": "e7e8q",
+          "san": "e8=Q",
+          "resultingCategoryForOpponent": null,
+          "resultingDtz": null
+        }
+      ],
+      "verificationMethod": "lichess_syzygy_root_audit_2026-08-09",
+      "admissionStatus": "exact_verified"
+    },
+    {
+      "id": "KH-006",
+      "file": "image_0050_00.jpeg",
+      "sourcePage": 50,
+      "placement": "8/8/1k6/1p1K4/1p3B2/8/P7/8",
+      "sideToMove": "w",
+      "bookClaim": "white_win",
+      "sourcePhrase": "White to move and win.",
+      "pieceCount": 6,
+      "tablebase": {
+        "category": "win",
+        "dtz": 19,
+        "dtm": 43,
+        "computedWhiteOutcome": "white_win"
+      },
+      "verifiedRoute": [
+        {
+          "ply": 1,
+          "side": "white",
+          "uci": "f4d2",
+          "san": "Bd2",
+          "resultingCategoryForOpponent": null,
+          "resultingDtz": null
+        }
+      ],
+      "verificationMethod": "lichess_syzygy_root_audit_2026-08-09",
+      "admissionStatus": "exact_verified"
+    },
+    {
+      "id": "KH-007",
+      "file": "image_0065_00.jpeg",
+      "sourcePage": 65,
+      "placement": "6k1/8/4KP2/4N3/8/8/1b6/8",
+      "sideToMove": "w",
+      "bookClaim": "white_win",
+      "sourcePhrase": "White has the move and wins.",
+      "pieceCount": 5,
+      "tablebase": {
+        "category": "draw",
+        "dtz": 0,
+        "dtm": 0,
+        "computedWhiteOutcome": "draw"
+      },
+      "verifiedRoute": [
+        {
+          "ply": 1,
+          "side": "white",
+          "uci": "f6f7",
+          "san": "f7+",
+          "resultingCategoryForOpponent": null,
+          "resultingDtz": null
+        }
+      ],
+      "verificationMethod": "lichess_syzygy_root_audit_2026-08-09",
+      "admissionStatus": "book_tablebase_conflict"
+    },
+    {
+      "id": "KH-008",
+      "file": "image_0074_00.jpeg",
+      "sourcePage": 74,
+      "placement": "8/8/8/8/8/6K1/3N1p2/5N1k",
+      "sideToMove": "w",
+      "bookClaim": "white_win",
+      "sourcePhrase": "White to move and win.",
+      "pieceCount": 5,
+      "tablebase": {
+        "category": "win",
+        "dtz": 11,
+        "dtm": 11,
+        "computedWhiteOutcome": "white_win"
+      },
+      "verifiedRoute": [
+        {
+          "ply": 1,
+          "side": "white",
+          "uci": "g3f4",
+          "san": "Kf4",
+          "resultingCategoryForOpponent": null,
+          "resultingDtz": null
+        }
+      ],
+      "verificationMethod": "lichess_syzygy_root_audit_2026-08-09",
+      "admissionStatus": "exact_verified"
+    },
+    {
+      "id": "KH-009",
+      "file": "image_0110_00.jpeg",
+      "sourcePage": 110,
+      "placement": "8/5K1k/7b/p5p1/6R1/8/8/8",
+      "sideToMove": "w",
+      "bookClaim": "draw",
+      "sourcePhrase": "White can only draw.",
+      "pieceCount": 6,
+      "tablebase": {
+        "category": "draw",
+        "dtz": 0,
+        "dtm": 0,
+        "computedWhiteOutcome": "draw"
+      },
+      "verifiedRoute": [
+        {
+          "ply": 1,
+          "side": "white",
+          "uci": "g4g1",
+          "san": "Rg1",
+          "resultingCategoryForOpponent": null,
+          "resultingDtz": null
+        }
+      ],
+      "verificationMethod": "lichess_syzygy_root_audit_2026-08-09",
+      "admissionStatus": "exact_verified"
+    },
+    {
+      "id": "KH-010",
+      "file": "image_0136_00.jpeg",
+      "sourcePage": 136,
+      "placement": "5R2/8/8/5K2/8/8/7p/4B1kr",
+      "sideToMove": "w",
+      "bookClaim": "white_win",
+      "sourcePhrase": "White to move and win.",
+      "pieceCount": 6,
+      "tablebase": {
+        "category": "win",
+        "dtz": 11,
+        "dtm": 41,
+        "computedWhiteOutcome": "white_win"
+      },
+      "verifiedRoute": [
+        {
+          "ply": 1,
+          "side": "white",
+          "uci": "f5g4",
+          "san": "Kg4",
+          "resultingCategoryForOpponent": null,
+          "resultingDtz": null
+        }
+      ],
+      "verificationMethod": "lichess_syzygy_root_audit_2026-08-09",
+      "admissionStatus": "exact_verified"
+    },
+    {
+      "id": "KH-011",
+      "file": "image_0161_00.jpeg",
+      "sourcePage": 161,
+      "placement": "1R6/8/8/8/6kp/Kp5r/1P6/8",
+      "sideToMove": "w",
+      "bookClaim": "draw",
+      "sourcePhrase": "White having the move draws.",
+      "pieceCount": 7,
+      "tablebase": {
+        "category": "draw",
+        "dtz": 0,
+        "dtm": null,
+        "computedWhiteOutcome": "draw"
+      },
+      "verifiedRoute": [
+        {
+          "ply": 1,
+          "side": "white",
+          "uci": "b8b4",
+          "san": "Rb4+",
+          "resultingCategoryForOpponent": null,
+          "resultingDtz": null
+        }
+      ],
+      "verificationMethod": "lichess_syzygy_root_audit_2026-08-09",
+      "admissionStatus": "exact_verified"
+    },
+    {
+      "id": "KH-012",
+      "file": "image_0166_00.jpeg",
+      "sourcePage": 166,
+      "placement": "7Q/8/8/8/8/3k4/p6p/3K4",
+      "sideToMove": "w",
+      "bookClaim": "draw",
+      "sourcePhrase": "White has the move and can but draw.",
+      "pieceCount": 5,
+      "tablebase": {
+        "category": "draw",
+        "dtz": 0,
+        "dtm": 0,
+        "computedWhiteOutcome": "draw"
+      },
+      "verifiedRoute": [
+        {
+          "ply": 1,
+          "side": "white",
+          "uci": "h8h3",
+          "san": "Qh3+",
+          "resultingCategoryForOpponent": null,
+          "resultingDtz": null
+        }
+      ],
+      "verificationMethod": "lichess_syzygy_root_audit_2026-08-09",
+      "admissionStatus": "exact_verified"
+    },
+    {
+      "id": "KH-013",
+      "file": "image_0187_00.jpeg",
+      "sourcePage": 187,
+      "placement": "K2k4/8/1q6/8/8/8/8/R7",
+      "sideToMove": "w",
+      "bookClaim": "draw",
+      "sourcePhrase": "White has the move and can but draw.",
+      "pieceCount": 4,
+      "tablebase": {
+        "category": "draw",
+        "dtz": 0,
+        "dtm": 0,
+        "computedWhiteOutcome": "draw"
+      },
+      "verifiedRoute": [
+        {
+          "ply": 1,
+          "side": "white",
+          "uci": "a1d1",
+          "san": "Rd1+",
+          "resultingCategoryForOpponent": null,
+          "resultingDtz": null
+        }
+      ],
+      "verificationMethod": "lichess_syzygy_root_audit_2026-08-09",
+      "admissionStatus": "exact_verified"
+    },
+    {
+      "id": "KH-014",
+      "file": "image_0204_00.jpeg",
+      "sourcePage": 204,
+      "placement": "2kb4/4r3/2P5/1K6/5Q2/8/8/8",
+      "sideToMove": null,
+      "bookClaim": null,
+      "sourcePhrase": "See example No. 6.",
+      "pieceCount": 6,
+      "tablebase": null,
+      "verifiedRoute": [],
+      "admissionStatus": "source_assertion_incomplete"
+    },
+    {
+      "id": "KH-015",
+      "file": "image_0216_00.jpeg",
+      "sourcePage": 216,
+      "placement": "8/3B4/8/3q4/2N1kp2/2P2p1N/2K2P2/8",
+      "sideToMove": "w",
+      "bookClaim": "white_win",
+      "sourcePhrase": "White to move and win.",
+      "pieceCount": 10,
+      "tablebase": null,
+      "verifiedRoute": [],
+      "admissionStatus": "engine_supported_not_tablebase_exact",
+      "engineEvidence": {
+        "engine": "Stockfish",
+        "depth": 20,
+        "multipv": 3,
+        "claimSupported": true,
+        "lines": [
+          {
+            "rank": 1,
+            "centipawn": 689,
+            "mate": null,
+            "depth": 20,
+            "route": [
+              {
+                "ply": 1,
+                "side": "white",
+                "uci": "h3g5",
+                "san": "Ng5+"
+              },
+              {
+                "ply": 2,
+                "side": "black",
+                "uci": "d5g5",
+                "san": "Qxg5"
+              },
+              {
+                "ply": 3,
+                "side": "white",
+                "uci": "c4d2",
+                "san": "Nd2+"
+              },
+              {
+                "ply": 4,
+                "side": "black",
+                "uci": "e4d5",
+                "san": "Kd5"
+              },
+              {
+                "ply": 5,
+                "side": "white",
+                "uci": "c3c4",
+                "san": "c4+"
+              },
+              {
+                "ply": 6,
+                "side": "black",
+                "uci": "d5d4",
+                "san": "Kd4"
+              },
+              {
+                "ply": 7,
+                "side": "white",
+                "uci": "d2f3",
+                "san": "Nxf3+"
+              },
+              {
+                "ply": 8,
+                "side": "black",
+                "uci": "d4c4",
+                "san": "Kxc4"
+              },
+              {
+                "ply": 9,
+                "side": "white",
+                "uci": "f3g5",
+                "san": "Nxg5"
+              },
+              {
+                "ply": 10,
+                "side": "black",
+                "uci": "c4d4",
+                "san": "Kd4"
+              }
+            ]
+          },
+          {
+            "rank": 2,
+            "centipawn": 0,
+            "mate": null,
+            "depth": 20,
+            "route": [
+              {
+                "ply": 1,
+                "side": "white",
+                "uci": "c4d2",
+                "san": "Nd2+"
+              },
+              {
+                "ply": 2,
+                "side": "black",
+                "uci": "e4e5",
+                "san": "Ke5"
+              },
+              {
+                "ply": 3,
+                "side": "white",
+                "uci": "d7g4",
+                "san": "Bg4"
+              },
+              {
+                "ply": 4,
+                "side": "black",
+                "uci": "d5a2",
+                "san": "Qa2+"
+              },
+              {
+                "ply": 5,
+                "side": "white",
+                "uci": "c2d3",
+                "san": "Kd3"
+              },
+              {
+                "ply": 6,
+                "side": "black",
+                "uci": "a2d5",
+                "san": "Qd5+"
+              },
+              {
+                "ply": 7,
+                "side": "white",
+                "uci": "d3c2",
+                "san": "Kc2"
+              }
+            ]
+          },
+          {
+            "rank": 3,
+            "centipawn": 0,
+            "mate": null,
+            "depth": 20,
+            "route": [
+              {
+                "ply": 1,
+                "side": "white",
+                "uci": "d7e6",
+                "san": "Be6"
+              },
+              {
+                "ply": 2,
+                "side": "black",
+                "uci": "d5d3",
+                "san": "Qd3+"
+              },
+              {
+                "ply": 3,
+                "side": "white",
+                "uci": "c2b3",
+                "san": "Kb3"
+              },
+              {
+                "ply": 4,
+                "side": "black",
+                "uci": "d3c3",
+                "san": "Qxc3+"
+              },
+              {
+                "ply": 5,
+                "side": "white",
+                "uci": "b3c3",
+                "san": "Kxc3"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "KH-016",
+      "file": "image_0225_00.jpeg",
+      "sourcePage": 225,
+      "placement": "kq4n1/4p2Q/1P2P3/1K6/8/8/p7/8",
+      "sideToMove": "w",
+      "bookClaim": "white_win",
+      "sourcePhrase": "White to move and win.",
+      "pieceCount": 9,
+      "tablebase": null,
+      "verifiedRoute": [],
+      "admissionStatus": "engine_supported_not_tablebase_exact",
+      "engineEvidence": {
+        "engine": "Stockfish",
+        "depth": 20,
+        "multipv": 3,
+        "claimSupported": true,
+        "lines": [
+          {
+            "rank": 1,
+            "centipawn": null,
+            "mate": 14,
+            "depth": 20,
+            "route": [
+              {
+                "ply": 1,
+                "side": "white",
+                "uci": "h7e4",
+                "san": "Qe4+"
+              },
+              {
+                "ply": 2,
+                "side": "black",
+                "uci": "b8b7",
+                "san": "Qb7"
+              },
+              {
+                "ply": 3,
+                "side": "white",
+                "uci": "e4a4",
+                "san": "Qa4+"
+              },
+              {
+                "ply": 4,
+                "side": "black",
+                "uci": "a8b8",
+                "san": "Kb8"
+              },
+              {
+                "ply": 5,
+                "side": "white",
+                "uci": "a4f4",
+                "san": "Qf4+"
+              },
+              {
+                "ply": 6,
+                "side": "black",
+                "uci": "b8a8",
+                "san": "Ka8"
+              },
+              {
+                "ply": 7,
+                "side": "white",
+                "uci": "f4f8",
+                "san": "Qf8+"
+              },
+              {
+                "ply": 8,
+                "side": "black",
+                "uci": "b7b8",
+                "san": "Qb8"
+              },
+              {
+                "ply": 9,
+                "side": "white",
+                "uci": "f8f3",
+                "san": "Qf3+"
+              },
+              {
+                "ply": 10,
+                "side": "black",
+                "uci": "b8b7",
+                "san": "Qb7"
+              }
+            ]
+          },
+          {
+            "rank": 2,
+            "centipawn": 0,
+            "mate": null,
+            "depth": 20,
+            "route": [
+              {
+                "ply": 1,
+                "side": "white",
+                "uci": "h7h5",
+                "san": "Qh5"
+              },
+              {
+                "ply": 2,
+                "side": "black",
+                "uci": "b8d8",
+                "san": "Qd8"
+              },
+              {
+                "ply": 3,
+                "side": "white",
+                "uci": "h5f3",
+                "san": "Qf3+"
+              },
+              {
+                "ply": 4,
+                "side": "black",
+                "uci": "a8b8",
+                "san": "Kb8"
+              },
+              {
+                "ply": 5,
+                "side": "white",
+                "uci": "f3f4",
+                "san": "Qf4+"
+              },
+              {
+                "ply": 6,
+                "side": "black",
+                "uci": "b8c8",
+                "san": "Kc8"
+              },
+              {
+                "ply": 7,
+                "side": "white",
+                "uci": "f4c4",
+                "san": "Qc4+"
+              },
+              {
+                "ply": 8,
+                "side": "black",
+                "uci": "c8b7",
+                "san": "Kb7"
+              },
+              {
+                "ply": 9,
+                "side": "white",
+                "uci": "c4e4",
+                "san": "Qe4+"
+              },
+              {
+                "ply": 10,
+                "side": "black",
+                "uci": "b7b8",
+                "san": "Kb8"
+              }
+            ]
+          },
+          {
+            "rank": 3,
+            "centipawn": -228,
+            "mate": null,
+            "depth": 20,
+            "route": [
+              {
+                "ply": 1,
+                "side": "white",
+                "uci": "h7h1",
+                "san": "Qh1+"
+              },
+              {
+                "ply": 2,
+                "side": "black",
+                "uci": "b8b7",
+                "san": "Qb7"
+              },
+              {
+                "ply": 3,
+                "side": "white",
+                "uci": "h1h5",
+                "san": "Qh5"
+              },
+              {
+                "ply": 4,
+                "side": "black",
+                "uci": "b7a6",
+                "san": "Qa6+"
+              },
+              {
+                "ply": 5,
+                "side": "white",
+                "uci": "b5a6",
+                "san": "Kxa6"
+              },
+              {
+                "ply": 6,
+                "side": "black",
+                "uci": "a2a1q",
+                "san": "a1=Q+"
+              },
+              {
+                "ply": 7,
+                "side": "white",
+                "uci": "a6b5",
+                "san": "Kb5"
+              },
+              {
+                "ply": 8,
+                "side": "black",
+                "uci": "a1b1",
+                "san": "Qb1+"
+              },
+              {
+                "ply": 9,
+                "side": "white",
+                "uci": "b5a5",
+                "san": "Ka5"
+              },
+              {
+                "ply": 10,
+                "side": "black",
+                "uci": "b1a2",
+                "san": "Qa2+"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "KH2-001",
+      "file": "image_0026_00.jpeg",
+      "sourcePage": 26,
+      "placement": "8/8/3pkp2/8/8/3PKP2/8/8",
+      "sideToMove": "w",
+      "bookClaim": "draw",
+      "sourcePhrase": "White with the move can only draw.",
+      "pieceCount": 6,
+      "tablebase": {
+        "category": "draw",
+        "dtz": 0,
+        "dtm": 0,
+        "computedWhiteOutcome": "draw"
+      },
+      "verifiedRoute": [
+        {
+          "ply": 1,
+          "side": "white",
+          "uci": "d3d4",
+          "san": "d4",
+          "resultingCategoryForOpponent": null,
+          "resultingDtz": null
+        }
+      ],
+      "verificationMethod": "lichess_syzygy_root_audit_2026-08-09",
+      "admissionStatus": "exact_verified"
+    },
+    {
+      "id": "KH2-002",
+      "file": "image_0033_00.jpeg",
+      "sourcePage": 33,
+      "placement": "8/8/3Kpkp1/5p2/8/8/4PP2/8",
+      "sideToMove": "w",
+      "bookClaim": "draw",
+      "sourcePhrase": "White with the move can only draw.",
+      "pieceCount": 7,
+      "tablebase": {
+        "category": "draw",
+        "dtz": 0,
+        "dtm": null,
+        "computedWhiteOutcome": "draw"
+      },
+      "verifiedRoute": [
+        {
+          "ply": 1,
+          "side": "white",
+          "uci": "f2f4",
+          "san": "f4",
+          "resultingCategoryForOpponent": null,
+          "resultingDtz": null
+        }
+      ],
+      "verificationMethod": "lichess_syzygy_root_audit_2026-08-09",
+      "admissionStatus": "exact_verified"
+    },
+    {
+      "id": "KH2-003",
+      "file": "image_0072_00.jpeg",
+      "sourcePage": 72,
+      "placement": "6bk/3p4/3Np2K/4Pp2/5P2/8/8/8",
+      "sideToMove": "w",
+      "bookClaim": "white_win",
+      "sourcePhrase": "White to move and win.",
+      "pieceCount": 9,
+      "tablebase": null,
+      "verifiedRoute": [],
+      "admissionStatus": "engine_supported_not_tablebase_exact",
+      "engineEvidence": {
+        "engine": "Stockfish",
+        "depth": 20,
+        "multipv": 3,
+        "claimSupported": true,
+        "lines": [
+          {
+            "rank": 1,
+            "centipawn": 1378,
+            "mate": null,
+            "depth": 20,
+            "route": [
+              {
+                "ply": 1,
+                "side": "white",
+                "uci": "d6e8",
+                "san": "Ne8"
+              },
+              {
+                "ply": 2,
+                "side": "black",
+                "uci": "g8f7",
+                "san": "Bf7"
+              },
+              {
+                "ply": 3,
+                "side": "white",
+                "uci": "e8f6",
+                "san": "Nf6"
+              },
+              {
+                "ply": 4,
+                "side": "black",
+                "uci": "f7e8",
+                "san": "Be8"
+              },
+              {
+                "ply": 5,
+                "side": "white",
+                "uci": "f6e8",
+                "san": "Nxe8"
+              },
+              {
+                "ply": 6,
+                "side": "black",
+                "uci": "h8g8",
+                "san": "Kg8"
+              },
+              {
+                "ply": 7,
+                "side": "white",
+                "uci": "h6g6",
+                "san": "Kg6"
+              },
+              {
+                "ply": 8,
+                "side": "black",
+                "uci": "g8f8",
+                "san": "Kf8"
+              },
+              {
+                "ply": 9,
+                "side": "white",
+                "uci": "e8f6",
+                "san": "Nf6"
+              },
+              {
+                "ply": 10,
+                "side": "black",
+                "uci": "f8e7",
+                "san": "Ke7"
+              }
+            ]
+          },
+          {
+            "rank": 2,
+            "centipawn": 1338,
+            "mate": null,
+            "depth": 20,
+            "route": [
+              {
+                "ply": 1,
+                "side": "white",
+                "uci": "h6g6",
+                "san": "Kg6"
+              },
+              {
+                "ply": 2,
+                "side": "black",
+                "uci": "g8h7",
+                "san": "Bh7+"
+              },
+              {
+                "ply": 3,
+                "side": "white",
+                "uci": "g6f7",
+                "san": "Kf7"
+              },
+              {
+                "ply": 4,
+                "side": "black",
+                "uci": "h7g8",
+                "san": "Bg8+"
+              },
+              {
+                "ply": 5,
+                "side": "white",
+                "uci": "f7f8",
+                "san": "Kf8"
+              },
+              {
+                "ply": 6,
+                "side": "black",
+                "uci": "h8h7",
+                "san": "Kh7"
+              },
+              {
+                "ply": 7,
+                "side": "white",
+                "uci": "d6e8",
+                "san": "Ne8"
+              },
+              {
+                "ply": 8,
+                "side": "black",
+                "uci": "h7g6",
+                "san": "Kg6"
+              },
+              {
+                "ply": 9,
+                "side": "white",
+                "uci": "f8g8",
+                "san": "Kxg8"
+              },
+              {
+                "ply": 10,
+                "side": "black",
+                "uci": "g6h5",
+                "san": "Kh5"
+              }
+            ]
+          },
+          {
+            "rank": 3,
+            "centipawn": 23,
+            "mate": null,
+            "depth": 20,
+            "route": [
+              {
+                "ply": 1,
+                "side": "white",
+                "uci": "h6g5",
+                "san": "Kg5"
+              },
+              {
+                "ply": 2,
+                "side": "black",
+                "uci": "h8g7",
+                "san": "Kg7"
+              },
+              {
+                "ply": 3,
+                "side": "white",
+                "uci": "d6e8",
+                "san": "Ne8+"
+              },
+              {
+                "ply": 4,
+                "side": "black",
+                "uci": "g7f8",
+                "san": "Kf8"
+              },
+              {
+                "ply": 5,
+                "side": "white",
+                "uci": "e8f6",
+                "san": "Nf6"
+              },
+              {
+                "ply": 6,
+                "side": "black",
+                "uci": "f8f7",
+                "san": "Kf7"
+              },
+              {
+                "ply": 7,
+                "side": "white",
+                "uci": "f6d7",
+                "san": "Nxd7"
+              },
+              {
+                "ply": 8,
+                "side": "black",
+                "uci": "f7g7",
+                "san": "Kg7"
+              },
+              {
+                "ply": 9,
+                "side": "white",
+                "uci": "d7c5",
+                "san": "Nc5"
+              },
+              {
+                "ply": 10,
+                "side": "black",
+                "uci": "g8f7",
+                "san": "Bf7"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "KH2-004",
+      "file": "image_0083_00.jpeg",
+      "sourcePage": 83,
+      "placement": "8/8/8/8/3B4/2N5/1pK5/k1b5",
+      "sideToMove": "w",
+      "bookClaim": "white_win",
+      "sourcePhrase": "White to move and win.",
+      "pieceCount": 6,
+      "tablebase": {
+        "category": "win",
+        "dtz": 7,
+        "dtm": 65,
+        "computedWhiteOutcome": "white_win"
+      },
+      "verifiedRoute": [
+        {
+          "ply": 1,
+          "side": "white",
+          "uci": "d4e5",
+          "san": "Be5",
+          "resultingCategoryForOpponent": null,
+          "resultingDtz": null
+        }
+      ],
+      "verificationMethod": "lichess_syzygy_root_audit_2026-08-09",
+      "admissionStatus": "exact_verified"
+    },
+    {
+      "id": "KH2-005",
+      "file": "image_0106_00.jpeg",
+      "sourcePage": 106,
+      "placement": "6bk/8/8/6K1/8/8/1R5P/8",
+      "sideToMove": "w",
+      "bookClaim": "white_win",
+      "sourcePhrase": "White to move and win.",
+      "pieceCount": 5,
+      "tablebase": {
+        "category": "win",
+        "dtz": 1,
+        "dtm": 41,
+        "computedWhiteOutcome": "white_win"
+      },
+      "verifiedRoute": [
+        {
+          "ply": 1,
+          "side": "white",
+          "uci": "g5h6",
+          "san": "Kh6",
+          "resultingCategoryForOpponent": null,
+          "resultingDtz": null
+        }
+      ],
+      "verificationMethod": "lichess_syzygy_root_audit_2026-08-09",
+      "admissionStatus": "exact_verified"
+    },
+    {
+      "id": "KH2-006",
+      "file": "image_0155_00.jpeg",
+      "sourcePage": 155,
+      "placement": "3r4/3PK3/2k5/8/8/2p5/3R4/8",
+      "sideToMove": "w",
+      "bookClaim": "white_win",
+      "sourcePhrase": "White to move and win.",
+      "pieceCount": 6,
+      "tablebase": {
+        "category": "win",
+        "dtz": 5,
+        "dtm": 39,
+        "computedWhiteOutcome": "white_win"
+      },
+      "verifiedRoute": [
+        {
+          "ply": 1,
+          "side": "white",
+          "uci": "d2d6",
+          "san": "Rd6+",
+          "resultingCategoryForOpponent": null,
+          "resultingDtz": null
+        }
+      ],
+      "verificationMethod": "lichess_syzygy_root_audit_2026-08-09",
+      "admissionStatus": "exact_verified"
+    },
+    {
+      "id": "KH2-007",
+      "file": "image_0156_00.jpeg",
+      "sourcePage": 156,
+      "placement": "8/8/3K4/8/8/Pk6/1P5R/2r5",
+      "sideToMove": "w",
+      "bookClaim": "draw",
+      "sourcePhrase": "White can only draw.",
+      "pieceCount": 6,
+      "tablebase": {
+        "category": "draw",
+        "dtz": 0,
+        "dtm": 0,
+        "computedWhiteOutcome": "draw"
+      },
+      "verifiedRoute": [
+        {
+          "ply": 1,
+          "side": "white",
+          "uci": "a3a4",
+          "san": "a4",
+          "resultingCategoryForOpponent": null,
+          "resultingDtz": null
+        }
+      ],
+      "verificationMethod": "lichess_syzygy_root_audit_2026-08-09",
+      "admissionStatus": "exact_verified"
+    },
+    {
+      "id": "KH2-008",
+      "file": "image_0168_00.jpeg",
+      "sourcePage": 168,
+      "placement": "8/8/8/8/8/4k3/3pp2Q/1K6",
+      "sideToMove": "w",
+      "bookClaim": "white_win",
+      "sourcePhrase": "White to move and win.",
+      "pieceCount": 5,
+      "tablebase": {
+        "category": "win",
+        "dtz": 11,
+        "dtm": 31,
+        "computedWhiteOutcome": "white_win"
+      },
+      "verifiedRoute": [
+        {
+          "ply": 1,
+          "side": "white",
+          "uci": "h2h6",
+          "san": "Qh6+",
+          "resultingCategoryForOpponent": null,
+          "resultingDtz": null
+        }
+      ],
+      "verificationMethod": "lichess_syzygy_root_audit_2026-08-09",
+      "admissionStatus": "exact_verified"
+    },
+    {
+      "id": "KH2-009",
+      "file": "image_0172_00.jpeg",
+      "sourcePage": 172,
+      "placement": "8/3KP1q1/8/8/8/4Q3/k7/8",
+      "sideToMove": null,
+      "bookClaim": "white_win",
+      "sourcePhrase": "White wins.",
+      "pieceCount": 5,
+      "tablebase": null,
+      "verifiedRoute": [],
+      "admissionStatus": "source_side_unknown"
+    },
+    {
+      "id": "KH2-010",
+      "file": "image_0174_00.jpeg",
+      "sourcePage": 174,
+      "placement": "1k6/3q4/3P4/3K4/5Q2/8/8/8",
+      "sideToMove": "w",
+      "bookClaim": "white_win",
+      "sourcePhrase": "White to move and win.",
+      "pieceCount": 5,
+      "tablebase": {
+        "category": "win",
+        "dtz": 9,
+        "dtm": 29,
+        "computedWhiteOutcome": "white_win"
+      },
+      "verifiedRoute": [
+        {
+          "ply": 1,
+          "side": "white",
+          "uci": "f4f8",
+          "san": "Qf8+",
+          "resultingCategoryForOpponent": null,
+          "resultingDtz": null
+        }
+      ],
+      "verificationMethod": "lichess_syzygy_root_audit_2026-08-09",
+      "admissionStatus": "exact_verified"
+    },
+    {
+      "id": "KH2-011",
+      "file": "image_0182_00.jpeg",
+      "sourcePage": 182,
+      "placement": "6k1/5q2/3Pp2K/8/8/8/8/7Q",
+      "sideToMove": "w",
+      "bookClaim": "white_win",
+      "sourcePhrase": "White to move and win.",
+      "pieceCount": 6,
+      "tablebase": {
+        "category": "win",
+        "dtz": 13,
+        "dtm": 33,
+        "computedWhiteOutcome": "white_win"
+      },
+      "verifiedRoute": [
+        {
+          "ply": 1,
+          "side": "white",
+          "uci": "h1g2",
+          "san": "Qg2+",
+          "resultingCategoryForOpponent": null,
+          "resultingDtz": null
+        }
+      ],
+      "verificationMethod": "lichess_syzygy_root_audit_2026-08-09",
+      "admissionStatus": "exact_verified"
+    },
+    {
+      "id": "KH2-012",
+      "file": "image_0212_00.jpeg",
+      "sourcePage": 212,
+      "placement": "4q3/8/8/8/3N1N2/3K2R1/7k/8",
+      "sideToMove": "w",
+      "bookClaim": "white_win",
+      "sourcePhrase": "White to move and win.",
+      "pieceCount": 6,
+      "tablebase": {
+        "category": "win",
+        "dtz": 27,
+        "dtm": 29,
+        "computedWhiteOutcome": "white_win"
+      },
+      "verifiedRoute": [
+        {
+          "ply": 1,
+          "side": "white",
+          "uci": "f4e2",
+          "san": "Nfe2",
+          "resultingCategoryForOpponent": null,
+          "resultingDtz": null
+        }
+      ],
+      "verificationMethod": "lichess_syzygy_root_audit_2026-08-09",
+      "admissionStatus": "exact_verified"
+    }
+  ]
+}

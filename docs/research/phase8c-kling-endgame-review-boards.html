@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kling/Horwitz 残局棋盘审核</title>
+<style>
+:root{--paper:#fff8e8;--ink:#18212f;--accent:#27786f;--line:#d9cdb3;--light:#f0d9b5;--dark:#b58863}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font-family:"Microsoft YaHei",sans-serif}
+main{max-width:1180px;margin:auto;padding:24px}h1{margin:0 0 8px}.intro{line-height:1.8;margin-bottom:18px}
+.toolbar{position:sticky;top:0;z-index:3;background:#fffaf0eF;padding:12px;border:1px solid var(--line);border-radius:14px;display:flex;gap:12px;align-items:center}
+button{border:0;border-radius:999px;background:var(--accent);color:white;padding:11px 20px;font-size:16px;cursor:pointer}
+.case{background:white;border:1px solid var(--line);border-radius:20px;padding:18px;margin:18px 0;box-shadow:0 5px 20px #806b4420}
+.case header{display:flex;justify-content:space-between;gap:15px;margin-bottom:12px}.comparison{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+.comparison section{min-width:0}h2{font-size:18px;margin:0 0 10px}.source{display:block;max-width:100%;height:480px;object-fit:contain;margin:auto;background:#f5f5f5}
+.board{width:min(100%,480px);aspect-ratio:1;display:grid;grid-template-columns:repeat(8,1fr);margin:auto;border:3px solid #382e24}
+.sq{display:grid;place-items:center;font-family:"Segoe UI Symbol","Arial Unicode MS",serif;font-size:clamp(28px,5.3vw,58px);line-height:1}
+.sq.light{background:var(--light)}.sq.dark{background:var(--dark)}.meta{line-height:1.8;margin:14px 0;overflow-wrap:anywhere}code{font-size:14px}
+.review{display:flex;flex-wrap:wrap;gap:18px;padding:12px;background:#eef7f5;border-radius:12px}.field{display:block;margin-top:12px;font-weight:600}
+.field input{display:block;width:100%;padding:10px;margin-top:6px;border:1px solid var(--line);border-radius:9px;font:inherit;font-weight:400}
+@media(max-width:760px){main{padding:12px}.comparison{grid-template-columns:1fr}.source{height:auto;max-height:430px}}
+</style></head><body><main>
+<h1>Kling/Horwitz 残局棋盘审核</h1>
+<p class="intro">共 16 个高置信度候选。只检查左右双方棋子的格子、颜色和种类是否完全一致；暂时不判断谁走、胜和负或解答内容。</p>
+<div class="toolbar"><button id="export">导出审核结果</button><span id="progress">已审核 0 / 16</span></div>
+
+        <article class="case" data-id="KH-001" data-file="image_0017_00.jpeg">
+          <header><strong>KH-001</strong><span>image_0017_00.jpeg</span></header>
+          <div class="comparison">
+            <section><h2>原书棋盘</h2><img class="source" src="../../work/research_books/phase8a_sources/chess-studies-epub/EPUB/image_0017_00.jpeg" alt="image_0017_00.jpeg"></section>
+            <section><h2>程序恢复</h2><div class="board" data-placement="3k4/3p4/3K4/8/8/8/3P4/8"></div></section>
+          </div>
+          <div class="meta">
+            <div><b>FEN摆放：</b><code>3k4/3p4/3K4/8/8/8/3P4/8</code></div>
+            <div>最低置信度 0.772；平均置信度 0.947</div>
+          </div>
+          <div class="review">
+            <label><input type="radio" name="r-1" value="correct"> 完全一致</label>
+            <label><input type="radio" name="r-1" value="incorrect"> 有棋子错误</label>
+            <label><input type="radio" name="r-1" value="unsure"> 看不清</label>
+          </div>
+          <label class="field">如有错误，填写正确的FEN棋子摆放
+            <input class="correction" value="3k4/3p4/3K4/8/8/8/3P4/8">
+          </label>
+          <label class="field">备注<input class="notes" placeholder="可留空"></label>
+        </article>
+
+        <article class="case" data-id="KH-002" data-file="image_0020_00.jpeg">
+          <header><strong>KH-002</strong><span>image_0020_00.jpeg</span></header>
+          <div class="comparison">
+            <section><h2>原书棋盘</h2><img class="source" src="../../work/research_books/phase8a_sources/chess-studies-epub/EPUB/image_0020_00.jpeg" alt="image_0020_00.jpeg"></section>
+            <section><h2>程序恢复</h2><div class="board" data-placement="3k4/3p4/8/3P4/3P4/3K4/8/8"></div></section>
+          </div>
+          <div class="meta">
+            <div><b>FEN摆放：</b><code>3k4/3p4/8/3P4/3P4/3K4/8/8</code></div>
+            <div>最低置信度 0.776；平均置信度 0.947</div>
+          </div>
+          <div class="review">
+            <label><input type="radio" name="r-2" value="correct"> 完全一致</label>
+            <label><input type="radio" name="r-2" value="incorrect"> 有棋子错误</label>
+            <label><input type="radio" name="r-2" value="unsure"> 看不清</label>
+          </div>
+          <label class="field">如有错误，填写正确的FEN棋子摆放
+            <input class="correction" value="3k4/3p4/8/3P4/3P4/3K4/8/8">
+          </label>
+          <label class="field">备注<input class="notes" placeholder="可留空"></label>
+        </article>
+
+        <article class="case" data-id="KH-003" data-file="image_0036_00.jpeg">
+          <header><strong>KH-003</strong><span>image_0036_00.jpeg</span></header>
+          <div class="comparison">
+            <section><h2>原书棋盘</h2><img class="source" src="../../work/research_books/phase8a_sources/chess-studies-epub/EPUB/image_0036_00.jpeg" alt="image_0036_00.jpeg"></section>
+            <section><h2>程序恢复</h2><div class="board" data-placement="8/8/6k1/8/4p2P/5pP1/5K1P/8"></div></section>
+          </div>
+          <div class="meta">
+            <div><b>FEN摆放：</b><code>8/8/6k1/8/4p2P/5pP1/5K1P/8</code></div>
+            <div>最低置信度 0.710；平均置信度 0.942</div>
+          </div>
+          <div class="review">
+            <label><input type="radio" name="r-3" value="correct"> 完全一致</label>
+            <label><input type="radio" name="r-3" value="incorrect"> 有棋子错误</label>
+            <label><input type="radio" name="r-3" value="unsure"> 看不清</label>
+          </div>
+          <label class="field">如有错误，填写正确的FEN棋子摆放
+            <input class="correction" value="8/8/6k1/8/4p2P/5pP1/5K1P/8">
+          </label>
+          <label class="field">备注<input class="notes" placeholder="可留空"></label>
+        </article>
+
+        <article class="case" data-id="KH-004" data-file="image_0045_00.jpeg">
+          <header><strong>KH-004</strong><span>image_0045_00.jpeg</span></header>
+          <div class="comparison">
+            <section><h2>原书棋盘</h2><img class="source" src="../../work/research_books/phase8a_sources/chess-studies-epub/EPUB/image_0045_00.jpeg" alt="image_0045_00.jpeg"></section>
+            <section><h2>程序恢复</h2><div class="board" data-placement="8/8/8/8/8/5p1k/4p1p1/4B1K1"></div></section>
+          </div>
+          <div class="meta">
+            <div><b>FEN摆放：</b><code>8/8/8/8/8/5p1k/4p1p1/4B1K1</code></div>
+            <div>最低置信度 0.847；平均置信度 0.951</div>
+          </div>
+          <div class="review">
+            <label><input type="radio" name="r-4" value="correct"> 完全一致</label>
+            <label><input type="radio" name="r-4" value="incorrect"> 有棋子错误</label>
+            <label><input type="radio" name="r-4" value="unsure"> 看不清</label>
+          </div>
+          <label class="field">如有错误，填写正确的FEN棋子摆放
+            <input class="correction" value="8/8/8/8/8/5p1k/4p1p1/4B1K1">
+          </label>
+          <label class="field">备注<input class="notes" placeholder="可留空"></label>
+        </article>
+
+        <article class="case" data-id="KH-005" data-file="image_0046_00.jpeg">
+          <header><strong>KH-005</strong><span>image_0046_00.jpeg</span></header>
+          <div class="comparison">
+            <section><h2>原书棋盘</h2><img class="source" src="../../work/research_books/phase8a_sources/chess-studies-epub/EPUB/image_0046_00.jpeg" alt="image_0046_00.jpeg"></section>
+            <section><h2>程序恢复</h2><div class="board" data-placement="6k1/7p/4K3/8/8/8/3P4/4B3"></div></section>
+          </div>
+          <div class="meta">
+            <div><b>FEN摆放：</b><code>6k1/7p/4K3/8/8/8/3P4/4B3</code></div>
+            <div>最低置信度 0.857；平均置信度 0.950</div>
+          </div>
+          <div class="review">
+            <label><input type="radio" name="r-5" value="correct"> 完全一致</label>
+            <label><input type="radio" name="r-5" value="incorrect"> 有棋子错误</label>
+            <label><input type="radio" name="r-5" value="unsure"> 看不清</label>
+          </div>
+          <label class="field">如有错误，填写正确的FEN棋子摆放
+            <input class="correction" value="6k1/7p/4K3/8/8/8/3P4/4B3">
+          </label>
+          <label class="field">备注<input class="notes" placeholder="可留空"></label>
+        </article>
+
+        <article class="case" data-id="KH-006" data-file="image_0050_00.jpeg">
+          <header><strong>KH-006</strong><span>image_0050_00.jpeg</span></header>
+          <div class="comparison">
+            <section><h2>原书棋盘</h2><img class="source" src="../../work/research_books/phase8a_sources/chess-studies-epub/EPUB/image_0050_00.jpeg" alt="image_0050_00.jpeg"></section>
+            <section><h2>程序恢复</h2><div class="board" data-placement="8/8/1k6/1p1K4/1p3B2/8/P7/8"></div></section>
+          </div>
+          <div class="meta">
+            <div><b>FEN摆放：</b><code>8/8/1k6/1p1K4/1p3B2/8/P7/8</code></div>
+            <div>最低置信度 0.715；平均置信度 0.942</div>
+          </div>
+          <div class="review">
+            <label><input type="radio" name="r-6" value="correct"> 完全一致</label>
+            <label><input type="radio" name="r-6" value="incorrect"> 有棋子错误</label>
+            <label><input type="radio" name="r-6" value="unsure"> 看不清</label>
+          </div>
+          <label class="field">如有错误，填写正确的FEN棋子摆放
+            <input class="correction" value="8/8/1k6/1p1K4/1p3B2/8/P7/8">
+          </label>
+          <label class="field">备注<input class="notes" placeholder="可留空"></label>
+        </article>
+
+        <article class="case" data-id="KH-007" data-file="image_0065_00.jpeg">
+          <header><strong>KH-007</strong><span>image_0065_00.jpeg</span></header>
+          <div class="comparison">
+            <section><h2>原书棋盘</h2><img class="source" src="../../work/research_books/phase8a_sources/chess-studies-epub/EPUB/image_0065_00.jpeg" alt="image_0065_00.jpeg"></section>
+            <section><h2>程序恢复</h2><div class="board" data-placement="6k1/8/4KP2/4N3/8/8/1b6/8"></div></section>
+          </div>
+          <div class="meta">
+            <div><b>FEN摆放：</b><code>6k1/8/4KP2/4N3/8/8/1b6/8</code></div>
+            <div>最低置信度 0.767；平均置信度 0.946</div>
+          </div>
+          <div class="review">
+            <label><input type="radio" name="r-7" value="correct"> 完全一致</label>
+            <label><input type="radio" name="r-7" value="incorrect"> 有棋子错误</label>
+            <label><input type="radio" name="r-7" value="unsure"> 看不清</label>
+          </div>
+          <label class="field">如有错误，填写正确的FEN棋子摆放
+            <input class="correction" value="6k1/8/4KP2/4N3/8/8/1b6/8">
+          </label>
+          <label class="field">备注<input class="notes" placeholder="可留空"></label>
+        </article>
+
+        <article class="case" data-id="KH-008" data-file="image_0074_00.jpeg">
+          <header><strong>KH-008</strong><span>image_0074_00.jpeg</span></header>
+          <div class="comparison">
+            <section><h2>原书棋盘</h2><img class="source" src="../../work/research_books/phase8a_sources/chess-studies-epub/EPUB/image_0074_00.jpeg" alt="image_0074_00.jpeg"></section>
+            <section><h2>程序恢复</h2><div class="board" data-placement="8/8/8/8/8/6K1/3N1p2/5N1k"></div></section>
+          </div>
+          <div class="meta">
+            <div><b>FEN摆放：</b><code>8/8/8/8/8/6K1/3N1p2/5N1k</code></div>
+            <div>最低置信度 0.754；平均置信度 0.942</div>
+          </div>
+          <div class="review">
+            <label><input type="radio" name="r-8" value="correct"> 完全一致</label>
+            <label><input type="radio" name="r-8" value="incorrect"> 有棋子错误</label>
+            <label><input type="radio" name="r-8" value="unsure"> 看不清</label>
+          </div>
+          <label class="field">如有错误，填写正确的FEN棋子摆放
+            <input class="correction" value="8/8/8/8/8/6K1/3N1p2/5N1k">
+          </label>
+          <label class="field">备注<input class="notes" placeholder="可留空"></label>
+        </article>
+
+        <article class="case" data-id="KH-009" data-file="image_0110_00.jpeg">
+          <header><strong>KH-009</strong><span>image_0110_00.jpeg</span></header>
+          <div class="comparison">
+            <section><h2>原书棋盘</h2><img class="source" src="../../work/research_books/phase8a_sources/chess-studies-epub/EPUB/image_0110_00.jpeg" alt="image_0110_00.jpeg"></section>
+            <section><h2>程序恢复</h2><div class="board" data-placement="8/5K1k/7b/p5p1/6R1/8/8/8"></div></section>
+          </div>
+          <div class="meta">
+            <div><b>FEN摆放：</b><code>8/5K1k/7b/p5p1/6R1/8/8/8</code></div>
+            <div>最低置信度 0.770；平均置信度 0.943</div>
+          </div>
+          <div class="review">
+            <label><input type="radio" name="r-9" value="correct"> 完全一致</label>
+            <label><input type="radio" name="r-9" value="incorrect"> 有棋子错误</label>
+            <label><input type="radio" name="r-9" value="unsure"> 看不清</label>
+          </div>
+          <label class="field">如有错误，填写正确的FEN棋子摆放
+            <input class="correction" value="8/5K1k/7b/p5p1/6R1/8/8/8">
+          </label>
+          <label class="field">备注<input class="notes" placeholder="可留空"></label>
+        </article>
+
+        <article class="case" data-id="KH-010" data-file="image_0136_00.jpeg">
+          <header><strong>KH-010</strong><span>image_0136_00.jpeg</span></header>
+          <div class="comparison">
+            <section><h2>原书棋盘</h2><img class="source" src="../../work/research_books/phase8a_sources/chess-studies-epub/EPUB/image_0136_00.jpeg" alt="image_0136_00.jpeg"></section>
+            <section><h2>程序恢复</h2><div class="board" data-placement="5R2/8/8/5K2/8/8/7p/4B1kr"></div></section>
+          </div>
+          <div class="meta">
+            <div><b>FEN摆放：</b><code>5R2/8/8/5K2/8/8/7p/4B1kr</code></div>
+            <div>最低置信度 0.721；平均置信度 0.924</div>
+          </div>
+          <div class="review">
+            <label><input type="radio" name="r-10" value="correct"> 完全一致</label>
+            <label><input type="radio" name="r-10" value="incorrect"> 有棋子错误</label>
+            <label><input type="radio" name="r-10" value="unsure"> 看不清</label>
+          </div>
+          <label class="field">如有错误，填写正确的FEN棋子摆放
+            <input class="correction" value="5R2/8/8/5K2/8/8/7p/4B1kr">
+          </label>
+          <label class="field">备注<input class="notes" placeholder="可留空"></label>
+        </article>
+
+        <article class="case" data-id="KH-011" data-file="image_0161_00.jpeg">
+          <header><strong>KH-011</strong><span>image_0161_00.jpeg</span></header>
+          <div class="comparison">
+            <section><h2>原书棋盘</h2><img class="source" src="../../work/research_books/phase8a_sources/chess-studies-epub/EPUB/image_0161_00.jpeg" alt="image_0161_00.jpeg"></section>
+            <section><h2>程序恢复</h2><div class="board" data-placement="1R6/8/8/8/6kp/Kp5r/1P6/8"></div></section>
+          </div>
+          <div class="meta">
+            <div><b>FEN摆放：</b><code>1R6/8/8/8/6kp/Kp5r/1P6/8</code></div>
+            <div>最低置信度 0.753；平均置信度 0.944</div>
+          </div>
+          <div class="review">
+            <label><input type="radio" name="r-11" value="correct"> 完全一致</label>
+            <label><input type="radio" name="r-11" value="incorrect"> 有棋子错误</label>
+            <label><input type="radio" name="r-11" value="unsure"> 看不清</label>
+          </div>
+          <label class="field">如有错误，填写正确的FEN棋子摆放
+            <input class="correction" value="1R6/8/8/8/6kp/Kp5r/1P6/8">
+          </label>
+          <label class="field">备注<input class="notes" placeholder="可留空"></label>
+        </article>
+
+        <article class="case" data-id="KH-012" data-file="image_0166_00.jpeg">
+          <header><strong>KH-012</strong><span>image_0166_00.jpeg</span></header>
+          <div class="comparison">
+            <section><h2>原书棋盘</h2><img class="source" src="../../work/research_books/phase8a_sources/chess-studies-epub/EPUB/image_0166_00.jpeg" alt="image_0166_00.jpeg"></section>
+            <section><h2>程序恢复</h2><div class="board" data-placement="8/8/8/8/8/3k4/p6p/3K4"></div></section>
+          </div>
+          <div class="meta">
+            <div><b>FEN摆放：</b><code>8/8/8/8/8/3k4/p6p/3K4</code></div>
+            <div>最低置信度 0.740；平均置信度 0.924</div>
+          </div>
+          <div class="review">
+            <label><input type="radio" name="r-12" value="correct"> 完全一致</label>
+            <label><input type="radio" name="r-12" value="incorrect"> 有棋子错误</label>
+            <label><input type="radio" name="r-12" value="unsure"> 看不清</label>
+          </div>
+          <label class="field">如有错误，填写正确的FEN棋子摆放
+            <input class="correction" value="8/8/8/8/8/3k4/p6p/3K4">
+          </label>
+          <label class="field">备注<input class="notes" placeholder="可留空"></label>
+        </article>
+
+        <article class="case" data-id="KH-013" data-file="image_0187_00.jpeg">
+          <header><strong>KH-013</strong><span>image_0187_00.jpeg</span></header>
+          <div class="comparison">
+            <section><h2>原书棋盘</h2><img class="source" src="../../work/research_books/phase8a_sources/chess-studies-epub/EPUB/image_0187_00.jpeg" alt="image_0187_00.jpeg"></section>
+            <section><h2>程序恢复</h2><div class="board" data-placement="K2k4/8/1q6/8/8/8/8/R7"></div></section>
+          </div>
+          <div class="meta">
+            <div><b>FEN摆放：</b><code>K2k4/8/1q6/8/8/8/8/R7</code></div>
+            <div>最低置信度 0.728；平均置信度 0.948</div>
+          </div>
+          <div class="review">
+            <label><input type="radio" name="r-13" value="correct"> 完全一致</label>
+            <label><input type="radio" name="r-13" value="incorrect"> 有棋子错误</label>
+            <label><input type="radio" name="r-13" value="unsure"> 看不清</label>
+          </div>
+          <label class="field">如有错误，填写正确的FEN棋子摆放
+            <input class="correction" value="K2k4/8/1q6/8/8/8/8/R7">
+          </label>
+          <label class="field">备注<input class="notes" placeholder="可留空"></label>
+        </article>
+
+        <article class="case" data-id="KH-014" data-file="image_0204_00.jpeg">
+          <header><strong>KH-014</strong><span>image_0204_00.jpeg</span></header>
+          <div class="comparison">
+            <section><h2>原书棋盘</h2><img class="source" src="../../work/research_books/phase8a_sources/chess-studies-epub/EPUB/image_0204_00.jpeg" alt="image_0204_00.jpeg"></section>
+            <section><h2>程序恢复</h2><div class="board" data-placement="2kb4/4r3/2P5/1K6/5Q2/8/8/8"></div></section>
+          </div>
+          <div class="meta">
+            <div><b>FEN摆放：</b><code>2kb4/4r3/2P5/1K6/5Q2/8/8/8</code></div>
+            <div>最低置信度 0.725；平均置信度 0.934</div>
+          </div>
+          <div class="review">
+            <label><input type="radio" name="r-14" value="correct"> 完全一致</label>
+            <label><input type="radio" name="r-14" value="incorrect"> 有棋子错误</label>
+            <label><input type="radio" name="r-14" value="unsure"> 看不清</label>
+          </div>
+          <label class="field">如有错误，填写正确的FEN棋子摆放
+            <input class="correction" value="2kb4/4r3/2P5/1K6/5Q2/8/8/8">
+          </label>
+          <label class="field">备注<input class="notes" placeholder="可留空"></label>
+        </article>
+
+        <article class="case" data-id="KH-015" data-file="image_0216_00.jpeg">
+          <header><strong>KH-015</strong><span>image_0216_00.jpeg</span></header>
+          <div class="comparison">
+            <section><h2>原书棋盘</h2><img class="source" src="../../work/research_books/phase8a_sources/chess-studies-epub/EPUB/image_0216_00.jpeg" alt="image_0216_00.jpeg"></section>
+            <section><h2>程序恢复</h2><div class="board" data-placement="8/3B4/8/3q4/2N1kp2/2P2p1N/2K2P2/8"></div></section>
+          </div>
+          <div class="meta">
+            <div><b>FEN摆放：</b><code>8/3B4/8/3q4/2N1kp2/2P2p1N/2K2P2/8</code></div>
+            <div>最低置信度 0.819；平均置信度 0.943</div>
+          </div>
+          <div class="review">
+            <label><input type="radio" name="r-15" value="correct"> 完全一致</label>
+            <label><input type="radio" name="r-15" value="incorrect"> 有棋子错误</label>
+            <label><input type="radio" name="r-15" value="unsure"> 看不清</label>
+          </div>
+          <label class="field">如有错误，填写正确的FEN棋子摆放
+            <input class="correction" value="8/3B4/8/3q4/2N1kp2/2P2p1N/2K2P2/8">
+          </label>
+          <label class="field">备注<input class="notes" placeholder="可留空"></label>
+        </article>
+
+        <article class="case" data-id="KH-016" data-file="image_0225_00.jpeg">
+          <header><strong>KH-016</strong><span>image_0225_00.jpeg</span></header>
+          <div class="comparison">
+            <section><h2>原书棋盘</h2><img class="source" src="../../work/research_books/phase8a_sources/chess-studies-epub/EPUB/image_0225_00.jpeg" alt="image_0225_00.jpeg"></section>
+            <section><h2>程序恢复</h2><div class="board" data-placement="8/7p/8/8/6K1/3P2P1/Q2p4/1n4qk"></div></section>
+          </div>
+          <div class="meta">
+            <div><b>FEN摆放：</b><code>8/7p/8/8/6K1/3P2P1/Q2p4/1n4qk</code></div>
+            <div>最低置信度 0.702；平均置信度 0.922</div>
+          </div>
+          <div class="review">
+            <label><input type="radio" name="r-16" value="correct"> 完全一致</label>
+            <label><input type="radio" name="r-16" value="incorrect"> 有棋子错误</label>
+            <label><input type="radio" name="r-16" value="unsure"> 看不清</label>
+          </div>
+          <label class="field">如有错误，填写正确的FEN棋子摆放
+            <input class="correction" value="8/7p/8/8/6K1/3P2P1/Q2p4/1n4qk">
+          </label>
+          <label class="field">备注<input class="notes" placeholder="可留空"></label>
+        </article>
+
+</main><script>
+const glyph={K:'♔',Q:'♕',R:'♖',B:'♗',N:'♘',P:'♙',k:'♚',q:'♛',r:'♜',b:'♝',n:'♞',p:'♟'};
+function expand(rank){const a=[];for(const c of rank){if(/\d/.test(c))for(let i=0;i<Number(c);i++)a.push('');else a.push(c)}return a}
+document.querySelectorAll('.board').forEach(board=>{
+ const squares=board.dataset.placement.split('/').flatMap(expand);
+ squares.forEach((piece,i)=>{const s=document.createElement('div');s.className='sq '+(((Math.floor(i/8)+i%8)%2)?'dark':'light');s.textContent=glyph[piece]||'';board.appendChild(s)})
+});
+function update(){const n=document.querySelectorAll('input[type=radio]:checked').length;document.querySelector('#progress').textContent=`已审核 ${n} / 16`}
+document.querySelectorAll('input[type=radio]').forEach(x=>x.addEventListener('change',update));
+document.querySelector('#export').addEventListener('click',()=>{
+ const results=[...document.querySelectorAll('.case')].map(card=>({
+  id:card.dataset.id,file:card.dataset.file,
+  verdict:card.querySelector('input[type=radio]:checked')?.value||'unreviewed',
+  correctedPlacement:card.querySelector('.correction').value.trim(),notes:card.querySelector('.notes').value.trim()
+ }));
+ const blob=new Blob([JSON.stringify({schemaVersion:'phase8c-kling-review-1.0',exportedAt:new Date().toISOString(),results},null,2)],{type:'application/json'});
+ const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='phase8c-kling-human-review-results.json';a.click();URL.revokeObjectURL(a.href);
+});
+</script></body></html>

@@ -344,6 +344,24 @@ def test_compact_prompt_keeps_complete_contract_without_full_pydantic_schema() -
     assert "$defs" not in prompt
 
 
+def test_prompt_locks_program_confirmed_opening_identity() -> None:
+    move = professional_review()
+    complexity = compute_professional_complexity(move)
+    context = build_validation_context(move, complexity.level)
+    payload = build_professional_payload(move, complexity, context.allowed_evidence_ids)
+    payload["confirmedOpening"] = {
+        "identityAuthority": "program_confirmed",
+        "name": "Italian Game: Giuoco Piano",
+        "eco": "C50",
+        "variationPath": ["Giuoco Piano"],
+    }
+
+    prompt = professional_user_prompt(payload, complexity.level)
+
+    assert "confirmedOpening的名称、ECO和变例已经由程序锁定" in prompt
+    assert "不得重新识别或输出其他名称" in prompt
+
+
 def _valid_reference_draft(move: MoveReview) -> ProfessionalAnalysisDraft:
     payload = build_reference_payload(move, "normal", ["fixed test"])
     facts = payload["pos"]["facts"]

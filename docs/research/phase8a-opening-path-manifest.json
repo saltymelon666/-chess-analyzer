@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "phase8a-opening-path-manifest-1.0",
+  "generatedAt": "2026-08-09T03:34:29.165183+00:00",
+  "source": {
+    "title": "Lichess chess-openings",
+    "url": "https://github.com/lichess-org/chess-openings",
+    "revision": "4b8622759e7ae6f93f011cc6c83a3823401ab45e",
+    "license": "CC0-1.0",
+    "authorityBoundary": "This catalog supplies opening names, ECO codes and verified move paths only; it does not supply a current engine evaluation or prove a strategic claim."
+  },
+  "summary": {
+    "inputRows": 3810,
+    "acceptedOpenings": 3810,
+    "rejectedRows": 0,
+    "ecoCodes": 500,
+    "families": 149,
+    "canonicalPositions": 3810,
+    "transpositionGroups": 0,
+    "maxPly": 36
+  },
+  "output": "docs/research/phase8a-opening-path-catalog.json",
+  "runtimeOutput": "app/data/opening-path-catalog.json"
+}

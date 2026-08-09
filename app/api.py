@@ -21,8 +21,19 @@ from .config import load_settings
 from .config import OFFICIAL_DEEPSEEK_BASE_URL
 from .deepseek_connection import check_deepseek_connection
 from .engine import StockfishService
+from .endgame_knowledge import (
+    EndgameKnowledgeRepository,
+    EndgameLookupRequest,
+    EndgameLookupResponse,
+)
 from .game_review import analyze_pgn
 from .narrative_generator import NarrativeGenerator
+from .opening_knowledge import (
+    OpeningKnowledgeRepository,
+    OpeningLookupRequest,
+    OpeningLookupResponse,
+    OpeningPresentation,
+)
 from .position_facts import extract_position_facts
 from .professional_analysis import ProfessionalAnalysisService, professional_cache_key
 from .strategic_plans import StrategicPlanAnalyzer
@@ -88,6 +99,8 @@ narrative_generator = NarrativeGenerator(
 threat_analyzer = ThreatAnalyzer()
 strategic_plan_analyzer = StrategicPlanAnalyzer()
 book_ground_truth = BookGroundTruthRepository()
+opening_knowledge = OpeningKnowledgeRepository()
+endgame_knowledge = EndgameKnowledgeRepository()
 game_cache: OrderedDict[str, list[MoveReview]] = OrderedDict()
 explanation_cache: dict[tuple[str, int], GeneratedMoveExplanation | str] = {}
 explanation_tasks: dict[tuple[str, int], asyncio.Task[GeneratedMoveExplanation | str]] = {}
@@ -125,6 +138,38 @@ async def health() -> HealthResponse:
         deepseek_key_format_valid=deepseek_key_format_valid,
         deepseek_model=settings.deepseek_model,
     )
+
+
+@app.post(
+    "/api/opening-lookup",
+    response_model=OpeningLookupResponse,
+    response_model_by_alias=True,
+)
+async def opening_lookup(request: OpeningLookupRequest) -> OpeningLookupResponse:
+    """Return deterministic opening identity without Stockfish or DeepSeek."""
+    try:
+        return opening_knowledge.lookup(pgn=request.pgn, fen=request.fen)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        logger.error("Opening catalog unavailable: %s", exc)
+        raise HTTPException(status_code=503, detail="开局目录暂不可用") from exc
+
+
+@app.post(
+    "/api/endgame-lookup",
+    response_model=EndgameLookupResponse,
+    response_model_by_alias=True,
+)
+async def endgame_lookup(request: EndgameLookupRequest) -> EndgameLookupResponse:
+    """Return an exact tablebase-verified book ending without DeepSeek."""
+    try:
+        return endgame_knowledge.lookup(request.fen)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        logger.error("Endgame knowledge unavailable: %s", exc)
+        raise HTTPException(status_code=503, detail="残局知识数据暂不可用") from exc
 
 
 if settings.environment == "development":
@@ -332,18 +377,21 @@ async def professional_analysis(request: MoveExplanationRequest) -> Professional
     if request.move_index > len(moves):
         raise HTTPException(status_code=404, detail="找不到这一步的事实数据")
     move = moves[request.move_index - 1]
+    opening_context = _professional_opening_context(moves, request.move_index)
     book_references = _professional_book_references(move.before_fen)
     depth = max((line.depth for line in move.candidate_lines), default=settings.game_analysis_depth)
     cache_key = professional_cache_key(
         move,
         stockfish_version="Stockfish 18",
         stockfish_depth=depth,
+        opening_id=opening_context.opening_id if opening_context else None,
     )
     cached = professional_cache.get(cache_key)
     if cached is not None:
         professional_cache.move_to_end(cache_key)
         return ProfessionalAnalysisResponse(
             analysis=cached.analysis,
+            openingContext=opening_context,
             book_references=book_references,
             complexity_reasons=cached.complexity_reasons,
             validation_warnings=cached.validation_warnings,
@@ -355,7 +403,9 @@ async def professional_analysis(request: MoveExplanationRequest) -> Professional
     try:
         task = professional_tasks.get(cache_key)
         if task is None:
-            task = asyncio.create_task(_generate_professional_analysis(move))
+            task = asyncio.create_task(
+                _generate_professional_analysis(move, opening_context=opening_context)
+            )
             professional_tasks[cache_key] = task
             created_task = True
         generated = await asyncio.shield(task)
@@ -365,6 +415,7 @@ async def professional_analysis(request: MoveExplanationRequest) -> Professional
             professional_cache.popitem(last=False)
         return ProfessionalAnalysisResponse(
             analysis=generated.analysis,
+            openingContext=opening_context,
             book_references=book_references,
             complexity_reasons=generated.complexity_reasons,
             validation_warnings=generated.validation_warnings,
@@ -374,6 +425,7 @@ async def professional_analysis(request: MoveExplanationRequest) -> Professional
     except (httpx.HTTPError, RuntimeError) as exc:
         logger.warning("Professional analysis unavailable: %s", exc)
         return ProfessionalAnalysisResponse(
+            openingContext=opening_context,
             book_references=book_references,
             warning=f"专业分析暂不可用：{exc}",
             cached=False,
@@ -381,6 +433,7 @@ async def professional_analysis(request: MoveExplanationRequest) -> Professional
     except Exception:
         logger.exception("Unexpected professional analysis error")
         return ProfessionalAnalysisResponse(
+            openingContext=opening_context,
             book_references=book_references,
             warning="专业分析暂不可用，但Stockfish事实包仍然有效",
             cached=False,
@@ -465,16 +518,38 @@ async def _generate_analysis_report(move: MoveReview) -> GeneratedAnalysisReport
     return await narrative_generator.generate(package)
 
 
-async def _generate_professional_analysis(move: MoveReview) -> GeneratedProfessionalAnalysis:
+async def _generate_professional_analysis(
+    move: MoveReview,
+    *,
+    opening_context: OpeningPresentation | None = None,
+) -> GeneratedProfessionalAnalysis:
     fact_package = build_move_fact_package(move)
     threat_package = await threat_analyzer.analyze(
         fact_package,
         stockfish=stockfish,
     )
-    return await professional_service.analyze(
-        move,
-        threat_package=threat_package,
-    )
+    kwargs = {"threat_package": threat_package}
+    if opening_context is not None:
+        kwargs["opening_context"] = opening_context
+    return await professional_service.analyze(move, **kwargs)
+
+
+def _professional_opening_context(
+    moves: list[MoveReview],
+    move_index: int,
+) -> OpeningPresentation | None:
+    """Recognize the position after the selected node using only verified moves."""
+    selected = moves[:move_index]
+    if not selected:
+        return None
+    try:
+        return opening_knowledge.presentation_for_moves(
+            [item.played_move.uci for item in selected],
+            initial_fen=selected[0].before_fen,
+        )
+    except (ValueError, RuntimeError, OSError) as exc:
+        logger.warning("Optional opening recognition unavailable: %s", exc)
+        return None
 
 
 def _professional_book_references(fen: str) -> list[ProfessionalBookReference]:

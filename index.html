@@ -113,7 +113,6 @@
       font-family: inherit;
     }
     .primary-btn { background: var(--accent); box-shadow:0 7px 14px rgba(244,185,66,.22); }
-    .alliance-import-btn { background:#FFF1C8; color:#765109; border:1px solid #EDB23D; box-shadow:0 7px 14px rgba(244,185,66,.18); }
     .secondary-btn { background: var(--accent-2); color:#346C62; }
     .ghost-btn { background: #F8F3EC; color:var(--muted); font-size: 13px; font-weight: 700; }
     .icon-btn { background: var(--panel); border: 1px solid var(--line); min-width: 44px; padding-inline:12px; }
@@ -189,6 +188,13 @@
     .professional-section.danger { background:#FFF5F5; border-color:#F2CECE; }
     .professional-section h4 { display:flex; align-items:center; gap:7px; margin:0 0 14px; font-size:clamp(20px,2vw,25px); line-height:1.35; }
     .professional-section p { margin:9px 0 0; color:var(--text); font-size:clamp(17px,1.45vw,19px); line-height:1.78; }
+    .professional-opening { margin-bottom:18px; padding:clamp(15px,2vw,20px); border:1px solid #E9D49A; border-radius:15px; background:linear-gradient(145deg,#FFF9E8,#F5FBF8); }
+    .professional-opening-kicker { color:#80601A; font-size:14px; font-weight:900; letter-spacing:.04em; }
+    .professional-opening-name { display:block; margin-top:6px; color:#2D665A; font-size:clamp(21px,2vw,26px); line-height:1.4; }
+    .professional-opening-source { margin-top:4px !important; color:var(--muted) !important; font-size:14px !important; }
+    .professional-opening-ideas { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:12px; }
+    .professional-opening-ideas p { margin:0; padding:11px 12px; border-radius:11px; background:rgba(255,255,255,.72); font-size:16px; }
+    .professional-opening-themes { color:#4D6B61 !important; font-size:16px !important; }
     .professional-plan-section h4 { font-size:clamp(22px,2.2vw,27px); }
     .professional-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
     .professional-side { min-width:0; padding:12px; border-radius:13px; background:var(--panel-2); }
@@ -277,6 +283,7 @@
       .pencil { left:27px; bottom:38px; }
       .panel { padding:15px; border-radius:22px; } .workspace { gap:16px; }
       .professional-grid { grid-template-columns:1fr; }
+      .professional-opening-ideas { grid-template-columns:1fr; }
       .professional-route-notes { grid-template-columns:1fr; }
       .step-controls { grid-template-columns: auto auto 1fr auto auto; gap:5px; }
       .game-strip { grid-template-columns: 1fr; }
@@ -314,8 +321,6 @@
         </div>
         <div class="hero-actions">
           <button class="primary-btn" id="importBtn" onclick="importPgn()">导入并显示</button>
-          <button class="alliance-import-btn" type="button" onclick="openAlliancePgnPicker()">📄 导入国象联盟棋谱</button>
-          <input id="alliancePgnInput" type="file" hidden accept=".pgn,.txt,application/x-chess-pgn,text/plain" onchange="importAlliancePgnFile(event)">
           <button class="secondary-btn" onclick="clearAll()">清空</button>
           <button class="ghost-btn" onclick="loadExample('italian')">意大利开局</button>
           <button class="ghost-btn" onclick="loadExample('scholars')">四步杀</button>
@@ -722,43 +727,6 @@ function formatGameLength(entries) {
   return `${entries.length} 着 · ${roundLabel}`;
 }
 
-function openAlliancePgnPicker() {
-  const fileInput = document.getElementById("alliancePgnInput");
-  fileInput.value = "";
-  fileInput.click();
-}
-
-function decodeAlliancePgn(buffer) {
-  try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(buffer);
-  } catch (_) {
-    try {
-      return new TextDecoder("gb18030", { fatal: true }).decode(buffer);
-    } catch (_) {
-      return new TextDecoder("utf-8").decode(buffer);
-    }
-  }
-}
-
-async function importAlliancePgnFile(event) {
-  const fileInput = event.currentTarget;
-  const file = fileInput.files && fileInput.files[0];
-  if (!file) return;
-
-  clearError();
-  try {
-    const buffer = await file.arrayBuffer();
-    const pgn = decodeAlliancePgn(buffer).replace(/^\uFEFF/, "").trim();
-    if (!pgn) throw new Error("文件中没有可读取的棋谱内容");
-    document.getElementById("sourceInput").value = pgn;
-    importPgn();
-  } catch (error) {
-    showError(`国象联盟棋谱导入失败：${error.message || "无法读取文件"}`);
-  } finally {
-    fileInput.value = "";
-  }
-}
-
 function importPgn() {
   const raw = document.getElementById("sourceInput").value.trim();
   if (!raw) return showError("请先粘贴 PGN");
@@ -1110,6 +1078,7 @@ async function loadProfessionalAnalysis(review) {
 
 function renderProfessionalAnalysis(payload) {
   const analysis = payload.analysis || {};
+  const opening = payload.openingContext || null;
   const position = analysis.positionAssessment || {};
   const plans = analysis.plans || {};
   const lines = analysis.candidateLines || [];
@@ -1128,8 +1097,10 @@ function renderProfessionalAnalysis(payload) {
     position.pieceActivity?.description,
     position.pawnStructure?.description
   ].flatMap(professionalPositionSentences).filter(usefulProfessionalText).filter((item, index, items) => items.indexOf(item) === index);
-  if (positionParagraphs.length) {
-    parts.push(`<section class="professional-section"><h4>双方子力与局面</h4>${positionParagraphs.map(item => `<p>${escapeHtml(item)}</p>`).join("")}</section>`);
+  const openingThemes = Array.isArray(opening?.tacticalThemes) ? opening.tacticalThemes.filter(Boolean) : [];
+  const openingCard = opening?.displayName ? `<div class="professional-opening"><div class="professional-opening-kicker">📚 当前开局</div><strong class="professional-opening-name">${escapeHtml(opening.displayName)}</strong><p class="professional-opening-source">${escapeHtml(opening.eco || "")} · ${escapeHtml(opening.name || "")}</p><p>${escapeHtml(opening.description || "")}</p><div class="professional-opening-ideas"><p><span class="professional-label">白方常见思路：</span>${escapeHtml(opening.whitePlan || "")}</p><p><span class="professional-label">黑方常见思路：</span>${escapeHtml(opening.blackPlan || "")}</p></div>${openingThemes.length ? `<p class="professional-opening-themes"><span class="professional-label">常见战术主题：</span>${openingThemes.map(escapeHtml).join("、")}</p>` : ""}</div>` : "";
+  if (openingCard || positionParagraphs.length) {
+    parts.push(`<section class="professional-section"><h4>双方子力与局面</h4>${openingCard}${positionParagraphs.map(item => `<p>${escapeHtml(item)}</p>`).join("")}</section>`);
   }
 
   document.getElementById("professionalComplexity").textContent = complexityNames[analysis.complexity] || "专业分析";

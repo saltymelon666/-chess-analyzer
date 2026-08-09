@@ -4,6 +4,7 @@ from typing import Literal
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
+from .opening_knowledge import OpeningPresentation
 from .strategic_plans import StrategicPlanFact
 from .threat_analysis import ThreatFact
 
@@ -610,6 +611,10 @@ class ProfessionalAnalysisResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     analysis: ProfessionalAnalysis | None = None
+    opening_context: OpeningPresentation | None = Field(
+        alias="openingContext",
+        default=None,
+    )
     book_references: list[ProfessionalBookReference] = Field(
         alias="bookReferences",
         default_factory=list,

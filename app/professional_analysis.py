@@ -25,6 +25,7 @@ from .models import (
     ProfessionalEvidenceText,
     ProfessionalThreat,
 )
+from .opening_knowledge import OpeningPresentation
 from .professional_validation import (
     LENGTH_RANGES,
     VAGUE_PHRASES,
@@ -65,7 +66,7 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .book_case_transfer import BookCaseTransferPackage
-PROFESSIONAL_PROMPT_VERSION = "professional-v12-program-direct-purpose"
+PROFESSIONAL_PROMPT_VERSION = "professional-v13-confirmed-opening-context"
 PROFESSIONAL_TOKEN_LIMITS = {"simple": 1500, "normal": 2600, "complex": 3400}
 STRATEGY_TAGS = [
     "king_attack",
@@ -134,6 +135,7 @@ class ProfessionalAnalysisService:
         *,
         threat_package: ThreatPackage | None = None,
         book_context: "BookCaseTransferPackage | None" = None,
+        opening_context: OpeningPresentation | None = None,
     ) -> GeneratedProfessionalAnalysis:
         complexity = compute_professional_complexity(move)
         fact_package = build_move_fact_package(move)
@@ -195,6 +197,8 @@ class ProfessionalAnalysisService:
             "initiative": initiative.model_dump(),
             "hardFacts": "program_controlled",
         }
+        if opening_context is not None:
+            payload["confirmedOpening"] = opening_context.prompt_payload()
         if book_context is not None and book_context.cases:
             payload["analogousBookContext"] = book_context.prompt_payload()
         system = professional_system_prompt()
@@ -555,6 +559,8 @@ def professional_system_prompt() -> str:
         "不得升级为当前局面已经存在的直接威胁。"
         "positionInterpretation.objective是程序选定的首要分析任务，必须先回答该问题；"
         "deemphasizedTopics中的内容不得作为分析主线。"
+        "confirmedOpening若存在，其名称、ECO和变例由程序确认；不得重新判断、改名或补写其他变例。"
+        "开局背景只是常见思路，只有当前事实包另有支持时才能把它表述成当前局面的事实或计划。"
         "PV只是参考变化，不是必然发生。"
         "所有解释必须是完整、自然、可直接展示给用户的中文棋理句子。"
         "禁止在解释中出现事实依据、判断依据、根据某事实可以判断、证据数量、内部变量名或引用ID。"
@@ -588,6 +594,13 @@ def professional_user_prompt(payload: dict[str, Any], complexity: str) -> str:
             "不得复制其中的棋子、格子、走法、评价、胜负或威胁；只有当前引用目录已有证据时才能借鉴解释角度。"
             "棋书案例ID不得进入任何Ref字段，变化内部事件不得升级为当前事件。"
         )
+    opening_rule = ""
+    if payload.get("confirmedOpening"):
+        opening_rule = (
+            "\n16. confirmedOpening的名称、ECO和变例已经由程序锁定，不得重新识别或输出其他名称。"
+            "background只提供该开局的常见思路，不能覆盖当前局面的Stockfish评价、事实、计划或威胁；"
+            "只有chessFacts或positionInterpretation同时支持时，才能借鉴其解释角度。"
+        )
     return f"""请根据以下引用目录生成分析草稿：
 {compact_payload}
 
@@ -607,6 +620,7 @@ def professional_user_prompt(payload: dict[str, Any], complexity: str) -> str:
 13. 物质差、王位置、易位、评价方向、走法质量以及实战着是否与首选一致全部由程序填写。自由文本不得重写。interpretationPolicy.initiative.side为unknown时，禁止声称任何一方拥有主动权；不得把Stockfish分数直接解释成主动权。
 14. 必须先回答positionInterpretation.objective.primaryQuestion，并围绕priorityTopics组织局面概览、实战着解释和路线比较。deemphasizedTopics不得成为主线。winning_conversion应解释优势方如何兑现；attack_conversion应解释攻势配合和防守资源；endgame_plan不得在没有直接危险时泛谈护王；dynamic_balance应比较活动性与静态因素；move_quality_explanation必须按真实评价差控制批评强度。
 {analogous_rule}
+{opening_rule}
 
 只返回与以下契约完全一致的JSON，不要Markdown或额外字段。数组对象表示元素结构：
 {compact_contract}"""
@@ -617,6 +631,7 @@ def professional_cache_key(
     *,
     stockfish_version: str,
     stockfish_depth: int,
+    opening_id: str | None = None,
 ) -> str:
     route_summary = [
         {
@@ -641,6 +656,7 @@ def professional_cache_key(
             "threatPackageVersion": THREAT_PACKAGE_VERSION,
             "strategicPlanPackageVersion": STRATEGIC_PLAN_PACKAGE_VERSION,
             "positionInterpretationVersion": POSITION_INTERPRETATION_VERSION,
+            "openingId": opening_id,
         },
         ensure_ascii=False,
         sort_keys=True,

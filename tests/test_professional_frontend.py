@@ -51,6 +51,10 @@ def test_professional_report_only_renders_conclusion_sections() -> None:
         assert "当前没有需要特别强调的结论。" not in page
         assert "const positionParagraphs = [" in page
         assert "双方子力与局面" in page
+        assert "const opening = payload.openingContext || null;" in page
+        assert "📚 当前开局" in page
+        assert "opening?.displayName" in page
+        assert "professional-opening-ideas" in page
         assert ".review-explanation[hidden] { display:none; }" in page
         assert "潜在威胁" not in page
         assert "双方计划" in page

@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "phase8e-opening-explanations-manifest-1.0",
+  "generatedAt": "2026-08-09T07:57:52.339088+00:00",
+  "source": {
+    "title": "Chess Opening Theory",
+    "project": "Wikibooks",
+    "url": "https://en.wikibooks.org/wiki/Chess_Opening_Theory",
+    "license": "CC BY-SA 4.0 / GFDL",
+    "attribution": "Wikibooks contributors",
+    "authorityBoundary": "Human opening explanations describe the source move path only. They do not establish the current engine evaluation or best move."
+  },
+  "summary": {
+    "explanationCount": 1896,
+    "catalogOpenings": 3810,
+    "coveredOpenings": 3810,
+    "coverageRate": 1.0,
+    "coveredFamilies": 149
+  },
+  "discoveredPages": 3011,
+  "parseableMovePathPages": 2982
+}

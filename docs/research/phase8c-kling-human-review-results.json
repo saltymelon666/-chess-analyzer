@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "phase8c-kling-review-1.0",
+  "exportedAt": "2026-08-09T04:08:42.502Z",
+  "results": [
+    {"id":"KH-001","file":"image_0017_00.jpeg","verdict":"correct","correctedPlacement":"3k4/3p4/3K4/8/8/8/3P4/8","notes":""},
+    {"id":"KH-002","file":"image_0020_00.jpeg","verdict":"correct","correctedPlacement":"3k4/3p4/8/3P4/3P4/3K4/8/8","notes":""},
+    {"id":"KH-003","file":"image_0036_00.jpeg","verdict":"correct","correctedPlacement":"8/8/6k1/8/4p2P/5pP1/5K1P/8","notes":""},
+    {"id":"KH-004","file":"image_0045_00.jpeg","verdict":"correct","correctedPlacement":"8/8/8/8/8/5p1k/4p1p1/4B1K1","notes":""},
+    {"id":"KH-005","file":"image_0046_00.jpeg","verdict":"incorrect","correctedPlacement":"6k1/7p/4K3/8/8/8/3P4/4B3","notes":""},
+    {"id":"KH-006","file":"image_0050_00.jpeg","verdict":"correct","correctedPlacement":"8/8/1k6/1p1K4/1p3B2/8/P7/8","notes":""},
+    {"id":"KH-007","file":"image_0065_00.jpeg","verdict":"correct","correctedPlacement":"6k1/8/4KP2/4N3/8/8/1b6/8","notes":""},
+    {"id":"KH-008","file":"image_0074_00.jpeg","verdict":"correct","correctedPlacement":"8/8/8/8/8/6K1/3N1p2/5N1k","notes":""},
+    {"id":"KH-009","file":"image_0110_00.jpeg","verdict":"correct","correctedPlacement":"8/5K1k/7b/p5p1/6R1/8/8/8","notes":""},
+    {"id":"KH-010","file":"image_0136_00.jpeg","verdict":"correct","correctedPlacement":"5R2/8/8/5K2/8/8/7p/4B1kr","notes":""},
+    {"id":"KH-011","file":"image_0161_00.jpeg","verdict":"correct","correctedPlacement":"1R6/8/8/8/6kp/Kp5r/1P6/8","notes":""},
+    {"id":"KH-012","file":"image_0166_00.jpeg","verdict":"incorrect","correctedPlacement":"8/8/8/8/8/3k4/p6p/3K4","notes":"后呢"},
+    {"id":"KH-013","file":"image_0187_00.jpeg","verdict":"correct","correctedPlacement":"K2k4/8/1q6/8/8/8/8/R7","notes":""},
+    {"id":"KH-014","file":"image_0204_00.jpeg","verdict":"correct","correctedPlacement":"2kb4/4r3/2P5/1K6/5Q2/8/8/8","notes":""},
+    {"id":"KH-015","file":"image_0216_00.jpeg","verdict":"correct","correctedPlacement":"8/3B4/8/3q4/2N1kp2/2P2p1N/2K2P2/8","notes":""},
+    {"id":"KH-016","file":"image_0225_00.jpeg","verdict":"incorrect","correctedPlacement":"8/7p/8/8/6K1/3P2P1/Q2p4/1n4qk","notes":""}
+  ]
+}
