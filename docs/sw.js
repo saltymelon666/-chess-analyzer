@@ -1,11 +1,11 @@
-const CACHE_NAME = "chess-analyzer-v3";
+const CACHE_NAME = "chess-analyzer-v4-webp";
 const urlsToCache = [
   "/",
   "/demo",
   "/manifest.json",
-  "/assets/chess/physical_chess_board_empty.png",
-  "/assets/chess/pieces/white_king_e1.png",
-  "/assets/chess/pieces/black_king_e8.png"
+  "/assets/chess/physical_chess_board_empty.webp",
+  "/assets/chess/pieces/white_king_e1.webp",
+  "/assets/chess/pieces/black_king_e8.webp"
 ];
 
 self.addEventListener("install", event => {
