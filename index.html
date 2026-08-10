@@ -74,7 +74,7 @@
     .board-shell {
       position: relative; width: var(--board-size); max-width: 100%;
       aspect-ratio: 1; margin: 0 auto;
-      background-image: url("assets/chess/physical_chess_board_empty.png");
+      background-image: url("assets/chess/physical_chess_board_empty.webp");
       background-size: cover; background-position: center;
       border-radius: 18px; overflow: hidden;
       box-shadow: 0 20px 38px rgba(82,60,34,.18); border:7px solid #F7EFE4;
@@ -332,7 +332,7 @@
       <div class="score-sheet"><div class="paper-title"></div><div class="mini-board"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="paper-lines"><i></i><i></i><i></i></div></div>
       <svg class="magnifier" viewBox="0 0 140 140"><circle cx="55" cy="55" r="39"/><line x1="84" y1="84" x2="124" y2="124"/></svg>
       <svg class="discovery-path" viewBox="0 0 280 240"><path d="M12 18 C92 4 66 113 151 105 S204 174 244 185"/><polygon points="240,174 263,188 239,197"/></svg>
-      <div class="piece-halo"><img class="guide-piece" src="assets/mascot-pawn-detective-v2.png" alt=""></div>
+      <div class="piece-halo"><img class="guide-piece" src="assets/mascot-pawn-detective-v2.webp" alt="" width="1536" height="1536" fetchpriority="high" decoding="async"></div>
       <svg class="lab-star star-one" viewBox="0 0 24 24"><path d="m12 1 2.7 7.1 7.3.4-5.7 4.6 1.9 7.3-6.2-4-6.2 4 1.9-7.3L2 8.5l7.3-.4z"/></svg>
       <svg class="lab-star star-two" viewBox="0 0 24 24"><path d="m12 1 2.7 7.1 7.3.4-5.7 4.6 1.9 7.3-6.2-4-6.2 4 1.9-7.3L2 8.5l7.3-.4z"/></svg>
       <svg class="lab-star star-three" viewBox="0 0 24 24"><path d="m12 1 2.7 7.1 7.3.4-5.7 4.6 1.9 7.3-6.2-4-6.2 4 1.9-7.3L2 8.5l7.3-.4z"/></svg>
@@ -401,7 +401,7 @@
         <div class="review-best"><span class="small">Stockfish 更推荐</span><br><strong id="moveReviewBest">-</strong></div>
         <section class="review-explanation" id="professionalAnalysisPanel" aria-live="polite">
           <div class="researcher-head">
-            <img class="review-mascot" src="assets/mascot-pawn-detective-v2.png" alt="小兵研究员">
+            <img class="review-mascot" src="assets/mascot-pawn-detective-v2.webp" alt="小兵研究员" width="1536" height="1536" loading="lazy" decoding="async">
             <div><strong class="researcher-title">小兵研究员说</strong><span class="professional-status" id="professionalAnalysisStatus">正在生成结论……</span></div>
             <span class="professional-complexity" id="professionalComplexity">分析中</span>
           </div>
@@ -440,18 +440,18 @@
 // ========== 状态管理 ==========
 const FILES = ["a","b","c","d","e","f","g","h"];
 const PIECE_ASSET = {
-  P: "assets/chess/pieces_transparent/white_pawn_a2.png",
-  N: "assets/chess/pieces_transparent/white_knight_b1.png",
-  B: "assets/chess/pieces_transparent/white_bishop_c1.png",
-  R: "assets/chess/pieces_transparent/white_rook_a1.png",
-  Q: "assets/chess/pieces_transparent/white_queen_d1.png",
-  K: "assets/chess/pieces_transparent/white_king_e1.png",
-  p: "assets/chess/pieces_transparent/black_pawn_a7.png",
-  n: "assets/chess/pieces_transparent/black_knight_b8.png",
-  b: "assets/chess/pieces_transparent/black_bishop_c8.png",
-  r: "assets/chess/pieces_transparent/black_rook_a8.png",
-  q: "assets/chess/pieces_transparent/black_queen_d8.png",
-  k: "assets/chess/pieces_transparent/black_king_e8.png"
+  P: "assets/chess/pieces_transparent/white_pawn_a2.webp",
+  N: "assets/chess/pieces_transparent/white_knight_b1.webp",
+  B: "assets/chess/pieces_transparent/white_bishop_c1.webp",
+  R: "assets/chess/pieces_transparent/white_rook_a1.webp",
+  Q: "assets/chess/pieces_transparent/white_queen_d1.webp",
+  K: "assets/chess/pieces_transparent/white_king_e1.webp",
+  p: "assets/chess/pieces_transparent/black_pawn_a7.webp",
+  n: "assets/chess/pieces_transparent/black_knight_b8.webp",
+  b: "assets/chess/pieces_transparent/black_bishop_c8.webp",
+  r: "assets/chess/pieces_transparent/black_rook_a8.webp",
+  q: "assets/chess/pieces_transparent/black_queen_d8.webp",
+  k: "assets/chess/pieces_transparent/black_king_e8.webp"
 };
 const EXAMPLES = {
   italian: "1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 4. d3 Be7 5. O-O O-O 6. Re1 d6",
