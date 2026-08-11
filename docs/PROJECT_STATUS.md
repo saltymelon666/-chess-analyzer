@@ -793,3 +793,4 @@ Phase 6A文件：
 - `https://pawnlab.cn/`和`https://pawnlab.cn/admin.html`均返回200；产品页已包含匿名`visitor_id`与“公测体验版”，后台页为独立运营页面。
 - Render生产`/api/health`返回200，Stockfish可用且DeepSeek配置有效；生产OpenAPI已包含`/api/event`、`/api/admin/dashboard`和`/api/admin/statistics`，后台无密钥访问返回401。
 - `render.yaml`已配置免费Web实例与免费Postgres。生产数据库是否已经实际绑定`ANALYTICS_DATABASE_URL`仍需在Render控制台确认；在确认前，不能把跨重启持久化描述为已验证。
+- 为绕过`pawnlab.cn/admin.html`曾被旧前端缓存替换成产品首页的问题，FastAPI生产后端现直接提供`/admin`与`/admin.html`运营入口；页面响应为`Cache-Control: no-store`并同源读取`/api/admin/dashboard`。`https://ai-chess-review-api.onrender.com/admin`已验证返回200、包含管理员密钥输入框且无产品首页内容。
