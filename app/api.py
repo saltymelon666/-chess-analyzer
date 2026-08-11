@@ -1,15 +1,27 @@
 from __future__ import annotations
 
 import asyncio
+import hmac
 import logging
+import time
 from collections import OrderedDict
+from datetime import date as calendar_date, datetime, time as datetime_time, timedelta, timezone
 from uuid import uuid4
 
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 from .ai_explainer import DeepSeekExplainer
+from .analytics import (
+    AnalyticsEventRequest,
+    AnalyticsEventResponse,
+    AnalyticsStore,
+    DailyStatistics,
+    RecentAnalysis,
+)
 from .analysis_report import (
     AnalysisReportResponse,
     GeneratedAnalysisReport,
@@ -36,6 +48,7 @@ from .opening_knowledge import (
 )
 from .position_facts import extract_position_facts
 from .professional_analysis import ProfessionalAnalysisService, professional_cache_key
+from .request_protection import PUBLIC_BETA_POLICIES, RequestProtector
 from .strategic_plans import StrategicPlanAnalyzer
 from .threat_analysis import ThreatAnalyzer
 from .models import (
@@ -101,6 +114,16 @@ strategic_plan_analyzer = StrategicPlanAnalyzer()
 book_ground_truth = BookGroundTruthRepository()
 opening_knowledge = OpeningKnowledgeRepository()
 endgame_knowledge = EndgameKnowledgeRepository()
+try:
+    analytics_store: AnalyticsStore | None = AnalyticsStore(
+        settings.analytics_database_url or settings.analytics_database_path,
+        input_price_per_million=settings.deepseek_input_price_per_million,
+        output_price_per_million=settings.deepseek_output_price_per_million,
+    )
+except Exception:
+    analytics_store = None
+    logger.exception("Analytics database unavailable; core analysis will continue")
+request_protector = RequestProtector()
 game_cache: OrderedDict[str, list[MoveReview]] = OrderedDict()
 explanation_cache: dict[tuple[str, int], GeneratedMoveExplanation | str] = {}
 explanation_tasks: dict[tuple[str, int], asyncio.Task[GeneratedMoveExplanation | str]] = {}
@@ -115,6 +138,41 @@ MAX_CACHED_GAMES = 20
 MAX_CACHED_PROFESSIONAL_ANALYSES = 100
 MAX_CACHED_ANALYSIS_REPORTS = 100
 
+
+class AdminProtectionPolicy(BaseModel):
+    label: str
+    per_minute: int
+    per_day: int
+    global_scope: bool
+
+
+class AdminConfiguration(BaseModel):
+    environment: str
+    analytics_persistent_storage: bool
+    admin_key_configured: bool
+    token_pricing_configured: bool
+    deepseek_configured: bool
+    deepseek_model: str
+    game_analysis_max_plies: int
+
+
+class AdminDashboard(BaseModel):
+    statistics: DailyStatistics
+    recent_analyses: list[RecentAnalysis]
+    protection_policies: list[AdminProtectionPolicy]
+    configuration: AdminConfiguration
+
+
+async def _record_analytics(method_name: str, *args, **kwargs) -> None:
+    """Keep optional beta telemetry from interrupting chess analysis."""
+    if analytics_store is None:
+        return
+    try:
+        method = getattr(analytics_store, method_name)
+        await asyncio.to_thread(method, *args, **kwargs)
+    except Exception:
+        logger.exception("Analytics write failed: %s", method_name)
+
 app = FastAPI(
     title="AI Chess Review API",
     version="0.3.0",
@@ -125,8 +183,56 @@ app.add_middleware(
     allow_origins=list(settings.allowed_origins),
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "X-Admin-Key"],
 )
+
+
+@app.middleware("http")
+async def protect_public_beta(request: Request, call_next):
+    path = request.url.path
+    client_key = request_protector.client_key(request)
+    if path == "/api/event":
+        policy = PUBLIC_BETA_POLICIES["event"]
+        allowed = request_protector.allow(
+            policy.scope,
+            client_key,
+            per_minute=policy.per_minute,
+            per_day=policy.per_day,
+        ).allowed
+    elif path == "/api/game-review":
+        policy = PUBLIC_BETA_POLICIES["game-review"]
+        allowed = request_protector.allow(
+            policy.scope,
+            client_key,
+            per_minute=policy.per_minute,
+            per_day=policy.per_day,
+        ).allowed
+    elif path in {
+        "/api/review",
+        "/api/move-explanation",
+        "/api/professional-analysis",
+        "/api/analysis-report",
+    }:
+        policy = PUBLIC_BETA_POLICIES["deepseek"]
+        global_policy = PUBLIC_BETA_POLICIES["deepseek-global"]
+        allowed = request_protector.allow(
+            policy.scope,
+            client_key,
+            per_minute=policy.per_minute,
+            per_day=policy.per_day,
+        ).allowed and request_protector.allow_global(
+            global_policy.scope,
+            per_minute=global_policy.per_minute,
+        ).allowed
+    else:
+        allowed = True
+    if not allowed:
+        return JSONResponse(
+            status_code=429,
+            content={"detail": "当前请求较多，请稍后再试"},
+            headers={"Retry-After": "60"},
+        )
+    return await call_next(request)
 
 
 @app.get("/api/health", response_model=HealthResponse)
@@ -138,6 +244,85 @@ async def health() -> HealthResponse:
         deepseek_key_format_valid=deepseek_key_format_valid,
         deepseek_model=settings.deepseek_model,
     )
+
+
+@app.post("/api/event", response_model=AnalyticsEventResponse, status_code=202)
+async def record_event(event: AnalyticsEventRequest) -> AnalyticsEventResponse:
+    await _record_analytics("record_event", event)
+    return AnalyticsEventResponse()
+
+
+@app.get("/api/admin/statistics", response_model=DailyStatistics)
+async def admin_statistics(
+    x_admin_key: str | None = Header(default=None),
+    day: str | None = Query(default=None, alias="date"),
+) -> DailyStatistics:
+    store = _authorized_analytics_store(x_admin_key)
+    requested_day = _admin_day(day)
+    return await asyncio.to_thread(store.daily_statistics, requested_day)
+
+
+@app.get("/api/admin/dashboard", response_model=AdminDashboard)
+async def admin_dashboard(
+    x_admin_key: str | None = Header(default=None),
+    day: str | None = Query(default=None, alias="date"),
+    limit: int = Query(default=50, ge=1, le=100),
+) -> AdminDashboard:
+    store = _authorized_analytics_store(x_admin_key)
+    requested_day = _admin_day(day)
+    statistics, recent = await asyncio.gather(
+        asyncio.to_thread(store.daily_statistics, requested_day),
+        asyncio.to_thread(store.recent_analyses, requested_day, limit=limit),
+    )
+    policies = [
+        AdminProtectionPolicy(
+            label=policy.label,
+            per_minute=policy.per_minute,
+            per_day=policy.per_day,
+            global_scope=policy.global_scope,
+        )
+        for policy in PUBLIC_BETA_POLICIES.values()
+    ]
+    return AdminDashboard(
+        statistics=statistics,
+        recent_analyses=recent,
+        protection_policies=policies,
+        configuration=AdminConfiguration(
+            environment=settings.environment,
+            analytics_persistent_storage=settings.analytics_persistent_storage,
+            admin_key_configured=bool(settings.admin_statistics_key),
+            token_pricing_configured=(
+                settings.deepseek_input_price_per_million > 0
+                or settings.deepseek_output_price_per_million > 0
+            ),
+            deepseek_configured=explainer.configured,
+            deepseek_model=settings.deepseek_model,
+            game_analysis_max_plies=settings.game_analysis_max_plies,
+        ),
+    )
+
+
+def _authorized_analytics_store(x_admin_key: str | None) -> AnalyticsStore:
+    configured_key = settings.admin_statistics_key
+    if configured_key:
+        if not x_admin_key or not hmac.compare_digest(x_admin_key, configured_key):
+            raise HTTPException(status_code=401, detail="后台访问凭据无效")
+    elif settings.environment != "development":
+        raise HTTPException(status_code=503, detail="后台统计凭据尚未配置")
+    if analytics_store is None:
+        raise HTTPException(status_code=503, detail="后台统计暂不可用")
+    return analytics_store
+
+
+def _admin_day(value: str | None) -> datetime | None:
+    if value is None:
+        return None
+    try:
+        parsed = calendar_date.fromisoformat(value)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="统计日期格式必须为 YYYY-MM-DD") from exc
+    china_timezone = timezone(timedelta(hours=8), name="Asia/Shanghai")
+    return datetime.combine(parsed, datetime_time.min, tzinfo=china_timezone)
 
 
 @app.post(
@@ -260,7 +445,15 @@ async def review(request: ReviewRequest) -> ReviewResponse:
 
 @app.post("/api/game-review", response_model=GameReviewResponse)
 async def game_review(request: GameReviewRequest) -> GameReviewResponse:
-    analysis_id = uuid4().hex
+    analysis_id = request.analysis_id or uuid4().hex
+    visitor_id = request.visitor_id or f"server_{uuid4().hex}"
+    started = time.perf_counter()
+    await _record_analytics(
+        "start_analysis",
+        analysis_id,
+        visitor_id,
+        request.pgn,
+    )
     try:
         result = await analyze_pgn(
             pgn=request.pgn,
@@ -271,11 +464,35 @@ async def game_review(request: GameReviewRequest) -> GameReviewResponse:
             max_plies=settings.game_analysis_max_plies,
         )
     except ValueError as exc:
+        elapsed_ms = round((time.perf_counter() - started) * 1000)
+        await _record_analytics(
+            "finish_analysis",
+            analysis_id,
+            success=False,
+            stockfish_ms=elapsed_ms,
+            total_ms=elapsed_ms,
+        )
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except asyncio.TimeoutError as exc:
+        elapsed_ms = round((time.perf_counter() - started) * 1000)
+        await _record_analytics(
+            "finish_analysis",
+            analysis_id,
+            success=False,
+            stockfish_ms=elapsed_ms,
+            total_ms=elapsed_ms,
+        )
         raise HTTPException(status_code=504, detail="整盘 Stockfish 分析超时，请缩短棋谱后重试") from exc
     except Exception as exc:
         logger.exception("Full game analysis failed")
+        elapsed_ms = round((time.perf_counter() - started) * 1000)
+        await _record_analytics(
+            "finish_analysis",
+            analysis_id,
+            success=False,
+            stockfish_ms=elapsed_ms,
+            total_ms=elapsed_ms,
+        )
         raise HTTPException(status_code=503, detail="整盘分析服务暂不可用") from exc
 
     game_cache[analysis_id] = result.moves
@@ -286,6 +503,15 @@ async def game_review(request: GameReviewRequest) -> GameReviewResponse:
             explanation_cache.pop(cache_key, None)
         for cache_key in [key for key in analysis_report_cache if key[0] == expired_id]:
             analysis_report_cache.pop(cache_key, None)
+    elapsed_ms = round((time.perf_counter() - started) * 1000)
+    await _record_analytics(
+        "finish_analysis",
+        analysis_id,
+        success=True,
+        stockfish_ms=elapsed_ms,
+        total_ms=elapsed_ms,
+        move_count=result.move_count,
+    )
     return result
 
 
@@ -413,6 +639,15 @@ async def professional_analysis(request: MoveExplanationRequest) -> Professional
         professional_cache.move_to_end(cache_key)
         while len(professional_cache) > MAX_CACHED_PROFESSIONAL_ANALYSES:
             professional_cache.popitem(last=False)
+        if created_task:
+            await _record_analytics(
+                "add_deepseek_usage",
+                request.analysis_id,
+                elapsed_ms=generated.usage.elapsed_ms,
+                prompt_tokens=generated.usage.prompt_tokens,
+                completion_tokens=generated.usage.completion_tokens,
+                total_tokens=generated.usage.total_tokens,
+            )
         return ProfessionalAnalysisResponse(
             analysis=generated.analysis,
             openingContext=opening_context,
@@ -424,6 +659,7 @@ async def professional_analysis(request: MoveExplanationRequest) -> Professional
         )
     except (httpx.HTTPError, RuntimeError) as exc:
         logger.warning("Professional analysis unavailable: %s", exc)
+        await _record_analytics("mark_analysis_failed", request.analysis_id)
         return ProfessionalAnalysisResponse(
             openingContext=opening_context,
             book_references=book_references,
@@ -432,6 +668,7 @@ async def professional_analysis(request: MoveExplanationRequest) -> Professional
         )
     except Exception:
         logger.exception("Unexpected professional analysis error")
+        await _record_analytics("mark_analysis_failed", request.analysis_id)
         return ProfessionalAnalysisResponse(
             openingContext=opening_context,
             book_references=book_references,
@@ -481,6 +718,15 @@ async def analysis_report(request: MoveExplanationRequest) -> AnalysisReportResp
         analysis_report_cache.move_to_end(cache_key)
         while len(analysis_report_cache) > MAX_CACHED_ANALYSIS_REPORTS:
             analysis_report_cache.popitem(last=False)
+        if created_task:
+            await _record_analytics(
+                "add_deepseek_usage",
+                request.analysis_id,
+                elapsed_ms=generated.usage.elapsed_ms,
+                prompt_tokens=generated.usage.prompt_tokens,
+                completion_tokens=generated.usage.completion_tokens,
+                total_tokens=generated.usage.total_tokens,
+            )
         return AnalysisReportResponse(
             report=generated.report,
             validation_warnings=generated.validation_warnings,
@@ -489,6 +735,7 @@ async def analysis_report(request: MoveExplanationRequest) -> AnalysisReportResp
         )
     except Exception as exc:
         logger.exception("Unexpected analysis report error")
+        await _record_analytics("mark_analysis_failed", request.analysis_id)
         raise HTTPException(status_code=503, detail="专业复盘报告暂不可用") from exc
     finally:
         task = analysis_report_tasks.get(cache_key)

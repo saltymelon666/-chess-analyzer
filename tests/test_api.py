@@ -1,4 +1,6 @@
 import asyncio
+from dataclasses import replace
+from pathlib import Path
 
 import chess
 import pytest
@@ -10,6 +12,7 @@ from app.analysis_report import (
     GeneratedAnalysisReport,
     build_fallback_report,
 )
+from app.analytics import AnalyticsStore
 from app.models import (
     ComplexityFactors,
     EngineResult,
@@ -20,6 +23,19 @@ from app.models import (
     MoveResult,
     MoveReview,
 )
+
+
+def test_render_allows_custom_domain_origins() -> None:
+    render_config = (Path(__file__).resolve().parents[1] / "render.yaml").read_text(encoding="utf-8")
+    assert "https://pawnlab.cn" in render_config
+    assert "https://www.pawnlab.cn" in render_config
+    assert "plan: free" in render_config
+    assert "key: ANALYTICS_DATABASE_URL" in render_config
+    assert "name: pawnlab-analytics" in render_config
+    assert "property: connectionString" in render_config
+    assert "databaseName: pawnlab_analytics" in render_config
+    assert 'ANALYTICS_PERSISTENT_STORAGE' in render_config
+    assert "generateValue: true" in render_config
 
 
 class FakeStockfish:
@@ -173,6 +189,100 @@ def test_request_validation(monkeypatch) -> None:
 
     response = client.post("/api/review", json={"fen": "short"})
     assert response.status_code == 422
+
+
+def test_event_and_admin_statistics_endpoints(monkeypatch, tmp_path) -> None:
+    store = AnalyticsStore(tmp_path / "api-analytics.sqlite3")
+    monkeypatch.setattr(api, "analytics_store", store)
+    client = TestClient(api.app)
+
+    event = client.post(
+        "/api/event",
+        json={
+            "visitor_id": "visitor_api_1234",
+            "event": "page_view",
+            "page": "/",
+            "device_info": "test browser",
+            "source_info": "direct",
+        },
+    )
+    statistics = client.get("/api/admin/statistics")
+
+    assert event.status_code == 202
+    assert event.json() == {"accepted": True}
+    assert statistics.status_code == 200
+    assert statistics.json()["visitors"] == 1
+    dashboard = client.get("/api/admin/dashboard")
+    assert dashboard.status_code == 200
+    payload = dashboard.json()
+    assert payload["statistics"]["page_views"] == 1
+    assert payload["recent_analyses"] == []
+    assert payload["protection_policies"]
+    assert payload["configuration"]["game_analysis_max_plies"] == 200
+
+
+def test_admin_dashboard_supports_date_and_rejects_invalid_date(
+    monkeypatch, tmp_path
+) -> None:
+    store = AnalyticsStore(tmp_path / "dated-dashboard.sqlite3")
+    monkeypatch.setattr(api, "analytics_store", store)
+    client = TestClient(api.app)
+
+    selected = client.get("/api/admin/dashboard?date=2026-08-11")
+    invalid = client.get("/api/admin/dashboard?date=11-08-2026")
+
+    assert selected.status_code == 200
+    assert selected.json()["statistics"]["date"] == "2026-08-11"
+    assert invalid.status_code == 422
+
+
+def test_admin_statistics_requires_key_in_production(monkeypatch, tmp_path) -> None:
+    store = AnalyticsStore(tmp_path / "protected-analytics.sqlite3")
+    monkeypatch.setattr(api, "analytics_store", store)
+    monkeypatch.setattr(
+        api,
+        "settings",
+        replace(api.settings, environment="production", admin_statistics_key="secret-test-key"),
+    )
+    client = TestClient(api.app)
+
+    assert client.get("/api/admin/statistics").status_code == 401
+    assert client.get("/api/admin/dashboard").status_code == 401
+    allowed = client.get(
+        "/api/admin/statistics",
+        headers={"X-Admin-Key": "secret-test-key"},
+    )
+    assert allowed.status_code == 200
+
+
+def test_game_review_records_analysis_without_changing_analysis_flow(monkeypatch, tmp_path) -> None:
+    store = AnalyticsStore(tmp_path / "review-analytics.sqlite3")
+    monkeypatch.setattr(api, "analytics_store", store)
+
+    async def fake_analyze_pgn(**kwargs):
+        return api.GameReviewResponse(
+            analysis_id=kwargs["analysis_id"],
+            depth=kwargs["depth"],
+            move_count=0,
+            moves=[],
+        )
+
+    monkeypatch.setattr(api, "analyze_pgn", fake_analyze_pgn)
+    client = TestClient(api.app)
+    response = client.post(
+        "/api/game-review",
+        json={
+            "pgn": "1. e4 e5",
+            "visitor_id": "visitor_review_1234",
+            "analysis_id": "analysis_review_1234",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["analysis_id"] == "analysis_review_1234"
+    statistics = store.daily_statistics()
+    assert statistics.analyses == 1
+    assert statistics.successes == 1
 
 
 def test_move_explanation_is_cached(monkeypatch) -> None:

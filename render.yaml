@@ -32,8 +32,26 @@ services:
       - key: GAME_ANALYSIS_TIMEOUT_SECONDS
         value: "240"
       - key: GAME_ANALYSIS_MAX_PLIES
-        value: "160"
+        value: "200"
       - key: DEEPSEEK_TIMEOUT_SECONDS
         value: "30"
       - key: ALLOWED_ORIGINS
         value: https://pawnlab.cn,https://www.pawnlab.cn,https://pawnlab-9e0.pages.dev,https://saltymelon666.github.io,http://localhost:8080,http://127.0.0.1:8080,http://localhost:8501,http://127.0.0.1:8501
+      - key: ANALYTICS_DATABASE_URL
+        fromDatabase:
+          name: pawnlab-analytics
+          property: connectionString
+      - key: ANALYTICS_PERSISTENT_STORAGE
+        value: "true"
+      - key: ADMIN_STATISTICS_KEY
+        generateValue: true
+      - key: DEEPSEEK_INPUT_PRICE_PER_MILLION
+        value: "0.14"
+      - key: DEEPSEEK_OUTPUT_PRICE_PER_MILLION
+        value: "0.28"
+
+databases:
+  - name: pawnlab-analytics
+    plan: free
+    databaseName: pawnlab_analytics
+    user: pawnlab_analytics
