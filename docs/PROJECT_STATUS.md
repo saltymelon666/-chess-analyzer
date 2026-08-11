@@ -786,3 +786,10 @@ Phase 6A文件：
 - 为降低7天公测固定成本，Analytics存储已支持本地SQLite与生产Postgres双后端；Render Blueprint保持免费Web实例并新增免费`pawnlab-analytics` Postgres，通过`ANALYTICS_DATABASE_URL`连接。管理员密钥自动生成，DeepSeek V4 Flash成本估算单价按2026-08-11官方价格配置为输入`$0.14/百万Token`、输出`$0.28/百万Token`。
 - 后台专项测试`23 passed`；完整pytest`341 passed, 2 warnings`。Edge真实浏览器桌面与手机均显示10个指标卡和4组保护规则，无横向溢出、控制台错误或产品页链接。两个后台页面内联JavaScript语法通过，Render Free Web + Free Postgres YAML解析通过。
 - 15局面真实Stockfish + DeepSeek质量套件：首次通过15/15、最终严格通过15/15、安全回退0/15，缓存响应410ms；说明后台与统计改动没有降低正式分析质量。
+
+## 22. 2026-08-11 免费公测版生产发布
+
+- 免费公测版已通过PR #12合并到`main`，生产提交为`8a3a9365f4537ea8f94ca9607df4fd9d8a18b31d`；GitHub Pages构建与部署成功。
+- `https://pawnlab.cn/`和`https://pawnlab.cn/admin.html`均返回200；产品页已包含匿名`visitor_id`与“公测体验版”，后台页为独立运营页面。
+- Render生产`/api/health`返回200，Stockfish可用且DeepSeek配置有效；生产OpenAPI已包含`/api/event`、`/api/admin/dashboard`和`/api/admin/statistics`，后台无密钥访问返回401。
+- `render.yaml`已配置免费Web实例与免费Postgres。生产数据库是否已经实际绑定`ANALYTICS_DATABASE_URL`仍需在Render控制台确认；在确认前，不能把跨重启持久化描述为已验证。
