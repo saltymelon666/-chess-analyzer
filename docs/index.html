@@ -31,9 +31,18 @@
     .shell { max-width: 1280px; margin: 0 auto; padding: 28px 24px 48px; }
     .topbar { display: flex; justify-content: space-between; align-items: center; gap: 18px; margin-bottom: 28px; }
     .brand { display:flex; align-items:center; gap:12px; font-weight:900; font-size:18px; }
+    .beta-badge { margin-left:auto; padding:7px 12px; border-radius:999px; background:#E9F6EE; color:#24633F; font-size:13px; font-weight:900; }
     .brand-mark { display:grid; place-items:center; width:44px; height:44px; border-radius:15px; background:var(--accent); font-size:27px; box-shadow:0 7px 16px rgba(244,185,66,.28); }
     h1 { margin: 0; font-size: clamp(32px, 4.6vw, 58px); line-height:1.14; letter-spacing:-.04em; }
     .subtitle { margin: 14px 0 0; color: var(--muted); font-size: clamp(15px, 1.8vw, 19px); line-height:1.7; }
+    .beta-overview { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin-top:18px; }
+    .beta-feature { min-width:0; padding:12px 13px; border:1px solid #D9E9E5; border-radius:16px; background:rgba(255,255,255,.72); }
+    .beta-feature strong { display:block; color:#2F675C; font-size:14px; }
+    .beta-feature span { display:block; margin-top:4px; color:var(--muted); font-size:12px; line-height:1.55; }
+    .beta-privacy { display:flex; align-items:flex-start; gap:7px; margin:11px 2px 0; color:#65736F; font-size:12px; line-height:1.6; }
+    .preview-notice { margin:0 0 18px; padding:13px 15px; border:1px solid #E8C86D; border-radius:16px; background:#FFF8DD; color:#735A18; font-size:13px; line-height:1.65; }
+    .preview-notice strong { display:block; margin-bottom:2px; color:#624B10; }
+    .preview-notice[hidden] { display:none; }
     .hero { display:grid; grid-template-columns:minmax(0,55fr) minmax(420px,45fr); gap:32px; align-items:start; margin-bottom:32px; }
     .hero-copy { min-width:0; padding-top:8px; }
     .eyebrow { display:inline-flex; gap:8px; align-items:center; margin-bottom:16px; color:#39786A; background:var(--accent-2); padding:8px 13px; border-radius:999px; font-weight:800; font-size:13px; }
@@ -74,7 +83,7 @@
     .board-shell {
       position: relative; width: var(--board-size); max-width: 100%;
       aspect-ratio: 1; margin: 0 auto;
-      background-image: url("assets/chess/physical_chess_board_empty.png");
+      background-image: url("assets/chess/physical_chess_board_empty.webp");
       background-size: cover; background-position: center;
       border-radius: 18px; overflow: hidden;
       box-shadow: 0 20px 38px rgba(82,60,34,.18); border:7px solid #F7EFE4;
@@ -274,6 +283,7 @@
       .hero { margin-bottom:20px; gap:18px; } .hero-guide { height:370px; }
       .hero-copy,.hero-upload,.upload-zone,textarea { min-width:0; max-width:100%; }
       .hero-upload { padding:14px; border-radius:22px; overflow:hidden; }
+      .beta-overview { grid-template-columns:1fr; gap:8px; }
       .piece-halo { width:195px; height:195px; left:50%; top:50%; }
       .score-sheet { left:12px; top:105px; transform:rotate(-5deg) scale(.72); }
       .magnifier { left:18px; top:206px; transform:rotate(-13deg) scale(.68); }
@@ -307,6 +317,12 @@
 <main class="shell">
   <div class="topbar">
     <div class="brand"><span class="brand-mark">♟</span><span>棋盘研究所</span></div>
+    <span class="beta-badge">公测体验版 · 免费使用</span>
+  </div>
+
+  <div class="preview-notice" id="previewNotice" hidden>
+    <strong>当前是本地文件预览</strong>
+    这里可以查看界面，但不能真实验证后端分析和匿名埋点。请通过 <code>http://localhost:8080</code> 打开项目。
   </div>
 
   <section class="hero">
@@ -314,6 +330,12 @@
       <span class="eyebrow">✦ 小小棋手的复盘伙伴</span>
       <h1>让孩子真正看懂<br>自己的棋局</h1>
       <p class="subtitle">上传一盘PGN，找出最值得学习的几个时刻。<br>复杂的棋局，我们会讲得简单又清楚。</p>
+      <div class="beta-overview" aria-label="公测版功能">
+        <div class="beta-feature"><strong>无需注册</strong><span>打开网页即可直接完成整盘复盘</span></div>
+        <div class="beta-feature"><strong>完整分析</strong><span>Stockfish逐步评价 + DeepSeek中文报告</span></div>
+        <div class="beta-feature"><strong>免费公测</strong><span>正常体验不限制使用次数</span></div>
+      </div>
+      <p class="beta-privacy"><span aria-hidden="true">🔒</span><span>仅匿名记录访问、棋谱上传和分析完成情况，不收集姓名、邮箱等个人信息。</span></p>
       <div class="hero-upload">
         <div class="upload-zone">
           <label class="upload-title" for="sourceInput"><span>📋</span>把棋谱放到研究桌上</label>
@@ -321,6 +343,8 @@
         </div>
         <div class="hero-actions">
           <button class="primary-btn" id="importBtn" onclick="importPgn()">导入并显示</button>
+          <label class="ghost-btn" for="pgnFileInput" role="button">选择 PGN 文件</label>
+          <input id="pgnFileInput" type="file" accept=".pgn,text/plain" hidden>
           <button class="secondary-btn" onclick="clearAll()">清空</button>
           <button class="ghost-btn" onclick="loadExample('italian')">意大利开局</button>
           <button class="ghost-btn" onclick="loadExample('scholars')">四步杀</button>
@@ -332,7 +356,7 @@
       <div class="score-sheet"><div class="paper-title"></div><div class="mini-board"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="paper-lines"><i></i><i></i><i></i></div></div>
       <svg class="magnifier" viewBox="0 0 140 140"><circle cx="55" cy="55" r="39"/><line x1="84" y1="84" x2="124" y2="124"/></svg>
       <svg class="discovery-path" viewBox="0 0 280 240"><path d="M12 18 C92 4 66 113 151 105 S204 174 244 185"/><polygon points="240,174 263,188 239,197"/></svg>
-      <div class="piece-halo"><img class="guide-piece" src="assets/mascot-pawn-detective-v2.png" alt=""></div>
+      <div class="piece-halo"><img class="guide-piece" src="assets/mascot-pawn-detective-v2.webp" alt="" width="1536" height="1536" fetchpriority="high" decoding="async"></div>
       <svg class="lab-star star-one" viewBox="0 0 24 24"><path d="m12 1 2.7 7.1 7.3.4-5.7 4.6 1.9 7.3-6.2-4-6.2 4 1.9-7.3L2 8.5l7.3-.4z"/></svg>
       <svg class="lab-star star-two" viewBox="0 0 24 24"><path d="m12 1 2.7 7.1 7.3.4-5.7 4.6 1.9 7.3-6.2-4-6.2 4 1.9-7.3L2 8.5l7.3-.4z"/></svg>
       <svg class="lab-star star-three" viewBox="0 0 24 24"><path d="m12 1 2.7 7.1 7.3.4-5.7 4.6 1.9 7.3-6.2-4-6.2 4 1.9-7.3L2 8.5l7.3-.4z"/></svg>
@@ -401,7 +425,7 @@
         <div class="review-best"><span class="small">Stockfish 更推荐</span><br><strong id="moveReviewBest">-</strong></div>
         <section class="review-explanation" id="professionalAnalysisPanel" aria-live="polite">
           <div class="researcher-head">
-            <img class="review-mascot" src="assets/mascot-pawn-detective-v2.png" alt="小兵研究员">
+            <img class="review-mascot" src="assets/mascot-pawn-detective-v2.webp" alt="小兵研究员" width="1536" height="1536" loading="lazy" decoding="async">
             <div><strong class="researcher-title">小兵研究员说</strong><span class="professional-status" id="professionalAnalysisStatus">正在生成结论……</span></div>
             <span class="professional-complexity" id="professionalComplexity">分析中</span>
           </div>
@@ -432,35 +456,34 @@
   </section>
 </main>
 
-<!-- chess.js v0.10.2 (本地版，已添加全局 Chess 变量) -->
-<script src="chess.js"></script>
 <script src="runtime-config.js"></script>
 
 <script>
 // ========== 状态管理 ==========
 const FILES = ["a","b","c","d","e","f","g","h"];
 const PIECE_ASSET = {
-  P: "assets/chess/pieces_transparent/white_pawn_a2.png",
-  N: "assets/chess/pieces_transparent/white_knight_b1.png",
-  B: "assets/chess/pieces_transparent/white_bishop_c1.png",
-  R: "assets/chess/pieces_transparent/white_rook_a1.png",
-  Q: "assets/chess/pieces_transparent/white_queen_d1.png",
-  K: "assets/chess/pieces_transparent/white_king_e1.png",
-  p: "assets/chess/pieces_transparent/black_pawn_a7.png",
-  n: "assets/chess/pieces_transparent/black_knight_b8.png",
-  b: "assets/chess/pieces_transparent/black_bishop_c8.png",
-  r: "assets/chess/pieces_transparent/black_rook_a8.png",
-  q: "assets/chess/pieces_transparent/black_queen_d8.png",
-  k: "assets/chess/pieces_transparent/black_king_e8.png"
+  P: "assets/chess/pieces_transparent/white_pawn_a2.webp",
+  N: "assets/chess/pieces_transparent/white_knight_b1.webp",
+  B: "assets/chess/pieces_transparent/white_bishop_c1.webp",
+  R: "assets/chess/pieces_transparent/white_rook_a1.webp",
+  Q: "assets/chess/pieces_transparent/white_queen_d1.webp",
+  K: "assets/chess/pieces_transparent/white_king_e1.webp",
+  p: "assets/chess/pieces_transparent/black_pawn_a7.webp",
+  n: "assets/chess/pieces_transparent/black_knight_b8.webp",
+  b: "assets/chess/pieces_transparent/black_bishop_c8.webp",
+  r: "assets/chess/pieces_transparent/black_rook_a8.webp",
+  q: "assets/chess/pieces_transparent/black_queen_d8.webp",
+  k: "assets/chess/pieces_transparent/black_king_e8.webp"
 };
 const EXAMPLES = {
   italian: "1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 4. d3 Be7 5. O-O O-O 6. Re1 d6",
   scholars: "1. e4 e5 2. Qh5 Nc6 3. Bc4 Nf6 4. Qxf7#"
 };
 
-let game = new Chess();
+const INITIAL_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+let game = null;
 let moves = []; // 每步后的 fen
-let initialFen = game.fen();
+let initialFen = INITIAL_FEN;
 let currentStep = 0;
 let totalSteps = 0;
 let pgnHeaders = {};
@@ -483,6 +506,56 @@ const API_BASE_URL = IS_LOCAL_FRONTEND
 
 function apiUrl(path) {
   return `${API_BASE_URL}${path}`;
+}
+
+const VISITOR_STORAGE_KEY = "chess_lab_visitor_id";
+
+function createVisitorId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID().replaceAll("-", "");
+  return `visitor_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 14)}`;
+}
+
+function getVisitorId() {
+  try {
+    const existing = localStorage.getItem(VISITOR_STORAGE_KEY);
+    if (existing) return existing;
+    const created = createVisitorId();
+    localStorage.setItem(VISITOR_STORAGE_KEY, created);
+    return created;
+  } catch {
+    return createVisitorId();
+  }
+}
+
+const visitorId = getVisitorId();
+
+let chessRuntimePromise;
+
+async function ensureChessRuntime() {
+  if (!chessRuntimePromise) {
+    chessRuntimePromise = import("./pgn-runtime.js")
+      .then(module => module.loadChessLibrary())
+      .catch(error => {
+        chessRuntimePromise = null;
+        throw error;
+      });
+  }
+  await chessRuntimePromise;
+  if (!game) game = new Chess(initialFen);
+}
+
+function trackEvent(event, details = {}) {
+  fetch(apiUrl("/api/event"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      visitor_id: visitorId,
+      event,
+      page: location.pathname,
+      ...details
+    }),
+    keepalive: true
+  }).catch(() => {});
 }
 
 
@@ -727,17 +800,24 @@ function formatGameLength(entries) {
   return `${entries.length} 着 · ${roundLabel}`;
 }
 
-function importPgn() {
+async function importPgn() {
   const raw = document.getElementById("sourceInput").value.trim();
-  if (!raw) return showError("请先粘贴 PGN");
+  if (!raw) {
+    trackEvent("upload_pgn", { pgn_length: 0, success: false });
+    return showError("请先粘贴或选择 PGN 文件");
+  }
   clearError();
 
   try {
+    await ensureChessRuntime();
     parsePgn(raw);
+    if (pgnMoves.length > 200) throw new Error("暂不支持超过 100 个完整回合的超长棋谱");
   } catch (e) {
+    trackEvent("upload_pgn", { pgn_length: raw.length, success: false });
     showError("无法解析 PGN：" + e.message);
     return;
   }
+  trackEvent("upload_pgn", { pgn_length: raw.length, success: true });
 
   document.getElementById("pgnStep").max = totalSteps;
   document.getElementById("pgnStep").value = currentStep;
@@ -835,9 +915,9 @@ function rebuildGameAtStep(step) {
 
 function clearAll() {
   document.getElementById("sourceInput").value = "";
-  game = new Chess();
-  initialFen = game.fen();
-  moves = [game.fen()];
+  game = globalThis.Chess ? new Chess() : null;
+  initialFen = game ? game.fen() : INITIAL_FEN;
+  moves = [initialFen];
   pgnMoves = [];
   currentStep = 0;
   totalSteps = 0;
@@ -878,6 +958,9 @@ async function analyzeGame() {
   let stage = 0;
   document.getElementById("loadingText").textContent = stages[0];
   clearInterval(loadingStageTimer);
+  const analysisStartedAt = performance.now();
+  const requestedAnalysisId = createVisitorId();
+  trackEvent("analysis_start", { analysis_id: requestedAnalysisId });
   loadingStageTimer = setInterval(() => {
     stage = Math.min(stage + 1, stages.length - 1);
     document.getElementById("loadingText").textContent = stages[stage];
@@ -887,7 +970,7 @@ async function analyzeGame() {
     const response = await fetch(apiUrl("/api/game-review"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pgn })
+      body: JSON.stringify({ pgn, visitor_id: visitorId, analysis_id: requestedAnalysisId })
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.detail || `整盘分析服务错误 (${response.status})`);
@@ -905,7 +988,17 @@ async function analyzeGame() {
     renderBoard();
     updateMoveReviewPanel();
     document.getElementById("backendStatus").textContent = `逐步评价完成 · 共 ${payload.move_count} 步 · 深度 ${payload.depth}`;
+    trackEvent("analysis_complete", {
+      analysis_id: payload.analysis_id,
+      duration_ms: Math.round(performance.now() - analysisStartedAt),
+      success: true
+    });
   } catch (e) {
+    trackEvent("analysis_complete", {
+      analysis_id: requestedAnalysisId,
+      duration_ms: Math.round(performance.now() - analysisStartedAt),
+      success: false
+    });
     showError("逐步评价失败：" + e.message);
   } finally {
     clearInterval(loadingStageTimer);
@@ -1193,6 +1286,7 @@ async function analyze() {
   }, 1800);
 
   try {
+    await ensureChessRuntime();
     const fen = game.fen();
     const response = await fetch(apiUrl("/api/review"), {
       method: "POST",
@@ -1375,7 +1469,7 @@ function renderMoveGuides(board) {
 function renderBoard() {
   const board = document.getElementById("visualBoard");
   board.innerHTML = "";
-  const fen = game.fen();
+  const fen = game ? game.fen() : initialFen;
   const { pieces, turn } = parseFen(fen);
   document.getElementById("turnLabel").textContent = turn === "b" ? "黑方走棋" : "白方走棋";
   document.getElementById("positionLabel").textContent = `${pieces.length} 枚棋子 · 白方在下`;
@@ -1387,6 +1481,7 @@ function renderBoard() {
     img.className = "piece-img";
     img.src = PIECE_ASSET[entry.piece];
     img.alt = entry.square;
+    img.decoding = "async";
     Object.assign(img.style, boardCenter(entry.row, entry.col));
     board.appendChild(img);
   });
@@ -1405,8 +1500,40 @@ function showError(msg) {
 document.addEventListener("DOMContentLoaded", () => {
   renderBoard();
   document.getElementById("analyzeBtn").disabled = true;
+  const isFilePreview = location.protocol === "file:";
+  if (isFilePreview) {
+    document.getElementById("previewNotice").hidden = false;
+    document.getElementById("backendStatus").textContent = "文件预览模式 · 请用 http://localhost:8080 打开以连接分析服务";
+  }
+  if (!isFilePreview) trackEvent("page_view", {
+    device_info: navigator.userAgent,
+    source_info: document.referrer ? new URL(document.referrer).origin : "direct"
+  });
 
-  fetch(apiUrl("/api/health"))
+  document.getElementById("pgnFileInput").addEventListener("change", event => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (file.size > 100000) {
+      trackEvent("upload_pgn", { pgn_length: file.size, success: false });
+      showError("PGN 文件过大，请选择较短的棋谱");
+      event.target.value = "";
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      document.getElementById("sourceInput").value = String(reader.result || "");
+      importPgn();
+      event.target.value = "";
+    };
+    reader.onerror = () => {
+      trackEvent("upload_pgn", { pgn_length: file.size, success: false });
+      showError("无法读取这个 PGN 文件");
+      event.target.value = "";
+    };
+    reader.readAsText(file);
+  });
+
+  if (!isFilePreview) fetch(apiUrl("/api/health"))
     .then(async response => {
       const health = await response.json().catch(() => ({}));
       if (!response.ok || health.stockfish !== "available") {

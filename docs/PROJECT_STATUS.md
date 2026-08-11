@@ -1,6 +1,6 @@
 # 棋盘研究所项目状态
 
-更新时间：2026-08-09
+更新时间：2026-08-10
 
 本文档是继续开发时的首要状态来源。内容只依据当前代码、Git 状态、自动化测试、仓库内质量报告和部署配置；无法从这些材料确认的内容均标为“待确认”。
 
@@ -14,6 +14,15 @@
 - 本地自动化测试：`291 passed, 2 warnings`（2026-08-06，路线首着作用硬事实保护后的完整回归）。
 - 15局面真实质量套件：最终严格校验`15/15`，首次通过`14/15`，`center-1`因DeepSeek传输中断进入程序安全回退；三条路线有效`15/15`。
 - Render 与 GitHub Pages 的当前线上运行状态：已验证。合并提交 `76d1ccc` 后，GitHub Pages 返回 200；Render `/api/health` 返回 200，Stockfish 可用、DeepSeek 已配置，开局与残局 lookup 接口均返回 200。
+
+### 前端首次加载性能优化
+
+- 101 张生产图片已从 PNG 转为 WebP，并同步到 `assets/` 与 `docs/assets/`；单份资源总量由 10.07 MiB 降至 2.05 MiB，减少 79.7%，当前最大的 WebP 为 489.4 KiB。
+- `chess.js` 已改为用户首次导入 PGN 或分析局面时通过 `pgn-runtime.js` 动态加载；Stockfish WASM 保持按需路径，不进入首次页面请求。
+- Fast 4G（1.6 Mbps、150 ms RTT）、冷缓存、桌面 1365×768、5 次中位数：首次传输 3811.1 KiB → 762.0 KiB，DOMContentLoaded 1330.1 ms → 740.2 ms，load 19795.2 ms → 4131.3 ms，LCP 17844 ms → 1980 ms。
+- 桌面、平板、手机浏览器冒烟检查均通过：无横向溢出、无控制台错误，`chess.js` 首屏不加载，导入示例 PGN 后按需加载并正确恢复 12 着。
+- 完整自动化回归：`337 passed, 2 warnings`；警告为既有 Starlette 废弃提示及本机 `.pytest_cache` 写权限提示。
+- 15 局面真实 Stockfish + DeepSeek 质量套件：首次通过 `15/15`，最终严格通过 `15/15`，重试 `0/15`，安全回退 `0/15`；输入 Token `5,458—8,704`，首次网络响应 `12.041—16.611` 秒，缓存响应 `674ms`。结果写入被忽略的 `work/frontend-performance/`，未覆盖仓库历史质量报告。
 
 ### Phase 6D / 6E / 6F 最新进展
 
@@ -756,3 +765,24 @@ Phase 6A文件：
 - 报告：`docs/research/chess-analysis-mvp-readiness-report.md`；真实结果：`docs/professional-analysis-quality-results.json`、`docs/professional-analysis-quality-report.md`。
 - 按产品负责人最终页面审核意见，开发版和发布版继续保留“小兵研究员说”专业分析面板及`/api/professional-analysis`调用，并删除面板内“当前局面分析”摘要卡片；其余展示范围以后续“结论模式”规则为准。
 - 后续页面审核将专业分析前端进一步收敛为“结论模式”：只显示明确威胁、双方计划、王安全、值得关注的弱点，以及精确命中的棋书原评；不显示最大危险推导、实战走法分析过程、候选路线展开、PV、评价变化说明、过程性后果和原始JSON。无有效结论时整个专业面板自动隐藏；后端完整分析结果与严格校验不变。
+
+## 20. 2026-08-10 7天公测版
+
+- 当前产品本来没有登录或注册门槛；页面现已明确标注“公测体验版 · 免费使用”，并同时支持粘贴PGN和选择本地`.pgn`文件，完整Stockfish与DeepSeek流程不降级。
+- 新增匿名Analytics：浏览器用`localStorage`保存随机`visitor_id`；后端SQLite记录访客首次/最后访问、设备摘要、来源，以及`page_view`、`upload_pgn`、`analysis_start`、`analysis_complete`事件。没有新增个人信息字段，也不持久化IP。
+- 新增`analysis_logs`，记录PGN长度与哈希、走子数、Stockfish/DeepSeek/总耗时、Prompt/Completion/总Token和成功/失败状态；Analytics写入失败不会中断核心棋局分析。
+- 新增`GET /api/admin/statistics`，生产环境通过`X-Admin-Key`访问；返回当日访客、上传、分析、成功率、平均耗时、Token和可选成本估算。成本单价通过环境变量配置，默认不猜测价格。
+- 新增仅针对异常流量的内存保护和DeepSeek全局突发保护；前端不展示IP、Token或成本限制。棋谱上限统一为100个完整回合（200个半回合），Stockfish深度、MultiPV、分析局面与DeepSeek Prompt未降低或修改。
+- 完整pytest：`336 passed, 2 warnings`；两个前端内联JavaScript语法通过；开发版与发布版SHA-256一致；实际启动FastAPI后`/api/health`、`/api/event`和`/api/admin/statistics`分别返回200、202、200；Edge无头浏览器的桌面、平板、手机视口均无横向溢出、控制台错误或资源加载错误。
+- 15局面真实Stockfish + DeepSeek质量套件已重跑：首次校验通过15/15、最终严格通过15/15、安全回退0/15、三条路线15/15有效，缓存响应312ms；正式结果和报告已刷新。
+- 当前SQLite路径可通过`ANALYTICS_DB_PATH`配置。Render生产环境如需跨重启保留完整7天数据，部署前仍需确认该路径位于持久卷；当前仓库没有擅自升级付费实例或挂载付费磁盘。
+- 公测能力现已在首页显式展示为“无需注册、完整分析、免费公测”三项，并提供匿名数据说明；通过`file:///`打开时会显示文件预览警告并停止后端健康检查，提示改用`http://localhost:8080`。HTTP桌面、平板、手机视口均显示新说明且无横向溢出或控制台错误。
+
+## 21. 2026-08-11 独立商业化运营后台
+
+- 新增独立`admin.html`与发布副本`docs/admin.html`；产品首页没有后台入口，也不展示Token、成本、异常保护或生产配置。管理员密钥只保存在当前标签页的`sessionStorage`，不会写入页面或仓库。
+- 新增`GET /api/admin/dashboard`，支持按日期读取访问人数、页面访问、上传成功/失败、分析次数、转化率、成功率、Stockfish/DeepSeek耗时、Prompt/Completion/总Token、估算成本、最近50条匿名分析日志、保护规则和生产配置状态。
+- 原`GET /api/admin/statistics`保持兼容并增加日期参数；生产环境的两个管理员接口均继续通过`X-Admin-Key`保护。
+- 为降低7天公测固定成本，Analytics存储已支持本地SQLite与生产Postgres双后端；Render Blueprint保持免费Web实例并新增免费`pawnlab-analytics` Postgres，通过`ANALYTICS_DATABASE_URL`连接。管理员密钥自动生成，DeepSeek V4 Flash成本估算单价按2026-08-11官方价格配置为输入`$0.14/百万Token`、输出`$0.28/百万Token`。
+- 后台专项测试`23 passed`；完整pytest`341 passed, 2 warnings`。Edge真实浏览器桌面与手机均显示10个指标卡和4组保护规则，无横向溢出、控制台错误或产品页链接。两个后台页面内联JavaScript语法通过，Render Free Web + Free Postgres YAML解析通过。
+- 15局面真实Stockfish + DeepSeek质量套件：首次通过15/15、最终严格通过15/15、安全回退0/15，缓存响应410ms；说明后台与统计改动没有降低正式分析质量。

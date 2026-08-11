@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>PawnLab 公测运营后台</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='.9em' font-size='56'%3E%E2%99%9F%3C/text%3E%3C/svg%3E">
+  <script src="./runtime-config.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink:#14231b; --muted:#617168; --paper:#f4f1e8; --card:#fffdf7;
+      --line:#d9ded8; --green:#1f6a4b; --green-soft:#e4f1e9; --gold:#b47a22;
+      --red:#b64b42; --shadow:0 14px 36px rgba(37,55,45,.09);
+    }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--paper); color:var(--ink); font:15px/1.55 system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif; }
+    button,input { font:inherit; }
+    .shell { width:min(1180px,calc(100% - 32px)); margin:0 auto; padding:32px 0 56px; }
+    header { display:flex; justify-content:space-between; align-items:flex-start; gap:24px; margin-bottom:22px; }
+    h1 { margin:0; font-size:clamp(24px,4vw,38px); letter-spacing:-.03em; }
+    .subtitle { margin:6px 0 0; color:var(--muted); }
+    .private-badge { background:var(--ink); color:#fff; border-radius:999px; padding:7px 12px; font-size:13px; white-space:nowrap; }
+    .panel { background:var(--card); border:1px solid var(--line); border-radius:18px; box-shadow:var(--shadow); padding:20px; margin-bottom:18px; }
+    .controls { display:grid; grid-template-columns:minmax(180px,1fr) minmax(220px,1.6fr) auto auto; gap:12px; align-items:end; }
+    label { display:grid; gap:6px; color:var(--muted); font-size:13px; }
+    input { width:100%; border:1px solid #bdc8c0; border-radius:10px; background:#fff; padding:10px 12px; color:var(--ink); }
+    button { border:0; border-radius:10px; padding:11px 16px; cursor:pointer; font-weight:700; }
+    .primary { background:var(--green); color:#fff; }
+    .secondary { background:var(--green-soft); color:var(--green); }
+    .status { margin-top:12px; min-height:24px; color:var(--muted); }
+    .status.error { color:var(--red); }
+    .grid { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:12px; }
+    .metric { min-height:116px; padding:16px; background:var(--card); border:1px solid var(--line); border-radius:16px; }
+    .metric span { color:var(--muted); font-size:13px; }
+    .metric strong { display:block; margin-top:8px; font-size:clamp(22px,3vw,32px); }
+    .metric small { display:block; color:var(--muted); margin-top:4px; }
+    .section-title { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:14px; }
+    h2 { margin:0; font-size:19px; }
+    .two-col { display:grid; grid-template-columns:1.1fr .9fr; gap:18px; }
+    .funnel { display:grid; gap:10px; }
+    .funnel-row { display:grid; grid-template-columns:100px 1fr 70px; gap:12px; align-items:center; }
+    .bar { height:12px; background:#e7ebe7; border-radius:999px; overflow:hidden; }
+    .bar i { display:block; height:100%; min-width:2px; background:linear-gradient(90deg,var(--green),#72a888); border-radius:inherit; }
+    .config-list,.policy-list { display:grid; gap:9px; }
+    .config-row,.policy-row { display:flex; justify-content:space-between; gap:16px; padding:10px 0; border-bottom:1px solid #e7e9e4; }
+    .config-row:last-child,.policy-row:last-child { border-bottom:0; }
+    .ok { color:var(--green); font-weight:700; }
+    .warn { color:var(--gold); font-weight:700; }
+    .table-wrap { overflow:auto; border:1px solid var(--line); border-radius:12px; }
+    table { width:100%; border-collapse:collapse; min-width:920px; background:#fff; }
+    th,td { padding:11px 12px; text-align:left; border-bottom:1px solid #e7e9e4; white-space:nowrap; }
+    th { color:var(--muted); font-size:12px; background:#f8f8f3; position:sticky; top:0; }
+    tbody tr:last-child td { border-bottom:0; }
+    .pill { display:inline-block; border-radius:999px; padding:3px 8px; font-size:12px; font-weight:700; }
+    .pill.success { color:var(--green); background:var(--green-soft); }
+    .pill.failed { color:var(--red); background:#f8e7e4; }
+    .empty { color:var(--muted); padding:28px; text-align:center; }
+    .footnote { color:var(--muted); font-size:13px; margin:14px 0 0; }
+    [hidden] { display:none !important; }
+    @media (max-width:900px) {
+      .grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .two-col { grid-template-columns:1fr; }
+      .controls { grid-template-columns:1fr 1fr; }
+    }
+    @media (max-width:560px) {
+      .shell { width:min(100% - 20px,1180px); padding-top:20px; }
+      header { display:block; }
+      .private-badge { display:inline-block; margin-top:12px; }
+      .controls,.grid { grid-template-columns:1fr; }
+      .funnel-row { grid-template-columns:78px 1fr 54px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div>
+        <h1>PawnLab 公测运营后台</h1>
+        <p class="subtitle">独立查看增长、转化、分析质量、Token、成本和异常保护。</p>
+      </div>
+      <span class="private-badge">管理员专用 · 产品页无入口</span>
+    </header>
+
+    <section class="panel">
+      <div class="controls">
+        <label>统计日期
+          <input id="dateInput" type="date">
+        </label>
+        <label>管理员密钥
+          <input id="keyInput" type="password" autocomplete="current-password" placeholder="输入 ADMIN_STATISTICS_KEY">
+        </label>
+        <button class="primary" id="loadButton" type="button">读取数据</button>
+        <button class="secondary" id="refreshButton" type="button">刷新</button>
+      </div>
+      <div class="status" id="status">请输入管理员密钥后读取数据。本地 development 环境可留空。</div>
+    </section>
+
+    <section id="dashboard" hidden>
+      <div class="grid" id="metrics"></div>
+
+      <div class="two-col">
+        <section class="panel">
+          <div class="section-title"><h2>体验转化漏斗</h2><span id="funnelDate"></span></div>
+          <div class="funnel" id="funnel"></div>
+          <p class="footnote">上传到分析转化率按当天分析次数 ÷ 上传次数计算。</p>
+        </section>
+        <section class="panel">
+          <div class="section-title"><h2>生产配置状态</h2></div>
+          <div class="config-list" id="configuration"></div>
+        </section>
+      </div>
+
+      <div class="two-col">
+        <section class="panel">
+          <div class="section-title"><h2>Token 与成本</h2></div>
+          <div class="config-list" id="costs"></div>
+          <p class="footnote">成本来自已配置的每百万 Token 单价；未配置时只显示 Token。</p>
+        </section>
+        <section class="panel">
+          <div class="section-title"><h2>异常保护规则</h2></div>
+          <div class="policy-list" id="policies"></div>
+          <p class="footnote">规则仅在后台展示，普通用户页面不会出现限制信息。</p>
+        </section>
+      </div>
+
+      <section class="panel">
+        <div class="section-title"><h2>最近分析日志</h2><span id="logCount"></span></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>时间</th><th>分析 ID</th><th>状态</th><th>步数</th><th>PGN 长度</th>
+              <th>Stockfish</th><th>DeepSeek</th><th>总耗时</th><th>Prompt</th><th>Completion</th><th>总 Token</th>
+            </tr></thead>
+            <tbody id="logBody"></tbody>
+          </table>
+          <div class="empty" id="emptyLogs" hidden>当天还没有分析记录。</div>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script>
+    const IS_LOCAL = location.hostname === "localhost" || location.hostname === "127.0.0.1";
+    const API_BASE_URL = IS_LOCAL ? "http://localhost:8000" : (window.CHESS_API_BASE_URL || "");
+    const SESSION_KEY = "pawnlab_admin_statistics_key";
+    const dateInput = document.getElementById("dateInput");
+    const keyInput = document.getElementById("keyInput");
+    const statusNode = document.getElementById("status");
+    const dashboard = document.getElementById("dashboard");
+
+    function localDateValue() {
+      const now = new Date();
+      const offset = now.getTimezoneOffset() * 60000;
+      return new Date(now.getTime() - offset).toISOString().slice(0, 10);
+    }
+    function formatNumber(value) {
+      return new Intl.NumberFormat("zh-CN").format(Number(value || 0));
+    }
+    function formatMs(value) {
+      if (value === null || value === undefined) return "—";
+      if (value < 1000) return formatNumber(value) + " ms";
+      return (value / 1000).toFixed(1) + " 秒";
+    }
+    function formatPercent(value) {
+      return value === null || value === undefined ? "—" : (value * 100).toFixed(1) + "%";
+    }
+    function shortId(value) {
+      return value && value.length > 16 ? value.slice(0, 8) + "…" + value.slice(-5) : (value || "—");
+    }
+    function addRow(parent, label, value, state) {
+      const row = document.createElement("div");
+      row.className = "config-row";
+      const left = document.createElement("span");
+      const right = document.createElement("strong");
+      left.textContent = label;
+      right.textContent = value;
+      if (state) right.className = state;
+      row.append(left, right);
+      parent.appendChild(row);
+    }
+    function renderMetrics(stats) {
+      const values = [
+        ["访问人数", stats.visitors, stats.page_views + " 次页面访问"],
+        ["上传次数", stats.uploads, stats.upload_successes + " 成功 / " + stats.upload_failures + " 失败"],
+        ["分析次数", stats.analyses, "当天创建的分析"],
+        ["成功率", formatPercent(stats.success_rate), stats.successes + " 成功 / " + stats.failures + " 失败"],
+        ["平均总耗时", formatMs(stats.average_analysis_ms), "成功分析平均值"],
+        ["Stockfish 耗时", formatMs(stats.stockfish_ms), "当天累计"],
+        ["DeepSeek 耗时", formatMs(stats.deepseek_ms), "当天累计"],
+        ["总 Token", formatNumber(stats.deepseek_total_tokens), "Prompt + Completion"],
+        ["上传→分析", formatPercent(stats.upload_to_analysis_rate), "核心体验转化"],
+        ["估算 AI 成本", stats.estimated_ai_cost === null ? "待配置" : "$" + Number(stats.estimated_ai_cost).toFixed(6), "USD"]
+      ];
+      const root = document.getElementById("metrics");
+      root.replaceChildren();
+      values.forEach(function(item) {
+        const card = document.createElement("article");
+        card.className = "metric";
+        const label = document.createElement("span");
+        const value = document.createElement("strong");
+        const note = document.createElement("small");
+        label.textContent = item[0]; value.textContent = item[1]; note.textContent = item[2];
+        card.append(label, value, note);
+        root.appendChild(card);
+      });
+    }
+    function renderFunnel(stats) {
+      const items = [
+        ["页面访问", stats.page_views],
+        ["匿名访客", stats.visitors],
+        ["PGN 上传", stats.uploads],
+        ["开始分析", stats.analyses],
+        ["成功完成", stats.successes]
+      ];
+      const max = Math.max.apply(null, items.map(function(item) { return Number(item[1] || 0); }).concat([1]));
+      const root = document.getElementById("funnel");
+      root.replaceChildren();
+      items.forEach(function(item) {
+        const row = document.createElement("div");
+        row.className = "funnel-row";
+        const label = document.createElement("span");
+        const track = document.createElement("div");
+        const bar = document.createElement("i");
+        const value = document.createElement("strong");
+        track.className = "bar";
+        bar.style.width = (Number(item[1] || 0) / max * 100) + "%";
+        label.textContent = item[0]; value.textContent = formatNumber(item[1]);
+        track.appendChild(bar); row.append(label, track, value); root.appendChild(row);
+      });
+      document.getElementById("funnelDate").textContent = stats.date;
+    }
+    function renderConfiguration(config) {
+      const root = document.getElementById("configuration");
+      root.replaceChildren();
+      addRow(root, "运行环境", config.environment);
+      addRow(root, "DeepSeek", config.deepseek_configured ? "已配置" : "未配置", config.deepseek_configured ? "ok" : "warn");
+      addRow(root, "模型", config.deepseek_model);
+      addRow(root, "管理员密钥", config.admin_key_configured ? "已配置" : "未配置", config.admin_key_configured ? "ok" : "warn");
+      addRow(root, "数据持久化", config.analytics_persistent_storage ? "已配置" : "未配置", config.analytics_persistent_storage ? "ok" : "warn");
+      addRow(root, "Token 单价", config.token_pricing_configured ? "已配置" : "未配置", config.token_pricing_configured ? "ok" : "warn");
+      addRow(root, "棋谱上限", Math.floor(config.game_analysis_max_plies / 2) + " 回合");
+    }
+    function renderCosts(stats) {
+      const root = document.getElementById("costs");
+      root.replaceChildren();
+      addRow(root, "Prompt Token", formatNumber(stats.deepseek_prompt_tokens));
+      addRow(root, "Completion Token", formatNumber(stats.deepseek_completion_tokens));
+      addRow(root, "总 Token", formatNumber(stats.deepseek_total_tokens));
+      addRow(root, "DeepSeek 累计耗时", formatMs(stats.deepseek_ms));
+      addRow(root, "估算 AI 成本", stats.estimated_ai_cost === null ? "单价未配置" : "$" + Number(stats.estimated_ai_cost).toFixed(6));
+    }
+    function renderPolicies(policies) {
+      const root = document.getElementById("policies");
+      root.replaceChildren();
+      policies.forEach(function(policy) {
+        const row = document.createElement("div");
+        row.className = "policy-row";
+        const label = document.createElement("span");
+        const value = document.createElement("strong");
+        label.textContent = policy.label + (policy.global_scope ? "（全站）" : "（单来源）");
+        value.textContent = policy.per_minute + "/分钟 · " + formatNumber(policy.per_day) + "/天";
+        row.append(label, value); root.appendChild(row);
+      });
+    }
+    function renderLogs(logs) {
+      const body = document.getElementById("logBody");
+      const empty = document.getElementById("emptyLogs");
+      body.replaceChildren();
+      empty.hidden = logs.length !== 0;
+      logs.forEach(function(log) {
+        const row = document.createElement("tr");
+        const values = [
+          new Date(log.created_at).toLocaleString("zh-CN"),
+          shortId(log.analysis_id),
+          log.status === "success" ? "成功" : "失败",
+          log.move_count === null ? "—" : log.move_count,
+          log.pgn_length,
+          formatMs(log.stockfish_ms),
+          formatMs(log.deepseek_ms),
+          formatMs(log.total_ms),
+          formatNumber(log.prompt_tokens),
+          formatNumber(log.completion_tokens),
+          formatNumber(log.total_tokens)
+        ];
+        values.forEach(function(value, index) {
+          const cell = document.createElement("td");
+          if (index === 2) {
+            const pill = document.createElement("span");
+            pill.className = "pill " + log.status;
+            pill.textContent = value;
+            cell.appendChild(pill);
+          } else {
+            cell.textContent = value;
+          }
+          row.appendChild(cell);
+        });
+        body.appendChild(row);
+      });
+      document.getElementById("logCount").textContent = logs.length + " 条";
+    }
+    async function loadDashboard() {
+      const key = keyInput.value.trim();
+      const date = dateInput.value;
+      sessionStorage.setItem(SESSION_KEY, key);
+      statusNode.className = "status";
+      statusNode.textContent = "正在读取后台数据……";
+      try {
+        const response = await fetch(API_BASE_URL + "/api/admin/dashboard?date=" + encodeURIComponent(date) + "&limit=50", {
+          headers: key ? { "X-Admin-Key": key } : {}
+        });
+        const payload = await response.json().catch(function() { return {}; });
+        if (!response.ok) throw new Error(payload.detail || "后台接口返回 " + response.status);
+        renderMetrics(payload.statistics);
+        renderFunnel(payload.statistics);
+        renderConfiguration(payload.configuration);
+        renderCosts(payload.statistics);
+        renderPolicies(payload.protection_policies);
+        renderLogs(payload.recent_analyses);
+        dashboard.hidden = false;
+        statusNode.textContent = "数据已更新 · " + new Date().toLocaleTimeString("zh-CN");
+      } catch (error) {
+        dashboard.hidden = true;
+        statusNode.className = "status error";
+        statusNode.textContent = error.message === "Failed to fetch"
+          ? "无法连接后台 API，请确认服务已启动并允许当前域名访问。"
+          : error.message;
+      }
+    }
+
+    dateInput.value = localDateValue();
+    keyInput.value = sessionStorage.getItem(SESSION_KEY) || "";
+    document.getElementById("loadButton").addEventListener("click", loadDashboard);
+    document.getElementById("refreshButton").addEventListener("click", loadDashboard);
+    dateInput.addEventListener("change", loadDashboard);
+    keyInput.addEventListener("keydown", function(event) {
+      if (event.key === "Enter") loadDashboard();
+    });
+  </script>
+</body>
+</html>
