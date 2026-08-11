@@ -21,28 +21,28 @@
 
 | 局面 | 复杂度 | 首次通过 | 重试 | 回退 | 输入Token | 输出Token | 首次耗时ms | 最大危险有证据 | 双方计划有证据 | 三条路线有效 |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| opening-1 | normal | 是 | 否 | 否 | 6906 | 1580 | 12949 | 是 | 是 | 是 |
-| opening-2 | normal | 是 | 否 | 否 | 6112 | 1871 | 15713 | 是 | 是 | 是 |
-| opening-3 | normal | 是 | 否 | 否 | 7574 | 1656 | 13916 | 是 | 是 | 是 |
-| tactic-1 | complex | 是 | 否 | 否 | 8424 | 1773 | 15372 | 是 | 是 | 是 |
-| tactic-2 | complex | 是 | 否 | 否 | 8704 | 1815 | 15756 | 是 | 是 | 是 |
-| tactic-3 | complex | 是 | 否 | 否 | 8231 | 1531 | 13267 | 是 | 是 | 是 |
-| king-attack-1 | complex | 是 | 否 | 否 | 7326 | 1673 | 14782 | 是 | 是 | 是 |
-| king-attack-2 | complex | 是 | 否 | 否 | 7698 | 1812 | 16530 | 是 | 是 | 是 |
-| king-attack-3 | complex | 是 | 否 | 否 | 5796 | 1703 | 14591 | 是 | 是 | 是 |
-| center-1 | complex | 是 | 否 | 否 | 7744 | 1603 | 13697 | 是 | 是 | 是 |
-| center-2 | complex | 是 | 否 | 否 | 7131 | 1551 | 12784 | 是 | 是 | 是 |
-| closed-1 | normal | 是 | 否 | 否 | 5458 | 1488 | 12393 | 是 | 是 | 是 |
-| closed-2 | complex | 是 | 否 | 否 | 5854 | 1733 | 15267 | 是 | 是 | 是 |
-| simplify-1 | complex | 是 | 否 | 否 | 7694 | 1411 | 11591 | 是 | 是 | 是 |
-| simplify-2 | complex | 是 | 否 | 否 | 6506 | 1367 | 12390 | 是 | 是 | 是 |
+| opening-1 | normal | 是 | 否 | 否 | 6906 | 1796 | 16963 | 是 | 是 | 是 |
+| opening-2 | normal | 是 | 否 | 否 | 6112 | 1543 | 14733 | 是 | 是 | 是 |
+| opening-3 | normal | 是 | 否 | 否 | 7574 | 1737 | 16002 | 是 | 是 | 是 |
+| tactic-1 | complex | 是 | 否 | 否 | 8424 | 1756 | 17822 | 是 | 是 | 是 |
+| tactic-2 | complex | 是 | 否 | 否 | 8704 | 2220 | 19766 | 是 | 是 | 是 |
+| tactic-3 | complex | 是 | 否 | 否 | 8231 | 1713 | 17701 | 是 | 是 | 是 |
+| king-attack-1 | complex | 是 | 否 | 否 | 7326 | 1874 | 20109 | 是 | 是 | 是 |
+| king-attack-2 | complex | 是 | 否 | 否 | 7698 | 1575 | 16656 | 是 | 是 | 是 |
+| king-attack-3 | complex | 是 | 否 | 否 | 5796 | 1635 | 15078 | 是 | 是 | 是 |
+| center-1 | complex | 是 | 否 | 否 | 7744 | 1641 | 15844 | 是 | 是 | 是 |
+| center-2 | complex | 是 | 否 | 否 | 7131 | 1655 | 15852 | 是 | 是 | 是 |
+| closed-1 | normal | 是 | 否 | 否 | 5458 | 1410 | 12960 | 是 | 是 | 是 |
+| closed-2 | complex | 是 | 否 | 否 | 5854 | 1642 | 17210 | 是 | 是 | 是 |
+| simplify-1 | complex | 是 | 否 | 否 | 7694 | 1475 | 14415 | 是 | 是 | 是 |
+| simplify-2 | complex | 是 | 否 | 否 | 6506 | 1572 | 16453 | 是 | 是 | 是 |
 
 ## 汇总
 
 - 首次校验通过：15/15（100.0%）
 - 最终严格校验通过：15/15（100.0%）
 - 安全回退：0/15（0.0%）
-- 缓存响应：563ms
+- 缓存响应：410ms
 
 ## 分析重点筛选验收
 
@@ -107,34 +107,32 @@
 
 以下项目不会被放行或返回给前端；后端先替换为“该格/该路线着法”，再执行完整严格校验：
 
-- `opening-1` attempt 1 `playedMoveAnalysis.continuationPhases[0].explanation`：已整句重建越界的程序专属结论
-- `opening-1` attempt 1 `candidateLines[1].advantages[0]`：已整句重建越界的程序专属结论
-- `opening-1` attempt 1 `candidateLines[2].risks[0]`：已整句重建越界的程序专属结论
 - `opening-2` attempt 1 `playedMoveAnalysis.continuationPhases[0].explanation`：已整句重建越界的程序专属结论
-- `opening-2` attempt 1 `candidateLines[1].continuationPhases[0].explanation`：已整句重建越界的程序专属结论
 - `opening-3` attempt 1 `playedMoveAnalysis.continuationPhases[0].explanation`：已整句重建越界的程序专属结论
-- `opening-3` attempt 1 `candidateLines[1].advantages[1]`：已整句重建越界的程序专属结论
-- `opening-3` attempt 1 `candidateLines[1].risks[0]`：已整句重建越界的程序专属结论
-- `opening-3` attempt 1 `candidateLines[2].risks[0]`：已整句重建越界的程序专属结论
-- `tactic-2` attempt 1 `mainDanger.consequence`：已整句重建越界的程序专属结论
+- `tactic-1` attempt 1 `candidateLines[1].advantages[0]`：已整句重建越界的程序专属结论
+- `tactic-2` attempt 1 `mainDanger.description`：已整句重建越界的程序专属结论
 - `tactic-2` attempt 1 `playedMoveAnalysis.continuationPhases[0].explanation`：已整句重建越界的程序专属结论
+- `tactic-2` attempt 1 `candidateLines[0].advantages[0]`：已整句重建越界的程序专属结论
 - `tactic-2` attempt 1 `candidateLines[0].continuationPhases[0].explanation`：已整句重建越界的程序专属结论
-- `tactic-3` attempt 1 `candidateLines[0].advantages[1]`：已整句重建越界的程序专属结论
+- `tactic-2` attempt 1 `candidateLines[2].advantages[0]`：已整句重建越界的程序专属结论
+- `tactic-2` attempt 1 `candidateLines[2].continuationPhases[0].explanation`：已整句重建越界的程序专属结论
+- `tactic-2` attempt 1 `comparison.whyFirstLineIsBest`：已整句重建越界的程序专属结论
 - `tactic-3` attempt 1 `candidateLines[1].risks[0]`：已整句重建越界的程序专属结论
-- `tactic-3` attempt 1 `candidateLines[1].continuationPhases[0].explanation`：已整句重建越界的程序专属结论
+- `king-attack-1` attempt 1 `mainDanger.description`：已整句重建越界的程序专属结论
+- `king-attack-1` attempt 1 `playedMoveAnalysis.intention`：已整句重建越界的程序专属结论
+- `king-attack-1` attempt 1 `candidateLines[0].continuationPhases[0].explanation`：已整句重建越界的程序专属结论
 - `king-attack-1` attempt 1 `candidateLines[1].continuationPhases[0].explanation`：已整句重建越界的程序专属结论
-- `king-attack-2` attempt 1 `mainDanger.description`：已整句重建越界的程序专属结论
+- `king-attack-1` attempt 1 `candidateLines[2].continuationPhases[0].explanation`：已整句重建越界的程序专属结论
 - `king-attack-2` attempt 1 `playedMoveAnalysis.continuationPhases[0].explanation`：已整句重建越界的程序专属结论
-- `king-attack-2` attempt 1 `candidateLines[0].advantages[0]`：已整句重建越界的程序专属结论
-- `king-attack-3` attempt 1 `candidateLines[1].advantages[0]`：已整句重建越界的程序专属结论
-- `king-attack-3` attempt 1 `candidateLines[2].risks[0]`：已整句重建越界的程序专属结论
-- `center-1` attempt 1 `plans.white[0].description`：已整句重建越界的程序专属结论
-- `center-1` attempt 1 `candidateLines[1].advantages[1]`：已整句重建越界的程序专属结论
-- `center-1` attempt 1 `candidateLines[2].risks[1]`：已整句重建越界的程序专属结论
-- `center-1` attempt 1 `comparison.whyFirstLineIsBest`：已整句重建越界的程序专属结论
-- `center-2` attempt 1 `candidateLines[1].advantages[0]`：已整句重建越界的程序专属结论
-- `center-2` attempt 1 `comparison.whyFirstLineIsBest`：已整句重建越界的程序专属结论
-- `simplify-1` attempt 1 `playedMoveAnalysis.continuationPhases[0].explanation`：已整句重建越界的程序专属结论
+- `king-attack-2` attempt 1 `candidateLines[0].risks[0]`：已整句重建越界的程序专属结论
+- `king-attack-3` attempt 1 `playedMoveAnalysis.continuationPhases[0].explanation`：已整句重建越界的程序专属结论
+- `center-2` attempt 1 `playedMoveAnalysis.continuationPhases[0].explanation`：已整句重建越界的程序专属结论
+- `center-2` attempt 1 `candidateLines[1].risks[1]`：已整句重建越界的程序专属结论
+- `closed-1` attempt 1 `comparison.mainDifference`：已整句重建越界的程序专属结论
+- `closed-1` attempt 1 `comparison.whyFirstLineIsBest`：已整句重建越界的程序专属结论
+- `simplify-1` attempt 1 `playedMoveAnalysis.positiveEffects[1]`：已整句重建越界的程序专属结论
+- `simplify-1` attempt 1 `candidateLines[0].advantages[0]`：已整句重建越界的程序专属结论
 - `simplify-1` attempt 1 `candidateLines[0].continuationPhases[0].explanation`：已整句重建越界的程序专属结论
 - `simplify-1` attempt 1 `candidateLines[1].continuationPhases[0].explanation`：已整句重建越界的程序专属结论
-- `simplify-1` attempt 1 `candidateLines[2].risks[0]`：已整句重建越界的程序专属结论
+- `simplify-2` attempt 1 `candidateLines[0].advantages[1]`：已整句重建越界的程序专属结论
+- `simplify-2` attempt 1 `candidateLines[0].continuationPhases[0].explanation`：已整句重建越界的程序专属结论

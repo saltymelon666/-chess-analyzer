@@ -46,6 +46,12 @@ class Settings:
     game_analysis_max_plies: int
     deepseek_timeout_seconds: float
     allowed_origins: tuple[str, ...]
+    analytics_database_path: Path
+    analytics_database_url: str
+    analytics_persistent_storage: bool
+    admin_statistics_key: str
+    deepseek_input_price_per_million: float
+    deepseek_output_price_per_million: float
 
 
 def load_settings() -> Settings:
@@ -80,7 +86,21 @@ def load_settings() -> Settings:
         stockfish_timeout_seconds=float(_value("STOCKFISH_TIMEOUT_SECONDS", defaults, "30")),
         game_analysis_depth=max(6, int(_value("GAME_ANALYSIS_DEPTH", defaults, "10"))),
         game_analysis_timeout_seconds=float(_value("GAME_ANALYSIS_TIMEOUT_SECONDS", defaults, "240")),
-        game_analysis_max_plies=max(1, int(_value("GAME_ANALYSIS_MAX_PLIES", defaults, "160"))),
+        game_analysis_max_plies=min(200, max(1, int(_value("GAME_ANALYSIS_MAX_PLIES", defaults, "200")))),
         deepseek_timeout_seconds=float(_value("DEEPSEEK_TIMEOUT_SECONDS", defaults, "30")),
         allowed_origins=origins,
+        analytics_database_path=Path(
+            _value("ANALYTICS_DB_PATH", defaults, str(ROOT_DIR / "data" / "analytics.sqlite3"))
+        ),
+        analytics_database_url=_value("ANALYTICS_DATABASE_URL", defaults),
+        analytics_persistent_storage=_value(
+            "ANALYTICS_PERSISTENT_STORAGE", defaults, "false"
+        ).lower() in {"1", "true", "yes", "on"},
+        admin_statistics_key=_value("ADMIN_STATISTICS_KEY", defaults),
+        deepseek_input_price_per_million=max(
+            0, float(_value("DEEPSEEK_INPUT_PRICE_PER_MILLION", defaults, "0"))
+        ),
+        deepseek_output_price_per_million=max(
+            0, float(_value("DEEPSEEK_OUTPUT_PRICE_PER_MILLION", defaults, "0"))
+        ),
     )

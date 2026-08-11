@@ -97,6 +97,8 @@ class DeepSeekConnectionResult(BaseModel):
 
 class GameReviewRequest(BaseModel):
     pgn: str = Field(min_length=3, max_length=100_000)
+    visitor_id: str | None = Field(default=None, min_length=8, max_length=80)
+    analysis_id: str | None = Field(default=None, min_length=8, max_length=80)
 
 
 class EvaluationSnapshot(BaseModel):
