@@ -191,6 +191,24 @@ def test_request_validation(monkeypatch) -> None:
     assert response.status_code == 422
 
 
+def test_backend_admin_page_is_served_without_frontend_cache() -> None:
+    client = TestClient(api.app)
+
+    page = client.get("/admin")
+    alias = client.get("/admin.html")
+    runtime_config = client.get("/runtime-config.js")
+
+    assert page.status_code == 200
+    assert alias.status_code == 200
+    assert page.headers["cache-control"] == "no-store"
+    assert "PawnLab 公测运营后台" in page.text
+    assert "ADMIN_STATISTICS_KEY" in page.text
+    assert "/api/admin/dashboard" in page.text
+    assert runtime_config.status_code == 200
+    assert runtime_config.headers["cache-control"] == "no-store"
+    assert 'window.CHESS_API_BASE_URL = "";' in runtime_config.text
+
+
 def test_event_and_admin_statistics_endpoints(monkeypatch, tmp_path) -> None:
     store = AnalyticsStore(tmp_path / "api-analytics.sqlite3")
     monkeypatch.setattr(api, "analytics_store", store)
