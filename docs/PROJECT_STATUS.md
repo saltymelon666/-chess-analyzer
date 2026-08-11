@@ -802,3 +802,4 @@ Phase 6A文件：
 - 电脑端首屏调整为等高双栏，上传区与插画底部对齐；棋盘和分析控制区采用更均衡的双栏比例。平板与手机继续保持单栏响应式布局。
 - 发布前完整仓库测试`254 passed, 1 warning`；两份内联JavaScript语法通过。Edge桌面、平板、手机导入示例PGN后均恢复12着，无横向溢出、控制台错误或首屏提前加载`chess.js`。
 - 本轮未运行15局面真实DeepSeek质量套件：改动仅限CSS展示层，不涉及提示词、Token、性能策略或专业内容质量。
+- Cloudflare Pages直接部署已完成；`https://pawnlab.cn/`返回200并包含本轮悬浮卡片CSS和公测版内容，`/admin.html`重定向到`/admin`后返回200。Edge线上桌面与手机复验均无横向溢出或控制台错误，示例PGN恢复12着，后端显示Stockfish 18与DeepSeek已连接。
