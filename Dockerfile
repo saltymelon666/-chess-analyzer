@@ -22,6 +22,7 @@ RUN apt-get update \
 COPY requirements.txt ./
 RUN pip install --no-cache-dir --requirement requirements.txt
 
+COPY admin.html ./admin.html
 COPY app ./app
 
 RUN useradd --create-home --uid 10001 appuser \
