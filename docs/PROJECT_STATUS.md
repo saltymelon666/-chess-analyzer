@@ -794,3 +794,11 @@ Phase 6A文件：
 - Render生产`/api/health`返回200，Stockfish可用且DeepSeek配置有效；生产OpenAPI已包含`/api/event`、`/api/admin/dashboard`和`/api/admin/statistics`，后台无密钥访问返回401。
 - `render.yaml`已配置免费Web实例与免费Postgres。生产数据库是否已经实际绑定`ANALYTICS_DATABASE_URL`仍需在Render控制台确认；在确认前，不能把跨重启持久化描述为已验证。
 - 为绕过`pawnlab.cn/admin.html`曾被旧前端缓存替换成产品首页的问题，FastAPI生产后端现直接提供`/admin`与`/admin.html`运营入口；页面响应为`Cache-Control: no-store`并同源读取`/api/admin/dashboard`。`https://ai-chess-review-api.onrender.com/admin`已验证返回200、包含管理员密钥输入框且无产品首页内容。
+
+## 23. 2026-08-11 首页悬浮卡片视觉升级
+
+- 首页在不修改分析逻辑、数据结构、API调用、文字内容和棋盘交互的前提下升级纯CSS视觉系统；开发版`index.html`与GitHub Pages发布版`docs/index.html`保持完全一致。
+- 主要卡片新增明显的双层悬浮阴影、顶部高光和桌面悬停上浮反馈；背景增加暖黄色、薄荷绿光斑与细点纹理，棋盘增加白色外框与柔和光效。
+- 电脑端首屏调整为等高双栏，上传区与插画底部对齐；棋盘和分析控制区采用更均衡的双栏比例。平板与手机继续保持单栏响应式布局。
+- 发布前完整仓库测试`254 passed, 1 warning`；两份内联JavaScript语法通过。Edge桌面、平板、手机导入示例PGN后均恢复12着，无横向溢出、控制台错误或首屏提前加载`chess.js`。
+- 本轮未运行15局面真实DeepSeek质量套件：改动仅限CSS展示层，不涉及提示词、Token、性能策略或专业内容质量。
