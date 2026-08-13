@@ -1,4 +1,4 @@
-const CACHE_NAME = "chess-analyzer-v4-webp";
+const CACHE_NAME = "chess-analyzer-v5-opening-context";
 const urlsToCache = [
   "/",
   "/demo",
