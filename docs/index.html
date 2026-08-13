@@ -748,6 +748,7 @@ let moveExplanationCache = new Map();
 let explanationRequestToken = 0;
 let professionalAnalysisCache = new Map();
 let professionalRequestToken = 0;
+let backendReconnectTimer = null;
 const OPENING_CONTEXT_UI_VERSION = 8;
 
 const IS_LOCAL_FRONTEND = ["localhost", "127.0.0.1"].includes(window.location.hostname);
@@ -757,6 +758,55 @@ const API_BASE_URL = IS_LOCAL_FRONTEND
 
 function apiUrl(path) {
   return `${API_BASE_URL}${path}`;
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = 12000) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function connectAnalysisService({ attempts = 3, showFailure = true } = {}) {
+  const status = document.getElementById("backendStatus");
+  const analyzeButton = document.getElementById("analyzeBtn");
+  const gameAnalyzeButton = document.getElementById("gameAnalyzeBtn");
+  clearTimeout(backendReconnectTimer);
+  status.textContent = "正在连接分析服务...";
+  analyzeButton.disabled = true;
+  gameAnalyzeButton.disabled = true;
+
+  let lastError = new Error("连接超时");
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const response = await fetchWithTimeout(apiUrl("/api/health"), { cache: "no-store" });
+      const health = await response.json().catch(() => ({}));
+      if (!response.ok || health.stockfish !== "available") {
+        throw new Error("Stockfish 服务不可用");
+      }
+      status.textContent = health.deepseek_configured
+        ? "分析服务已连接 · Stockfish 18 + DeepSeek"
+        : "分析服务已连接 · DeepSeek 尚未配置，仍可使用 Stockfish";
+      analyzeButton.disabled = false;
+      gameAnalyzeButton.disabled = false;
+      clearError();
+      return true;
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts) await new Promise(resolve => setTimeout(resolve, 900));
+    }
+  }
+
+  status.textContent = "分析服务暂时未连接 · 正在自动重试";
+  if (showFailure) {
+    const reason = lastError.name === "AbortError" ? "连接超时" : lastError.message;
+    showError(`暂时无法连接分析服务（${API_BASE_URL || "当前站点"}）：${reason}。页面会自动重试。`);
+  }
+  backendReconnectTimer = setTimeout(() => connectAnalysisService({ attempts: 1, showFailure: false }), 8000);
+  return false;
 }
 
 const VISITOR_STORAGE_KEY = "chess_lab_visitor_id";
@@ -1894,22 +1944,7 @@ document.addEventListener("DOMContentLoaded", () => {
     reader.readAsText(file);
   });
 
-  if (!isFilePreview) fetch(apiUrl("/api/health"))
-    .then(async response => {
-      const health = await response.json().catch(() => ({}));
-      if (!response.ok || health.stockfish !== "available") {
-        throw new Error("Stockfish 服务不可用");
-      }
-      document.getElementById("backendStatus").textContent = health.deepseek_configured
-        ? "分析服务已连接 · Stockfish 18 + DeepSeek"
-        : "分析服务已连接 · DeepSeek 尚未配置，仍可使用 Stockfish";
-      document.getElementById("analyzeBtn").disabled = false;
-      document.getElementById("gameAnalyzeBtn").disabled = false;
-    })
-    .catch(err => {
-      document.getElementById("backendStatus").textContent = "分析服务未连接";
-      showError(`无法连接后端分析服务（${API_BASE_URL || "当前站点"}）：${err.message}`);
-    });
+  if (!isFilePreview) connectAnalysisService();
 
   document.getElementById("sourceInput").addEventListener("paste", () => {
     setTimeout(() => {
