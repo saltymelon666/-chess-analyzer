@@ -518,6 +518,15 @@ async def game_review(request: GameReviewRequest) -> GameReviewResponse:
         )
         raise HTTPException(status_code=503, detail="整盘分析服务暂不可用") from exc
 
+    result.moves = [
+        item.model_copy(
+            update={
+                "opening_context": _professional_opening_context(result.moves, item.index)
+            }
+        )
+        for item in result.moves
+    ]
+    result.opening_summary = _game_opening_context(result.moves)
     game_cache[analysis_id] = result.moves
     game_cache.move_to_end(analysis_id)
     while len(game_cache) > MAX_CACHED_GAMES:
@@ -626,7 +635,9 @@ async def professional_analysis(request: MoveExplanationRequest) -> Professional
     if request.move_index > len(moves):
         raise HTTPException(status_code=404, detail="找不到这一步的事实数据")
     move = moves[request.move_index - 1]
-    opening_context = _professional_opening_context(moves, request.move_index)
+    # The game review owns opening identity. Reuse that exact result everywhere
+    # instead of allowing the professional-analysis path to classify it again.
+    opening_context = move.opening_context
     book_references = _professional_book_references(move.before_fen)
     depth = max((line.depth for line in move.candidate_lines), default=settings.game_analysis_depth)
     cache_key = professional_cache_key(
@@ -808,18 +819,37 @@ def _professional_opening_context(
     moves: list[MoveReview],
     move_index: int,
 ) -> OpeningPresentation | None:
-    """Recognize the position after the selected node using only verified moves."""
-    selected = moves[:move_index]
-    if not selected:
+    """Recognize the selected move's starting position from verified prior moves."""
+    prior_moves = moves[:max(move_index - 1, 0)]
+    if not prior_moves:
         return None
     try:
         return opening_knowledge.presentation_for_moves(
-            [item.played_move.uci for item in selected],
-            initial_fen=selected[0].before_fen,
+            [item.played_move.uci for item in prior_moves],
+            initial_fen=moves[0].before_fen,
         )
     except (ValueError, RuntimeError, OSError) as exc:
         logger.warning("Optional opening recognition unavailable: %s", exc)
         return None
+
+
+def _game_opening_context(moves: list[MoveReview]) -> OpeningPresentation | None:
+    """Return the deepest verified opening reached anywhere in the game."""
+    if not moves:
+        return None
+    candidates = [item.opening_context for item in moves if item.opening_context]
+    try:
+        final_context = opening_knowledge.presentation_for_moves(
+            [item.played_move.uci for item in moves],
+            initial_fen=moves[0].before_fen,
+        )
+    except (ValueError, RuntimeError, OSError) as exc:
+        logger.warning("Optional final opening recognition unavailable: %s", exc)
+        final_context = None
+    if final_context is not None:
+        candidates.append(final_context)
+    deepest = max(candidates, key=lambda item: item.query_ply, default=None)
+    return deepest
 
 
 def _professional_book_references(fen: str) -> list[ProfessionalBookReference]:

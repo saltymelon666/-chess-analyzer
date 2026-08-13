@@ -51,10 +51,41 @@ def test_professional_report_only_renders_conclusion_sections() -> None:
         assert "当前没有需要特别强调的结论。" not in page
         assert "const positionParagraphs = [" in page
         assert "双方子力与局面" in page
-        assert "const opening = payload.openingContext || null;" in page
-        assert "📚 当前开局" in page
+        assert "const opening = payload.openingContext || activeReview?.openingContext || gameReview?.openingSummary || null;" in page
         assert "opening?.displayName" in page
-        assert "professional-opening-ideas" in page
+        assert "开局名称：" in page
+        assert "所处分支：" in page
+        assert "开局说明" in page
+        assert "白方思路" in page
+        assert "黑方思路" in page
+        assert "opening?.variationNameZh" in page
+        assert "professional-opening-context" in page
+        assert "professional-opening-identity" in page
+        assert "professional-opening-notes" in page
+        assert '["开局说明", openingDescription]' in page
+        assert '["白方思路", openingWhitePlan]' in page
+        assert '["黑方思路", openingBlackPlan]' in page
+        assert '.replace(/\\bWhite\\b/gi, "白方").replace(/\\bBlack\\b/gi, "黑方")' in page
+        assert '.replace(/怀特/g, "白方").replace(/布莱克/g, "黑方")' in page
+        assert "const openingParagraphs = value =>" in page
+        assert '.split(/\\n\\s*\\n+/)' in page
+        assert '.split(/\\s+(?=(?:\\d+)' not in page
+        assert 'class="professional-opening-branch"' in page
+        assert "text-indent:2em" in page
+        assert "const OPENING_CONTEXT_UI_VERSION = 8;" in page
+        assert '.replace(/主教/g, "象")' in page
+        assert '.replace(/骑士/g, "马")' in page
+        assert "const normalizeOpeningChessTerms = value =>" in page
+        assert "const openingTextLooksNatural = value =>" in page
+        assert '`${gameReview?.analysis_id || "unknown"}:${review.index}:${openingRevision}`' in page
+        assert "if (cached?._openingContextVersion === OPENING_CONTEXT_UI_VERSION)" in page
+        assert "payload._openingContextVersion = OPENING_CONTEXT_UI_VERSION;" in page
+        assert "openingContext: review.openingContext || gameReview?.openingSummary || null" in page
+        assert "_openingOnly: true" in page
+        assert "const reviewOpening = review.openingContext || gameReview?.openingSummary || null;" in page
+        assert "if (!reviewOpening)" in page
+        assert "openingContext: reviewOpening," in page
+        assert 'italian: "1. e4 e5 2. Nf3 Nc6 3. Bc4 Bc5 4. c3 Nf6 5. d4 exd4' in page
         assert ".review-explanation[hidden] { display:none; }" in page
         assert "潜在威胁" not in page
         assert "双方计划" in page
