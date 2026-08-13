@@ -6,12 +6,13 @@ import logging
 import time
 from collections import OrderedDict
 from datetime import date as calendar_date, datetime, time as datetime_time, timedelta, timezone
+from pathlib import Path
 from uuid import uuid4
 
 import httpx
 from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel
 
 from .ai_explainer import DeepSeekExplainer
@@ -72,6 +73,7 @@ from .models import (
 
 
 logger = logging.getLogger(__name__)
+ADMIN_PAGE_PATH = Path(__file__).resolve().parent.parent / "admin.html"
 settings = load_settings()
 deepseek_key_present = bool(settings.deepseek_api_key)
 deepseek_key_format_valid = deepseek_key_present and settings.deepseek_api_key.startswith("sk-")
@@ -243,6 +245,27 @@ async def health() -> HealthResponse:
         deepseek_configured=explainer.configured,
         deepseek_key_format_valid=deepseek_key_format_valid,
         deepseek_model=settings.deepseek_model,
+    )
+
+
+@app.get("/admin", include_in_schema=False)
+@app.get("/admin.html", include_in_schema=False)
+async def backend_admin_page() -> FileResponse:
+    if not ADMIN_PAGE_PATH.is_file():
+        raise HTTPException(status_code=503, detail="运营后台页面暂不可用")
+    return FileResponse(
+        ADMIN_PAGE_PATH,
+        media_type="text/html",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/runtime-config.js", include_in_schema=False)
+async def backend_runtime_config() -> Response:
+    return Response(
+        'window.CHESS_API_BASE_URL = "";\n',
+        media_type="application/javascript",
+        headers={"Cache-Control": "no-store"},
     )
 
 
@@ -497,9 +520,7 @@ async def game_review(request: GameReviewRequest) -> GameReviewResponse:
 
     result.moves = [
         item.model_copy(
-            update={
-                "opening_context": _professional_opening_context(result.moves, item.index)
-            }
+            update={"opening_context": _professional_opening_context(result.moves, item.index)}
         )
         for item in result.moves
     ]
@@ -612,8 +633,6 @@ async def professional_analysis(request: MoveExplanationRequest) -> Professional
     if request.move_index > len(moves):
         raise HTTPException(status_code=404, detail="找不到这一步的事实数据")
     move = moves[request.move_index - 1]
-    # The game review owns opening identity. Reuse that exact result everywhere
-    # instead of allowing the professional-analysis path to classify it again.
     opening_context = move.opening_context
     book_references = _professional_book_references(move.before_fen)
     depth = max((line.depth for line in move.candidate_lines), default=settings.game_analysis_depth)
@@ -825,8 +844,7 @@ def _game_opening_context(moves: list[MoveReview]) -> OpeningPresentation | None
         final_context = None
     if final_context is not None:
         candidates.append(final_context)
-    deepest = max(candidates, key=lambda item: item.query_ply, default=None)
-    return deepest
+    return max(candidates, key=lambda item: item.query_ply, default=None)
 
 
 def _professional_book_references(fen: str) -> list[ProfessionalBookReference]:

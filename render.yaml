@@ -36,7 +36,7 @@ services:
       - key: DEEPSEEK_TIMEOUT_SECONDS
         value: "30"
       - key: ALLOWED_ORIGINS
-        value: https://pawnlab.cn,https://www.pawnlab.cn,https://saltymelon666.github.io,http://localhost:8080,http://127.0.0.1:8080,http://localhost:8501,http://127.0.0.1:8501
+        value: https://pawnlab.cn,https://www.pawnlab.cn,https://pawnlab-9e0.pages.dev,https://saltymelon666.github.io,http://localhost:8080,http://127.0.0.1:8080,http://localhost:8501,http://127.0.0.1:8501
       - key: ANALYTICS_DATABASE_URL
         fromDatabase:
           name: pawnlab-analytics
