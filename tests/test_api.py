@@ -1,8 +1,10 @@
 import asyncio
+import io
 from dataclasses import replace
 from pathlib import Path
 
 import chess
+import chess.pgn
 import pytest
 from fastapi.testclient import TestClient
 
@@ -301,6 +303,68 @@ def test_game_review_records_analysis_without_changing_analysis_flow(monkeypatch
     statistics = store.daily_statistics()
     assert statistics.analyses == 1
     assert statistics.successes == 1
+
+
+def test_game_review_attaches_french_euwe_context_before_be7(monkeypatch) -> None:
+    pgn = "1. e4 e6 2. d4 d5 3. e5 c5 4. c3 Nc6 5. Nf3 Bd7 6. Be2 Nge7 7. O-O Ng6 8. g3 Be7"
+    board = chess.Board()
+    reviews = []
+    game = chess.pgn.read_game(io.StringIO(pgn))
+    assert game is not None
+    for index, move in enumerate(game.mainline_moves(), start=1):
+        before_fen = board.fen()
+        san = board.san(move)
+        piece = board.piece_at(move.from_square)
+        assert piece is not None
+        played = MoveFacts(
+            san=san,
+            uci=move.uci(),
+            from_square=chess.square_name(move.from_square),
+            to_square=chess.square_name(move.to_square),
+            piece=f"{'white' if piece.color else 'black'}_{chess.piece_name(piece.piece_type)}",
+            capture=board.is_capture(move),
+            check=board.gives_check(move),
+            checkmate=False,
+            castling=board.is_castling(move),
+        )
+        board.push(move)
+        reviews.append(sample_move_review().model_copy(update={
+            "index": index,
+            "move_number": (index + 1) // 2,
+            "side": "white" if index % 2 else "black",
+            "san": san,
+            "uci": move.uci(),
+            "before_fen": before_fen,
+            "after_fen": board.fen(),
+            "played_move": played,
+        }))
+
+    async def fake_analyze_pgn(**kwargs):
+        return api.GameReviewResponse(
+            analysis_id=kwargs["analysis_id"],
+            depth=kwargs["depth"],
+            move_count=len(reviews),
+            moves=reviews,
+        )
+
+    monkeypatch.setattr(api, "analyze_pgn", fake_analyze_pgn)
+    monkeypatch.setattr(api, "analytics_store", None)
+    api.game_cache.clear()
+    response = TestClient(api.app).post(
+        "/api/game-review",
+        json={"pgn": pgn, "analysis_id": "french-euwe-regression"},
+    )
+
+    assert response.status_code == 200
+    before_be7 = response.json()["moves"][15]["openingContext"]
+    assert before_be7["eco"] == "C02"
+    assert before_be7["displayName"] == "法兰西防御 · 推进变化 · 欧威变化"
+    assert before_be7["queryPly"] == 15
+    assert before_be7["resolverVersion"] == "opening-context-2"
+    opening_summary = response.json()["openingSummary"]
+    assert opening_summary["eco"] == "C02"
+    assert opening_summary["displayName"] == "法兰西防御 · 推进变化 · 欧威变化"
+    assert opening_summary["queryPly"] == 16
 
 
 def test_move_explanation_is_cached(monkeypatch) -> None:

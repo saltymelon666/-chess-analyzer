@@ -234,13 +234,19 @@ class MoveReview(BaseModel):
     actual_move_line: CandidateLine | None = None
     position_facts: PositionFacts = Field(default_factory=PositionFacts)
     position_facts_after: PositionFacts = Field(default_factory=PositionFacts)
+    opening_context: OpeningPresentation | None = Field(alias="openingContext", default=None)
 
 
 class GameReviewResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     analysis_id: str
     depth: int
     move_count: int
     moves: list[MoveReview]
+    opening_summary: OpeningPresentation | None = Field(
+        alias="openingSummary", default=None
+    )
 
 
 class MoveExplanationRequest(BaseModel):

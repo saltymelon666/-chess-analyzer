@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 from pathlib import Path
 from typing import Any, Literal, Sequence
 
@@ -11,9 +12,13 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 DEFAULT_OPENING_CATALOG = Path(__file__).resolve().parent / "data" / "opening-path-catalog.json"
+DEFAULT_CLASSIC_OPENING_EXTENSIONS = (
+    Path(__file__).resolve().parent / "data" / "classic-opening-extensions.json"
+)
 DEFAULT_OPENING_EXPLANATIONS = (
     Path(__file__).resolve().parent / "data" / "opening-explanations.json"
 )
+OPENING_CONTEXT_RESOLVER_VERSION = "opening-context-2"
 
 
 class OpeningLookupRequest(BaseModel):
@@ -54,6 +59,8 @@ class OpeningHumanExplanation(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     text: str
+    text_en: str | None = Field(default=None, alias="textEn")
+    text_zh: str | None = Field(default=None, alias="textZh")
     matched_ply: int = Field(alias="matchedPly", ge=1)
     page_title: str = Field(alias="pageTitle")
     page_url: str = Field(alias="pageUrl")
@@ -110,6 +117,10 @@ class OpeningPresentation(BaseModel):
     black_plan: str = Field(alias="blackPlan")
     tactical_themes: list[str] = Field(alias="tacticalThemes", default_factory=list)
     source: str = "Lichess chess-openings (CC0-1.0)"
+    resolver_version: str = Field(
+        alias="resolverVersion", default=OPENING_CONTEXT_RESOLVER_VERSION
+    )
+    database_revision: str = Field(alias="databaseRevision", default="unknown")
 
     def prompt_payload(self) -> dict[str, Any]:
         return {
@@ -200,10 +211,388 @@ _VARIATION_NAMES_ZH = {
     "Giuoco Pianissimo": "吉奥科皮亚尼西莫变化",
     "Classical Variation": "古典变化",
     "Center Attack": "中心进攻变化",
+    "Greco's Attack": "格列柯进攻",
+    "Greco Gambit": "格列柯弃兵",
+    "Closed": "封闭体系",
+    "Classical Main Line": "古典主线",
+    "Classical Development": "古典发展体系",
+    "Najdorf Variation": "纳吉多夫变化",
+    "English Attack": "英国式进攻",
+    "Winawer Variation": "维纳维尔变化",
+    "Orthodox Defense": "正统防御",
+    "Rubinstein Variation": "鲁宾斯坦变化",
+    "Mar del Plata Variation": "马德普拉塔变化",
+    "Exchange Variation": "兑换变化",
+    "Four Knights Variation": "四马变化",
+    "Classical Attack": "古典进攻",
+    "Austrian Attack": "奥地利进攻",
+    "Leningrad Variation": "列宁格勒变化",
+    "Vienna Gambit": "维也纳弃兵",
+    "Open Defense": "开放变化",
     "Two Knights Defense": "双马防御",
     "Evans Gambit": "伊文斯弃兵",
+    "Symmetrical Variation": "对称变化",
+    "Stonewall Variation": "石墙变化",
+    "Advance Variation": "推进变化",
+    "Euwe Variation": "欧威变化",
+    "Paulsen Attack": "保尔森进攻",
+    "Richter-Rauzer Attack": "里赫特尔-劳泽尔进攻",
+    "Dragon Variation": "龙式变化",
+    "Yugoslav Attack": "南斯拉夫进攻",
+    "Scheveningen Variation": "舍维宁根变化",
+    "Tarrasch Variation": "塔拉什变化",
+    "Closed Main Line": "封闭主线",
+    "Spanish Variation": "西班牙变化",
+    "Meran Variation": "梅兰变化",
     "Main Line": "主线",
 }
+
+
+_FAMILY_NAMES_ZH = {
+    "Alekhine Defense": "阿廖欣防御",
+    "Benko Gambit": "本科弃兵",
+    "Benoni Defense": "别诺尼防御",
+    "Bird Opening": "伯德开局",
+    "Bishop's Opening": "象开局",
+    "Blackmar-Diemer Gambit": "布莱克马-迪默弃兵",
+    "Bogo-Indian Defense": "博戈印度防御",
+    "Caro-Kann Defense": "卡罗-康防御",
+    "Catalan Opening": "加泰罗尼亚开局",
+    "Center Game": "中心开局",
+    "Colle System": "科列体系",
+    "Danish Gambit": "丹麦弃兵",
+    "Dutch Defense": "荷兰防御",
+    "English Defense": "英国式防御",
+    "English Opening": "英国式开局",
+    "Englund Gambit": "英格伦弃兵",
+    "Four Knights Game": "四马开局",
+    "French Defense": "法兰西防御",
+    "Grünfeld Defense": "格林菲尔德防御",
+    "Indian Defense": "印度防御",
+    "Italian Game": "意大利开局",
+    "King's Gambit": "王翼弃兵",
+    "King's Indian Attack": "王印度进攻",
+    "King's Indian Defense": "王印度防御",
+    "King's Knight Opening": "王翼马开局",
+    "King's Pawn Game": "王兵开局",
+    "King's Pawn Opening": "王兵开局",
+    "Latvian Gambit": "拉脱维亚弃兵",
+    "London System": "伦敦体系",
+    "Modern Defense": "现代防御",
+    "Neo-Grünfeld Defense": "新格林菲尔德防御",
+    "Nimzo-Indian Defense": "尼姆佐印度防御",
+    "Nimzo-Larsen Attack": "尼姆佐-拉尔森进攻",
+    "Nimzowitsch Defense": "尼姆佐维奇防御",
+    "Old Indian Defense": "老印度防御",
+    "Owen Defense": "欧文防御",
+    "Petrov's Defense": "彼得罗夫防御",
+    "Philidor Defense": "菲利多尔防御",
+    "Pirc Defense": "皮尔茨防御",
+    "Polish Opening": "波兰开局",
+    "Ponziani Opening": "庞齐亚尼开局",
+    "Queen's Gambit": "后翼弃兵",
+    "Queen's Gambit Accepted": "后翼弃兵接受变化",
+    "Queen's Gambit Declined": "后翼弃兵拒绝变化",
+    "Queen's Indian Defense": "后印度防御",
+    "Queen's Pawn Game": "后兵开局",
+    "Réti Opening": "列蒂开局",
+    "Richter-Veresov Attack": "里赫特尔-韦列索夫进攻",
+    "Ruy Lopez": "西班牙开局",
+    "Scandinavian Defense": "斯堪的纳维亚防御",
+    "Scotch Game": "苏格兰开局",
+    "Semi-Slav Defense": "半斯拉夫防御",
+    "Sicilian Defense": "西西里防御",
+    "Slav Defense": "斯拉夫防御",
+    "Tarrasch Defense": "塔拉什防御",
+    "Torre Attack": "托雷进攻",
+    "Trompowsky Attack": "特罗姆波夫斯基进攻",
+    "Vienna Game": "维也纳开局",
+    "Zukertort Opening": "朱克托特开局",
+}
+
+
+_OPENING_TERM_NAMES_ZH = {
+    "Accepted": "接受变化",
+    "Declined": "拒绝变化",
+    "Defense": "防御",
+    "Gambit": "弃兵",
+    "Opening": "开局",
+    "Attack": "进攻",
+    "System": "体系",
+    "Formation": "阵型",
+    "Game": "开局",
+    "Main Line": "主线",
+    "Classical Variation": "古典变化",
+    "Modern Variation": "现代变化",
+}
+
+
+def _translate_opening_label(
+    name: str,
+    *,
+    eco: str | None = None,
+    fallback: str | None = None,
+) -> str:
+    exact = _FAMILY_NAMES_ZH.get(name) or _VARIATION_NAMES_ZH.get(name)
+    if exact:
+        return exact
+    translated = name
+    for english, chinese in sorted(
+        _OPENING_TERM_NAMES_ZH.items(), key=lambda item: len(item[0]), reverse=True
+    ):
+        translated = translated.replace(english, chinese)
+    if translated != name and not any("a" <= char.lower() <= "z" for char in translated):
+        return translated
+    return fallback or (f"{eco} 开局体系" if eco else "开局体系")
+
+
+def _fallback_opening_profile(opening: OpeningMatch) -> dict[str, Any]:
+    moves = opening.uci_moves
+    first = moves[0] if moves else ""
+    reply = moves[1] if len(moves) > 1 else ""
+    if first == "e2e4" and reply == "e7e5":
+        return {
+            "description": "这是开放型王兵开局，双方通常直接争夺中心并快速发展王翼子力。",
+            "white": "白方通常争取顺畅出子、尽早保护王，并寻找d4中心突破。",
+            "black": "黑方通常维持e5中心支点、完成王翼发展，并在合适时机用d5反击。",
+            "themes": ["快速发展", "中心争夺", "王的安全"],
+        }
+    if first == "e2e4" and reply == "c7c5":
+        return {
+            "description": "这是不对称的王兵开局，黑方从侧翼立即争夺d4中心格。",
+            "white": "白方通常利用空间和发展速度，在中心或王翼组织主动行动。",
+            "black": "黑方通常利用半开放c线和后翼兵形制造反击。",
+            "themes": ["不对称兵形", "开放c线", "中心突破"],
+        }
+    if first == "e2e4":
+        return {
+            "description": "这是王兵开局体系，双方围绕e4中心兵和中心控制安排发展。",
+            "white": "白方通常利用先行优势发展子力，并准备扩大中心或王翼空间。",
+            "black": "黑方通常先挑战白方中心，再根据兵形选择稳固发展或反击。",
+            "themes": ["中心控制", "子力发展", "兵链攻防"],
+        }
+    if first == "d2d4" and reply == "g8f6":
+        return {
+            "description": "这是印度防御类后兵体系，黑方先发展子力，再从侧面攻击白方中心。",
+            "white": "白方通常建立空间中心，并根据黑方部署选择推进或稳固中心。",
+            "black": "黑方通常用子力和兵的突破向白方中心施压，争取动态反击。",
+            "themes": ["中心兵链", "侧翼反击", "子力协调"],
+        }
+    if first == "d2d4":
+        return {
+            "description": "这是后兵开局体系，双方通常围绕d4、d5和c线进行长期中心较量。",
+            "white": "白方通常巩固中心、发展后翼子力，并寻找c4或e4扩张。",
+            "black": "黑方通常保持中心稳定，并通过c5或e5反击白方中心。",
+            "themes": ["中心张力", "c线活动", "兵形转换"],
+        }
+    return {
+        "description": "这是灵活的侧翼开局体系，先控制关键中心格，再根据对手部署转换兵形。",
+        "white": "白方通常保持兵形弹性，先发展子力，再选择合适的中心推进。",
+        "black": "黑方通常争取占据中心，并用及时的兵突破限制白方侧翼布局。",
+        "themes": ["灵活发展", "中心控制", "兵形转换"],
+    }
+
+
+def _normalize_opening_explanation_zh(text: str) -> str | None:
+    raw_paragraphs = re.split(r"\n\s*\n+", text.replace("\u200b", "").strip())
+    replacements = {
+        "White": "白方",
+        "white": "白方",
+        "Black": "黑方",
+        "black": "黑方",
+        "怀特": "白方",
+        "布莱克": "黑方",
+        "白棋": "白方",
+        "黑棋": "黑方",
+        "白牌": "白方",
+        "黑牌": "黑方",
+        "白色方": "白方",
+        "黑色方": "黑方",
+        "主教": "象",
+        "骑士": "马",
+    }
+    normalized_paragraphs: list[str] = []
+    for raw_paragraph in raw_paragraphs:
+        normalized = " ".join(raw_paragraph.split())
+        for source, target in replacements.items():
+            normalized = re.sub(
+                rf"(?<![A-Za-z]){re.escape(source)}(?![A-Za-z])", target, normalized
+            )
+        # Chinese piece names can be attached to an untranslated Latin modifier,
+        # for example "fianchettoed主教"; they still need standard chess terms.
+        normalized = normalized.replace("主教", "象").replace("骑士", "马")
+        normalized = re.sub(r"\b([a-h])-pawn\b", r"\1兵", normalized, flags=re.IGNORECASE)
+        normalized = re.sub(
+            r"/\s*(\d+)\s*(\.\.\.|[。.])\s*([^/，。；;]+?)/",
+            _normalized_move_marker,
+            normalized,
+        )
+        normalized = re.sub(
+            r"(?<!\d)(\d+)\s*[。.][ ]*\.\s*\.\s*([KQRBNOa-h])", r"\1...\2", normalized
+        )
+        normalized = re.sub(r"(?<!\d)(\d+)\s*[。.][ ]+([KQRBNOa-h])", r"\1.\2", normalized)
+        normalized = re.sub(r"(?<!\d)(\d+)\.\.\.[ ]+([KQRBNOa-h])", r"\1...\2", normalized)
+        normalized = re.sub(r"(?<=[\u4e00-\u9fff])[ \t]+(?=[\u4e00-\u9fff\d])", "", normalized)
+        normalized = re.sub(r"[ \t]+([，。！？；：,.!?;:])", r"\1", normalized)
+        normalized = re.sub(r"([，。！？；：])(?=[A-Za-z0-9])", r"\1 ", normalized)
+        normalized = _normalize_castle_term_zh(normalized)
+        if normalized:
+            normalized_paragraphs.append(normalized)
+    normalized = "\n\n".join(normalized_paragraphs)
+    # Reject legacy mojibake instead of exposing it as a Chinese book explanation.
+    latin1_noise = len(re.findall(r"[À-ÿ]", normalized))
+    chinese_chars = len(re.findall(r"[\u4e00-\u9fff]", normalized))
+    if chinese_chars < 8 or latin1_noise > max(4, chinese_chars // 8):
+        return None
+    return normalized
+
+
+def _normalize_castle_term_zh(text: str) -> str:
+    """Distinguish the rook piece from machine-translated castling language."""
+    castling_phrases = {
+        "城堡权利": "易位权",
+        "城堡王侧": "王翼易位",
+        "城堡王翼": "王翼易位",
+        "王侧城堡": "王翼易位",
+        "王翼城堡": "王翼易位",
+        "城堡后侧": "后翼易位",
+        "城堡后翼": "后翼易位",
+        "后侧城堡": "后翼易位",
+        "后翼城堡": "后翼易位",
+        "长城堡": "长易位",
+        "短城堡": "短易位",
+        "相反城堡": "异向易位",
+        "对面城堡": "异向易位",
+        "城堡国王": "已易位的王",
+    }
+    for source, target in castling_phrases.items():
+        text = text.replace(source, target)
+
+    segments = re.split(r"(?<=[。！？\n])", text)
+    castling_cues = (
+        "O-O",
+        "易位",
+        "王侧",
+        "王翼",
+        "后侧",
+        "后翼",
+        "国王",
+        "易位权",
+        "准备",
+        "无法",
+        "不能",
+        "可以",
+        "应该",
+        "必须",
+        "通常",
+        "经常",
+        "很快",
+        "之后",
+        "之前",
+        "选择",
+        "延迟",
+        "建立",
+        "建造",
+        "建城",
+    )
+    normalized_segments: list[str] = []
+    for segment in segments:
+        if "城堡" not in segment:
+            normalized_segments.append(segment)
+            continue
+        replacement = "易位" if any(cue in segment for cue in castling_cues) else "车"
+        normalized_segments.append(segment.replace("城堡", replacement))
+    return "".join(normalized_segments)
+
+
+_OPENING_LANGUAGE_REJECT_MARKERS = (
+    "意大利足球",
+    "电子棋子",
+    "电子兵",
+    "黑人玩家",
+    "白人玩家",
+    "黑人",
+    "白人",
+    "大多数黑人",
+    "女王的印第安人",
+    "加泰罗尼亚公开赛",
+    "加泰罗尼亚语",
+    "柏林号",
+    "后防线",
+    "白方的小子",
+    "用剑",
+    "双足象",
+    "七国集团",
+    "最先进的a兵",
+    "侧翼棋子换成更有价值的中央棋子",
+    "开放举措",
+    "独立的台词",
+    "国王的策略",
+    "接受策略",
+    "拒绝策略",
+    "斯汤顿策略",
+    "反策略",
+    "开放理论",
+    "播放 e5",
+    "播放 c5",
+    "播放 d5",
+    "游戏继续",
+    "示例行为",
+    "选择更安静的选择",
+    "英语开场",
+    "明显的夺回",
+    "马节奏",
+    "该脚",
+    "先进但较弱的棋子",
+    "蒙面攻击",
+    "开发了他们",
+    "向象施压",
+)
+
+
+def _opening_explanation_language_is_natural(text: str | None) -> bool:
+    if not text:
+        return False
+    if any(marker in text for marker in _OPENING_LANGUAGE_REJECT_MARKERS):
+        return False
+    # Slash-wrapped move markers or a dangling move number are damaged source
+    # fragments, not readable Chinese prose.
+    if re.search(r"/\s*\d+[。.](?:\.\.)?", text):
+        return False
+    if any(re.fullmatch(r"\d+\.?\.?", paragraph.strip()) for paragraph in text.split("\n\n")):
+        return False
+    return True
+
+
+def _normalized_move_marker(match: re.Match[str]) -> str:
+    move_number = match.group(1).strip()
+    black_dots = "..." if match.group(2) == "..." else "."
+    move = re.sub(r"\s+", "", match.group(3))
+    return f"{move_number}{black_dots}{move}"
+
+
+def _concise_opening_explanation(text: str, *, limit: int = 900) -> str | None:
+    normalized = _normalize_opening_explanation_zh(text)
+    if not normalized:
+        return None
+    if len(normalized) <= limit:
+        return normalized
+
+    selected: list[str] = []
+    used = 0
+    for paragraph in normalized.split("\n\n"):
+        extra = len(paragraph) + (2 if selected else 0)
+        if used + extra > limit:
+            break
+        selected.append(paragraph)
+        used += extra
+    if selected:
+        return "\n\n".join(selected)
+
+    # Very long source paragraphs are clipped only at a real Chinese sentence
+    # boundary. A period inside SAN (for example 7.Bd3) is never treated as one.
+    sentence_end = max(normalized.rfind(mark, 0, limit + 1) for mark in ("。", "！", "？"))
+    return normalized[: sentence_end + 1] if sentence_end >= 40 else None
 
 
 def _position_key(board: chess.Board) -> str:
@@ -242,13 +631,23 @@ class OpeningKnowledgeRepository:
         self,
         catalog_path: Path | str = DEFAULT_OPENING_CATALOG,
         explanation_path: Path | str | None = DEFAULT_OPENING_EXPLANATIONS,
+        extension_path: Path | str | None = DEFAULT_CLASSIC_OPENING_EXTENSIONS,
     ) -> None:
         self.catalog_path = Path(catalog_path)
         self.explanation_path = Path(explanation_path) if explanation_path else None
+        if (
+            extension_path == DEFAULT_CLASSIC_OPENING_EXTENSIONS
+            and self.catalog_path != DEFAULT_OPENING_CATALOG
+        ):
+            self.extension_path = None
+        else:
+            self.extension_path = Path(extension_path) if extension_path else None
         self._entries: list[dict[str, Any]] | None = None
         self._path_index: dict[tuple[str, ...], list[dict[str, Any]]] = {}
-        self._position_index: dict[str, list[dict[str, Any]]] = {}
+        self._path_coverage_index: dict[tuple[str, ...], list[dict[str, Any]]] = {}
+        self._position_index: dict[str, list[tuple[dict[str, Any], int]]] = {}
         self._explanation_index: dict[tuple[str, ...], dict[str, Any]] = {}
+        self._database_revision = "unknown"
 
     def lookup(self, *, pgn: str | None = None, fen: str | None = None) -> OpeningLookupResponse:
         self._ensure_loaded()
@@ -315,40 +714,61 @@ class OpeningKnowledgeRepository:
         *,
         initial_fen: str = chess.STARTING_FEN,
     ) -> OpeningPresentation | None:
+        result = self.lookup_moves(uci_moves, initial_fen=initial_fen)
+        query_path = tuple(uci_moves)
+        path_fully_covered = (
+            initial_fen == chess.STARTING_FEN
+            and query_path in self._path_coverage_index
+        )
         return self.presentation_from_lookup(
-            self.lookup_moves(uci_moves, initial_fen=initial_fen)
+            result,
+            catalog_position_confirmed=(
+                path_fully_covered or result.match_type == "position_transposition"
+            ),
+            database_revision=self._database_revision,
         )
 
     @staticmethod
-    def presentation_from_lookup(result: OpeningLookupResponse) -> OpeningPresentation | None:
+    def presentation_from_lookup(
+        result: OpeningLookupResponse,
+        *,
+        catalog_position_confirmed: bool = False,
+        database_revision: str = "unknown",
+    ) -> OpeningPresentation | None:
         opening = result.opening
-        if not result.matched or opening is None or result.match_type == "none":
+        if (
+            not catalog_position_confirmed
+            or not result.matched
+            or opening is None
+            or result.match_type == "none"
+        ):
             return None
-        if opening.matched_ply < 4:
-            return None
-        stale_ply = result.query_ply - opening.matched_ply
-        coverage = opening.matched_ply / max(result.query_ply, 1)
-        if result.match_type == "path_prefix" and (stale_ply > 2 or coverage < 0.75):
-            return None
-
         profile = _OPENING_FAMILY_PROFILES.get(opening.family_name)
         if profile is None:
-            return None
+            profile = _fallback_opening_profile(opening)
+            family_name_zh = _translate_opening_label(opening.family_name, eco=opening.eco)
+        else:
+            family_name_zh = str(profile["zh"])
         translated_variations = [
-            _VARIATION_NAMES_ZH.get(name, name)
-            for name in opening.variation_path
+            _translate_opening_label(name, fallback=f"第{index}级数据库分支")
+            for index, name in enumerate(opening.variation_path, start=1)
         ]
         variation_zh = " · ".join(translated_variations) or None
-        display_name = str(profile["zh"])
+        display_name = family_name_zh
         if variation_zh:
             display_name += f" · {variation_zh}"
         confidence = "exact" if result.match_type in {"exact_path", "position_transposition", "exact_fen"} else "high"
+        book_explanation = _concise_opening_explanation(
+            result.human_explanation.text
+        ) if result.human_explanation else None
+        if not _opening_explanation_language_is_natural(book_explanation):
+            book_explanation = None
         return OpeningPresentation(
             openingId=opening.opening_id,
             eco=opening.eco,
             name=opening.name,
             familyName=opening.family_name,
-            familyNameZh=profile["zh"],
+            familyNameZh=family_name_zh,
             variationPath=opening.variation_path,
             variationNameZh=variation_zh,
             displayName=display_name,
@@ -356,11 +776,12 @@ class OpeningKnowledgeRepository:
             matchedPly=opening.matched_ply,
             queryPly=result.query_ply,
             confidence=confidence,
-            description=profile["description"],
+            description=book_explanation or profile["description"],
             whitePlan=profile["white"],
             blackPlan=profile["black"],
             tacticalThemes=list(profile["themes"]),
             source=result.source,
+            databaseRevision=database_revision,
         )
 
     def _lookup_resolved(
@@ -376,14 +797,32 @@ class OpeningKnowledgeRepository:
             if query_moves and allow_path_match
             else []
         )
+        covered_path_matches = (
+            self._path_coverage_index.get(tuple(query_moves), [])
+            if query_moves and allow_path_match
+            else []
+        )
         entry: dict[str, Any] | None = None
+        matched_ply: int | None = None
         match_type: Literal["exact_path", "path_prefix", "position_transposition", "exact_fen", "none"] = "none"
 
         if exact_path_matches:
             entry = self._select(exact_path_matches)
             match_type = "exact_path"
+        elif covered_path_matches:
+            for length in range(len(query_moves) - 1, 0, -1):
+                matches = self._path_index.get(tuple(query_moves[:length]), [])
+                if matches:
+                    entry = self._select(matches)
+                    match_type = "path_prefix"
+                    break
+            if entry is None:
+                entry = self._select_shortest(covered_path_matches)
+                matched_ply = len(query_moves)
+                match_type = "path_prefix"
         elif position_matches:
-            entry = self._select(position_matches)
+            entry, position_ply = self._select_position(position_matches)
+            matched_ply = position_ply
             match_type = "position_transposition" if query_moves else "exact_fen"
         elif query_moves and allow_path_match:
             for length in range(len(query_moves) - 1, 0, -1):
@@ -399,9 +838,14 @@ class OpeningKnowledgeRepository:
             matchType=match_type,
             queryPly=len(query_moves),
             currentFen=board.fen(),
-            opening=self._to_match(entry) if entry else None,
+            opening=self._to_match(entry, matched_ply=matched_ply) if entry else None,
             humanExplanation=self._find_explanation(explanation_moves),
             nextBranches=self._next_branches(query_moves),
+            source=(
+                "Pawnlab 经典开局主线扩展（python-chess 合法性校验）"
+                if entry and entry.get("classicExtension")
+                else "Lichess chess-openings (CC0-1.0)"
+            ),
         )
 
     def _ensure_loaded(self) -> None:
@@ -411,18 +855,48 @@ class OpeningKnowledgeRepository:
             raise RuntimeError(f"开局目录不存在：{self.catalog_path}")
         payload = json.loads(self.catalog_path.read_text(encoding="utf-8"))
         entries = list(payload.get("openings", []))
+        revisions = [str(payload.get("source", {}).get("revision") or payload.get("schemaVersion") or "unknown")]
+        if self.extension_path and self.extension_path.exists():
+            extension_payload = json.loads(self.extension_path.read_text(encoding="utf-8"))
+            revisions.append(
+                str(
+                    extension_payload.get("source", {}).get("revision")
+                    or extension_payload.get("schemaVersion")
+                    or "unknown"
+                )
+            )
+            known_ids = {entry["openingId"] for entry in entries}
+            entries.extend(
+                {**entry, "classicExtension": True}
+                for entry in extension_payload.get("openings", [])
+                if entry["openingId"] not in known_ids
+            )
         path_index: dict[tuple[str, ...], list[dict[str, Any]]] = {}
-        position_index: dict[str, list[dict[str, Any]]] = {}
+        path_coverage_index: dict[tuple[str, ...], list[dict[str, Any]]] = {}
+        position_index: dict[str, list[tuple[dict[str, Any], int]]] = {}
         for entry in entries:
-            path_index.setdefault(tuple(entry["uciMoves"]), []).append(entry)
-            position_index.setdefault(entry["canonicalPositionKey"], []).append(entry)
+            moves = tuple(entry["uciMoves"])
+            path_index.setdefault(moves, []).append(entry)
+            board = chess.Board()
+            for length in range(1, len(moves) + 1):
+                path_coverage_index.setdefault(moves[:length], []).append(entry)
+                board.push_uci(moves[length - 1])
+                position_index.setdefault(_position_key(board), []).append((entry, length))
         self._entries = entries
         self._path_index = path_index
+        self._path_coverage_index = path_coverage_index
         self._position_index = position_index
+        self._database_revision = "+".join(revisions)
         if self.explanation_path and self.explanation_path.exists():
             explanation_payload = json.loads(
                 self.explanation_path.read_text(encoding="utf-8")
             )
+            explanation_revision = str(
+                explanation_payload.get("generatedAt")
+                or explanation_payload.get("schemaVersion")
+                or "unknown"
+            )
+            self._database_revision += f"+{explanation_revision}"
             self._explanation_index = {
                 tuple(item["uciMoves"]): item
                 for item in explanation_payload.get("explanations", [])
@@ -430,10 +904,44 @@ class OpeningKnowledgeRepository:
 
     @staticmethod
     def _select(entries: list[dict[str, Any]]) -> dict[str, Any]:
-        return sorted(entries, key=lambda item: (item["plyCount"], item["eco"], item["name"]))[-1]
+        return sorted(
+            entries,
+            key=lambda item: (
+                bool(item.get("classicExtension")),
+                item["plyCount"],
+                item["eco"],
+                item["name"],
+            ),
+        )[-1]
 
     @staticmethod
-    def _to_match(entry: dict[str, Any]) -> OpeningMatch:
+    def _select_shortest(entries: list[dict[str, Any]]) -> dict[str, Any]:
+        return sorted(entries, key=lambda item: (item["plyCount"], item["eco"], item["name"]))[0]
+
+    @classmethod
+    def _select_position(
+        cls,
+        candidates: list[tuple[dict[str, Any], int]],
+    ) -> tuple[dict[str, Any], int]:
+        """Prefer a name reached at this node; otherwise use the nearest future name."""
+        reached = [item for item in candidates if item[0]["plyCount"] <= item[1]]
+        if reached:
+            return sorted(
+                reached,
+                key=lambda item: (
+                    item[0]["plyCount"],
+                    bool(item[0].get("classicExtension")),
+                    item[0]["eco"],
+                    item[0]["name"],
+                ),
+            )[-1]
+        return sorted(
+            candidates,
+            key=lambda item: (item[0]["plyCount"], item[0]["eco"], item[0]["name"]),
+        )[0]
+
+    @staticmethod
+    def _to_match(entry: dict[str, Any], *, matched_ply: int | None = None) -> OpeningMatch:
         return OpeningMatch(
             openingId=entry["openingId"],
             eco=entry["eco"],
@@ -443,7 +951,7 @@ class OpeningKnowledgeRepository:
             pgn=entry["pgn"],
             sanMoves=entry["sanMoves"],
             uciMoves=entry["uciMoves"],
-            matchedPly=entry["plyCount"],
+            matchedPly=matched_ply or entry["plyCount"],
         )
 
     def _next_branches(self, query_moves: list[str], *, limit: int = 12) -> list[OpeningContinuation]:
@@ -471,7 +979,9 @@ class OpeningKnowledgeRepository:
             item = self._explanation_index.get(tuple(moves[:length]))
             if item:
                 return OpeningHumanExplanation(
-                    text=item["text"],
+                    text=item.get("textZh") or item["text"],
+                    text_en=item.get("textEn") or item.get("text"),
+                    text_zh=item.get("textZh"),
                     matchedPly=length,
                     pageTitle=item["pageTitle"],
                     pageUrl=item["pageUrl"],
