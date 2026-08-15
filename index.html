@@ -236,22 +236,6 @@
     .best-arrow-layer { position:absolute; inset:0; z-index:4; width:100%; height:100%; pointer-events:none; overflow:visible; }
     .best-arrow { stroke:#E4A82E; stroke-width:1.5; stroke-linecap:round; opacity:.9; }
 
-    .results { display: none; gap: 12px; }
-    .results.active { display: grid; }
-    .feedback-card { margin-top:4px; padding:clamp(18px,2vw,24px); border:1px solid #E8D6B1; border-radius:20px; background:linear-gradient(145deg,#FFF9E8,#FFFDF8); box-shadow:0 12px 28px rgba(91,70,43,.08); }
-    .feedback-card h3 { margin:0; color:#5F4B26; font-size:clamp(19px,2vw,23px); }
-    .feedback-intro { margin:5px 0 16px; color:var(--muted); font-size:14px; }
-    .feedback-stars { display:flex; gap:5px; margin-bottom:14px; }
-    .feedback-star { min-height:0; padding:3px; border:0; background:transparent; color:#D6C7A9; font-size:30px; line-height:1; box-shadow:none; cursor:pointer; }
-    .feedback-star:hover,.feedback-star.selected { color:#F4B942; transform:translateY(-2px) scale(1.08); filter:none; box-shadow:none; }
-    .feedback-options,.feedback-checks { display:flex; flex-wrap:wrap; gap:8px; }
-    .feedback-option,.feedback-check { display:inline-flex; align-items:center; gap:7px; min-height:40px; padding:8px 12px; border:1px solid #E4D7BD; border-radius:999px; background:rgba(255,255,255,.78); color:#665A43; font-size:14px; cursor:pointer; transition:transform 170ms ease,background 170ms ease,border-color 170ms ease,box-shadow 170ms ease; }
-    .feedback-option:hover,.feedback-check:hover { transform:translateY(-2px); border-color:#D5B86D; box-shadow:0 7px 15px rgba(155,101,0,.1); }
-    .feedback-option.selected { background:#FFF0BE; border-color:#E7C66F; color:#5F4B26; font-weight:850; }
-    .feedback-check input { accent-color:#39786A; }
-    .feedback-checks { margin-top:10px; }
-    .feedback-thanks { display:none; margin:14px 0 0; color:#39786A; font-weight:850; }
-    .feedback-thanks.visible { display:block; animation:cardRise .35s ease both; }
     .metric {
       display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center;
       background: linear-gradient(135deg, var(--accent-2), #FFF5D9);
@@ -557,9 +541,7 @@
 
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="primary-btn" id="gameAnalyzeBtn" onclick="analyzeGame()" disabled>评价整盘棋</button>
-        <button class="secondary-btn" id="analyzeBtn" onclick="analyze()" disabled>只分析当前局面</button>
         <label style="display:flex;align-items:center;gap:8px;margin:0;color:var(--muted);font-size:13px;">
-          <input type="checkbox" id="autoAnalyze" style="width:auto;"> 调步后自动分析
         </label>
       </div>
 
@@ -591,48 +573,6 @@
         </section>
       </section>
 
-      <div class="results" id="resultSection">
-        <div class="metric">
-          <div>
-            <span class="muted">局面评估</span>
-            <strong id="evalValue">-</strong>
-          </div>
-          <span id="evalMeta" class="muted"></span>
-        </div>
-        <div>
-          <h2 style="font-size:18px;margin:8px 0 0;">✨ 更好的走法</h2>
-          <div id="movesList"></div>
-        </div>
-        <!-- DeepSeek AI 文字分析 -->
-        <div id="aiAnalysis" class="ai-card">
-          <h3 class="ai-title">💡 发生了什么 · 简单提示</h3>
-          <div id="aiAnalysisText" class="ai-copy"></div>
-          <div id="aiAnalysisLoading" style="display:none;color:var(--muted);">DeepSeek 正在生成分析...</div>
-        </div>
-        <section class="feedback-card" aria-labelledby="feedbackTitle">
-          <h3 id="feedbackTitle">这份报告对你有帮助吗？</h3>
-          <p class="feedback-intro">告诉我们你的感受，帮助研究所把讲解变得更清楚。</p>
-          <div class="feedback-stars" role="radiogroup" aria-label="五星评价">
-            <button class="feedback-star" type="button" data-rating="1" aria-label="1 星">★</button>
-            <button class="feedback-star" type="button" data-rating="2" aria-label="2 星">★</button>
-            <button class="feedback-star" type="button" data-rating="3" aria-label="3 星">★</button>
-            <button class="feedback-star" type="button" data-rating="4" aria-label="4 星">★</button>
-            <button class="feedback-star" type="button" data-rating="5" aria-label="5 星">★</button>
-          </div>
-          <div class="feedback-options" role="radiogroup" aria-label="报告感受">
-            <button class="feedback-option" type="button" data-feedback="helpful">非常有帮助</button>
-            <button class="feedback-option" type="button" data-feedback="okay">一般</button>
-            <button class="feedback-option" type="button" data-feedback="unclear">没看懂</button>
-          </div>
-          <div class="feedback-checks" aria-label="具体收获">
-            <label class="feedback-check"><input type="checkbox" value="next-step">知道下一步怎么走</label>
-            <label class="feedback-check"><input type="checkbox" value="mistake">发现自己的错误</label>
-            <label class="feedback-check"><input type="checkbox" value="chess-idea">学到了棋理</label>
-            <label class="feedback-check"><input type="checkbox" value="still-unclear">还是看不懂</label>
-          </div>
-          <p class="feedback-thanks" id="feedbackThanks" role="status">收到啦，谢谢你的反馈！</p>
-        </section>
-      </div>
     </section>
   </section>
 </main>
@@ -703,11 +643,9 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 12000) {
 
 async function connectAnalysisService({ attempts = 3, showFailure = true } = {}) {
   const status = document.getElementById("backendStatus");
-  const analyzeButton = document.getElementById("analyzeBtn");
   const gameAnalyzeButton = document.getElementById("gameAnalyzeBtn");
   clearTimeout(backendReconnectTimer);
   status.textContent = "正在连接分析服务...";
-  analyzeButton.disabled = true;
   gameAnalyzeButton.disabled = true;
 
   let lastError = new Error("连接超时");
@@ -721,7 +659,6 @@ async function connectAnalysisService({ attempts = 3, showFailure = true } = {})
       status.textContent = health.deepseek_configured
         ? "分析服务已连接 · Stockfish 18 + DeepSeek"
         : "分析服务已连接 · DeepSeek 尚未配置，仍可使用 Stockfish";
-      analyzeButton.disabled = false;
       gameAnalyzeButton.disabled = false;
       clearError();
       return true;
@@ -775,7 +712,6 @@ function initEngine() {
         clearTimeout(timeoutId);
         console.log("[SF] got readyok");
         engineReady = true;
-        document.getElementById("analyzeBtn").disabled = false;
         document.getElementById("loading").style.display = "none";
         resolve();
       }
@@ -1011,7 +947,6 @@ function importPgn() {
   updateStepLabels();
   renderBoard();
   renderMovePreview();
-  document.getElementById("resultSection").classList.remove("active");
   document.getElementById("moveReviewCard").classList.remove("active");
 }
 
@@ -1061,7 +996,6 @@ function onSliderInput() {
   renderBoard();
   renderMovePreview();
   updateMoveReviewPanel();
-  if (!gameReview && document.getElementById("autoAnalyze").checked) analyze();
 }
 
 function jumpStep(step) {
@@ -1071,9 +1005,7 @@ function jumpStep(step) {
   updateStepLabels();
   renderBoard();
   renderMovePreview();
-  document.getElementById("resultSection").classList.remove("active");
   updateMoveReviewPanel();
-  if (!gameReview && document.getElementById("autoAnalyze").checked) analyze();
 }
 
 function rebuildGameAtStep(step) {
@@ -1099,7 +1031,6 @@ function clearAll() {
   pgnHeaders = {};
   document.getElementById("timeline").classList.remove("active");
   document.getElementById("pgnSummary").classList.remove("active");
-  document.getElementById("resultSection").classList.remove("active");
   document.getElementById("moveReviewCard").classList.remove("active");
   document.getElementById("whiteName").textContent = "White";
   document.getElementById("blackName").textContent = "Black";
@@ -1127,7 +1058,6 @@ async function analyzeGame() {
   const button = document.getElementById("gameAnalyzeBtn");
   button.disabled = true;
   button.textContent = "正在评价整盘棋...";
-  document.getElementById("analyzeBtn").disabled = true;
   document.getElementById("loading").style.display = "block";
   const stages = ["正在整理棋谱……", "正在寻找关键局面……", "正在准备每步评价……"];
   let stage = 0;
@@ -1168,7 +1098,6 @@ async function analyzeGame() {
     document.getElementById("loading").style.display = "none";
     button.disabled = false;
     button.textContent = "重新评价整盘棋";
-    document.getElementById("analyzeBtn").disabled = false;
   }
 }
 
@@ -1183,7 +1112,6 @@ function updateMoveReviewPanel() {
     return;
   }
   card.classList.add("active");
-  document.getElementById("resultSection").classList.remove("active");
   const sideLabel = review.side === "white" ? "白方" : "黑方";
   const complexityLabel = { simple: "简单局面", normal: "普通局面", complex: "复杂局面" }[review.complexity] || "普通局面";
   document.getElementById("moveReviewContext").textContent = `第 ${review.move_number} 回合 · ${sideLabel} · ${complexityLabel}`;
@@ -1438,97 +1366,6 @@ function formatPieceFactName(pieceId) {
   return `${color === "white" ? "白" : color === "black" ? "黑" : ""}${names[piece] || "棋子"}`;
 }
 
-async function analyze() {
-  clearError();
-  document.getElementById("analyzeBtn").disabled = true;
-  document.getElementById("analyzeBtn").textContent = "分析中...";
-  document.getElementById("loading").style.display = "block";
-  const loadingStages = ["正在整理棋谱……", "正在寻找关键局面……", "正在准备简单解释……"];
-  let loadingStage = 0;
-  document.getElementById("loadingText").textContent = loadingStages[0];
-  clearInterval(loadingStageTimer);
-  loadingStageTimer = setInterval(() => {
-    loadingStage = Math.min(loadingStage + 1, loadingStages.length - 1);
-    document.getElementById("loadingText").textContent = loadingStages[loadingStage];
-  }, 1800);
-
-  try {
-    const fen = game.fen();
-    const response = await fetch(apiUrl("/api/review"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fen })
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(payload.detail || `分析服务错误 (${response.status})`);
-    }
-    showResult(payload);
-  } catch (e) {
-    showError("分析出错：" + e.message);
-  } finally {
-    clearInterval(loadingStageTimer);
-    loadingStageTimer = null;
-    document.getElementById("loading").style.display = "none";
-    document.getElementById("analyzeBtn").disabled = false;
-    document.getElementById("analyzeBtn").textContent = "分析当前局面";
-  }
-}
-
-function showResult(reviewData) {
-  const engineData = reviewData.engine || {};
-  document.getElementById("resultSection").classList.add("active");
-  renderBoard();
-
-  const topMoves = engineData.top_moves || [];
-  const best = topMoves[0];
-
-  // 中文文字描述（不重复显示数字）
-  let evalText = engineData.evaluation || "-";
-  let evalDetail = "";
-  const cp = best ? best.centipawn : null;
-  const mateIn = best ? best.mate_in : null;
-
-  if (mateIn != null) {
-    const side = mateIn > 0 ? "白方" : "黑方";
-    evalDetail = `${side}${Math.abs(mateIn)}步将杀`;
-  } else if (cp != null) {
-    const s = cp / 100;
-    const absS = Math.abs(s);
-    if (absS > 3.0) evalDetail = s > 0 ? "白方大优" : "黑方大优";
-    else if (absS > 1.5) evalDetail = s > 0 ? "白方优势" : "黑方优势";
-    else if (absS > 0.7) evalDetail = s > 0 ? "白方稍优" : "黑方稍优";
-    else if (absS > 0.3) evalDetail = s > 0 ? "白方略优" : "黑方略优";
-    else evalDetail = "局面均势";
-  }
-
-  document.getElementById("evalValue").textContent = evalText;
-  document.getElementById("evalMeta").textContent = evalDetail;
-  document.getElementById("movesList").innerHTML = topMoves.map((m, i) => {
-    let scoreStr = "";
-    if (m.mate_in != null) {
-      const side = m.mate_in > 0 ? "白" : "黑";
-      scoreStr = `${side} M${Math.abs(m.mate_in)}`;
-    } else if (m.centipawn != null) {
-      const s = m.centipawn / 100;
-      scoreStr = s > 0 ? `+${s.toFixed(1)}` : `${s.toFixed(1)}`;
-    } else {
-      scoreStr = "-";
-    }
-    return `<div class="move-card">
-      <div class="move-line">
-        <div><span class="small">#${i + 1}</span> <span class="move-san">${m.san}</span></div>
-        <strong>${scoreStr}</strong>
-      </div>
-    </div>`;
-  }).join("");
-
-  const aiBox = document.getElementById("aiAnalysis");
-  const aiText = document.getElementById("aiAnalysisText");
-  aiBox.style.display = "block";
-  aiText.textContent = reviewData.explanation || reviewData.warning || "Stockfish 分析已完成，暂无 AI 解释。";
-}
-
 // ========== 棋盘渲染 ==========
 const BOARD_META = { size: 2048, margin: 164, square: 215 };
 
@@ -1662,32 +1499,6 @@ function showError(msg) {
 }
 
 // ========== 初始化 ==========
-function setupFeedback() {
-  const stars = [...document.querySelectorAll(".feedback-star")];
-  const options = [...document.querySelectorAll(".feedback-option")];
-  const checks = [...document.querySelectorAll(".feedback-check input")];
-  const thanks = document.getElementById("feedbackThanks");
-  const acknowledge = () => thanks.classList.add("visible");
-  stars.forEach(star => star.addEventListener("click", () => {
-    const rating = Number(star.dataset.rating);
-    stars.forEach(item => {
-      const active = Number(item.dataset.rating) <= rating;
-      item.classList.toggle("selected", active);
-      item.setAttribute("aria-checked", active && Number(item.dataset.rating) === rating ? "true" : "false");
-    });
-    acknowledge();
-  }));
-  options.forEach(option => option.addEventListener("click", () => {
-    options.forEach(item => {
-      const active = item === option;
-      item.classList.toggle("selected", active);
-      item.setAttribute("aria-checked", active ? "true" : "false");
-    });
-    acknowledge();
-  }));
-  checks.forEach(check => check.addEventListener("change", acknowledge));
-}
-
 document.addEventListener("DOMContentLoaded", () => {
   const workspace = document.querySelector(".workspace");
   const reviewCard = document.getElementById("moveReviewCard");
@@ -1699,8 +1510,6 @@ document.addEventListener("DOMContentLoaded", () => {
     reportHost.appendChild(reviewCard);
   }
   renderBoard();
-  setupFeedback();
-  document.getElementById("analyzeBtn").disabled = true;
   connectAnalysisService();
 
   document.getElementById("sourceInput").addEventListener("paste", () => {
