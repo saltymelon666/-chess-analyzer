@@ -69,6 +69,26 @@ def test_analytics_records_anonymous_events_and_analysis_usage(tmp_path: Path) -
     assert source == "https://example.com"
 
 
+def test_feedback_event_records_rating_and_suggestion(tmp_path: Path) -> None:
+    store = AnalyticsStore(tmp_path / "feedback.sqlite3")
+    store.record_event(
+        AnalyticsEventRequest(
+            visitor_id="visitor_feedback_1234",
+            event="feedback",
+            page="/",
+            rating=5,
+            suggestion="希望增加更多残局示例",
+        )
+    )
+
+    with store._connect() as connection:
+        feedback = connection.execute(
+            "SELECT event_name, rating, suggestion FROM events"
+        ).fetchone()
+
+    assert tuple(feedback) == ("feedback", 5, "希望增加更多残局示例")
+
+
 def test_request_protector_rejects_only_after_threshold() -> None:
     protector = RequestProtector()
     assert protector.allow("analysis", "client", per_minute=2, per_day=10).allowed

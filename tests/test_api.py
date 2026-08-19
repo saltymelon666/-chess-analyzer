@@ -226,10 +226,22 @@ def test_event_and_admin_statistics_endpoints(monkeypatch, tmp_path) -> None:
             "source_info": "direct",
         },
     )
+    feedback = client.post(
+        "/api/event",
+        json={
+            "visitor_id": "visitor_api_1234",
+            "event": "feedback",
+            "page": "/",
+            "rating": 4,
+            "suggestion": "希望增加更多残局示例",
+        },
+    )
     statistics = client.get("/api/admin/statistics")
 
     assert event.status_code == 202
     assert event.json() == {"accepted": True}
+    assert feedback.status_code == 202
+    assert feedback.json() == {"accepted": True}
     assert statistics.status_code == 200
     assert statistics.json()["visitors"] == 1
     dashboard = client.get("/api/admin/dashboard")
