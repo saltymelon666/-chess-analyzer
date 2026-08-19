@@ -24,6 +24,7 @@ EventName = Literal[
     "analysis_start",
     "analysis_complete",
     "report_export",
+    "feedback",
 ]
 
 
@@ -40,6 +41,9 @@ class AnalyticsEventRequest(BaseModel):
     analysis_id: str | None = Field(default=None, min_length=8, max_length=80)
     duration_ms: int | None = Field(default=None, ge=0, le=86_400_000)
     report_id: str | None = Field(default=None, min_length=1, max_length=120)
+    rating: int | None = Field(default=None, ge=1, le=5)
+    suggestion: str | None = Field(default=None, max_length=2000)
+    analysis_result: str | None = Field(default=None, max_length=20_000)
 
     @field_validator("visitor_id", "analysis_id", "report_id")
     @classmethod
@@ -66,6 +70,14 @@ class AnalyticsEventRequest(BaseModel):
             raise ValueError("analysis_complete requires duration_ms and success")
         if self.event == "report_export" and self.report_id is None:
             raise ValueError("report_export requires report_id")
+        if self.event == "feedback" and self.rating is None and not (self.suggestion or "").strip():
+            raise ValueError("feedback requires rating or suggestion")
+        if self.event != "feedback" and (
+            self.rating is not None
+            or self.suggestion is not None
+            or self.analysis_result is not None
+        ):
+            raise ValueError("feedback fields are only allowed for feedback")
         return self
 
 
@@ -108,6 +120,15 @@ class RecentAnalysis(BaseModel):
     completion_tokens: int
     total_tokens: int
     status: Literal["success", "failed"]
+
+
+class RecentFeedback(BaseModel):
+    created_at: str
+    visitor_id: str
+    analysis_id: str | None
+    rating: int | None
+    suggestion: str | None
+    analysis_result: str | None
 
 
 class AnalyticsStore:
@@ -172,6 +193,9 @@ class AnalyticsStore:
                     analysis_id TEXT,
                     duration_ms INTEGER,
                     report_id TEXT,
+                    rating INTEGER,
+                    suggestion TEXT,
+                    analysis_result TEXT,
                     FOREIGN KEY(visitor_id) REFERENCES visitors(visitor_id)
                 );
                 CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at);
@@ -206,6 +230,19 @@ class AnalyticsStore:
                         connection.execute(statement)
             else:
                 connection.executescript(schema)
+            for statement in (
+                "ALTER TABLE events ADD COLUMN rating INTEGER",
+                "ALTER TABLE events ADD COLUMN suggestion TEXT",
+                "ALTER TABLE events ADD COLUMN analysis_result TEXT",
+            ):
+                try:
+                    self._execute(connection, statement)
+                except Exception as error:
+                    if not any(
+                        marker in str(error).lower()
+                        for marker in ("duplicate column", "already exists")
+                    ):
+                        raise
 
     @staticmethod
     def _now() -> str:
@@ -254,8 +291,9 @@ class AnalyticsStore:
                 """
                 INSERT INTO events(
                     visitor_id, event_name, created_at, page, pgn_length,
-                    success, analysis_id, duration_ms, report_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    success, analysis_id, duration_ms, report_id, rating, suggestion,
+                    analysis_result
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     event.visitor_id,
@@ -267,6 +305,9 @@ class AnalyticsStore:
                     event.analysis_id,
                     event.duration_ms,
                     event.report_id,
+                    event.rating,
+                    event.suggestion.strip() if event.suggestion else None,
+                    event.analysis_result.strip() if event.analysis_result else None,
                 ),
             )
 
@@ -458,3 +499,27 @@ class AnalyticsStore:
                 (start, end, min(100, max(1, limit))),
             ).fetchall()
         return [RecentAnalysis.model_validate(dict(row)) for row in rows]
+
+    def recent_feedback(
+        self,
+        day: datetime | None = None,
+        *,
+        limit: int = 50,
+    ) -> list[RecentFeedback]:
+        local_now = day.astimezone(self.timezone) if day else datetime.now(self.timezone)
+        local_start = datetime.combine(local_now.date(), time.min, tzinfo=self.timezone)
+        start = local_start.astimezone(timezone.utc).isoformat(timespec="milliseconds")
+        end = (local_start + timedelta(days=1)).astimezone(timezone.utc).isoformat(timespec="milliseconds")
+        with self._lock, self._connect() as connection:
+            rows = self._execute(
+                connection,
+                """
+                SELECT created_at, visitor_id, analysis_id, rating, suggestion, analysis_result
+                FROM events
+                WHERE event_name = 'feedback' AND created_at >= ? AND created_at < ?
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (start, end, min(100, max(1, limit))),
+            ).fetchall()
+        return [RecentFeedback.model_validate(dict(row)) for row in rows]

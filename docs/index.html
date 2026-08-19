@@ -77,6 +77,27 @@
       background: var(--panel); border: 1px solid var(--line);
       border-radius: var(--radius-lg); padding: 22px; box-shadow: var(--shadow);
     }
+    .feedback-panel {
+      margin-top: 32px; padding: 24px; display:grid; grid-template-columns:minmax(0, .8fr) minmax(0, 1.2fr);
+      gap:24px; align-items:center; background:linear-gradient(135deg,#F2F9F6 0%,#FFFDF7 100%);
+      border:1px solid #D7E8E1; border-radius:var(--radius-lg); box-shadow:var(--shadow);
+    }
+    .feedback-copy h2 { margin:0; font-size:clamp(22px,3vw,30px); letter-spacing:-.03em; }
+    .feedback-copy p { margin:9px 0 0; color:var(--muted); line-height:1.65; }
+    .feedback-form { display:grid; gap:14px; }
+    .rating-group { margin:0; padding:0; border:0; }
+    .rating-group legend { margin-bottom:8px; color:var(--muted); font-size:13px; font-weight:800; }
+    .rating-options { display:flex; gap:8px; flex-wrap:wrap; }
+    .rating-option { position:relative; }
+    .rating-option input { position:absolute; opacity:0; pointer-events:none; }
+    .rating-option label { display:grid; place-items:center; width:42px; height:38px; margin:0; border:1px solid #D6E5DF; border-radius:12px; background:#fff; color:#39786A; font-size:15px; font-weight:900; cursor:pointer; transition:transform 160ms ease,border-color 160ms ease,background 160ms ease,box-shadow 160ms ease; }
+    .rating-option label:hover { transform:translateY(-2px); border-color:#A9CEC4; box-shadow:0 6px 14px rgba(57,120,106,.12); }
+    .rating-option input:checked + label { border-color:#D79B26; background:#FFF1C5; color:#805600; box-shadow:0 5px 12px rgba(215,155,38,.16); }
+    .rating-option input:focus-visible + label { outline:3px solid rgba(244,185,66,.42); outline-offset:3px; }
+    .feedback-form textarea { min-height:104px; resize:vertical; font-family:inherit; }
+    .feedback-actions { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+    .feedback-status { min-height:22px; color:#39786A; font-size:13px; font-weight:800; }
+    .feedback-status.error { color:#A34C4C; }
     .board-head { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 12px; color: var(--muted); font-size: 14px; }
     .board-shell {
       position: relative; width: var(--board-size); max-width: 100%;
@@ -426,6 +447,7 @@
     @media (max-width: 760px) {
       .hero { grid-template-columns:1fr; }
       .hero-guide { order:2; height:400px; }
+      .feedback-panel { grid-template-columns:1fr; margin-top:20px; padding:20px; }
     }
     @media (max-width: 600px) {
       .shell { padding: 18px 14px 36px; }
@@ -576,6 +598,32 @@
 
     </section>
   </section>
+  <section class="feedback-panel" aria-labelledby="feedbackTitle">
+    <div class="feedback-copy">
+      <h2 id="feedbackTitle">把你的想法留在研究桌上</h2>
+      <p>一次评分或一句建议，都能帮助我们把棋谱分析做得更清楚、更好用。</p>
+    </div>
+    <form class="feedback-form" id="feedbackForm">
+      <fieldset class="rating-group">
+        <legend>这次体验对你有帮助吗？</legend>
+        <div class="rating-options" role="radiogroup" aria-label="体验评分">
+          <div class="rating-option"><input id="rating1" name="rating" type="radio" value="1"><label for="rating1">1</label></div>
+          <div class="rating-option"><input id="rating2" name="rating" type="radio" value="2"><label for="rating2">2</label></div>
+          <div class="rating-option"><input id="rating3" name="rating" type="radio" value="3"><label for="rating3">3</label></div>
+          <div class="rating-option"><input id="rating4" name="rating" type="radio" value="4"><label for="rating4">4</label></div>
+          <div class="rating-option"><input id="rating5" name="rating" type="radio" value="5"><label for="rating5">5</label></div>
+        </div>
+      </fieldset>
+      <div>
+        <label for="feedbackSuggestion">你最希望我们改进什么？</label>
+        <textarea id="feedbackSuggestion" maxlength="2000" placeholder="例如：希望能更快看到分析结果，或增加某类棋书说明……"></textarea>
+      </div>
+      <div class="feedback-actions">
+        <button class="primary-btn" type="submit">提交反馈</button>
+        <span class="feedback-status" id="feedbackStatus" role="status" aria-live="polite"></span>
+      </div>
+    </form>
+  </section>
 </main>
 
 <!-- chess.js v0.10.2 (本地版，已添加全局 Chess 变量) -->
@@ -630,6 +678,71 @@ const API_BASE_URL = IS_LOCAL_FRONTEND
 
 function apiUrl(path) {
   return `${API_BASE_URL}${path}`;
+}
+
+function getVisitorId() {
+  const key = "pawnlab_visitor_id";
+  try {
+    let visitorId = localStorage.getItem(key);
+    if (!visitorId) {
+      visitorId = crypto.randomUUID ? crypto.randomUUID() : `visitor_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      localStorage.setItem(key, visitorId);
+    }
+    return visitorId;
+  } catch (error) {
+    return `visitor_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  }
+}
+
+async function submitFeedback(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const status = document.getElementById("feedbackStatus");
+  const button = form.querySelector("button[type=submit]");
+  const rating = form.querySelector("input[name=rating]:checked")?.value;
+  const suggestion = document.getElementById("feedbackSuggestion").value.trim();
+  const feedbackAnalysis = currentFeedbackAnalysis();
+  if (!rating && !suggestion) {
+    status.textContent = "请先评分或写下一条建议";
+    status.classList.add("error");
+    return;
+  }
+  button.disabled = true;
+  status.textContent = "正在提交……";
+  status.classList.remove("error");
+  try {
+    const response = await fetchWithTimeout(apiUrl("/api/event"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        visitor_id: getVisitorId(),
+        event: "feedback",
+        page: window.location.pathname,
+        rating: rating ? Number(rating) : null,
+        suggestion: suggestion || null,
+        analysis_id: feedbackAnalysis.analysisId,
+        analysis_result: feedbackAnalysis.result
+      })
+    }, 8000);
+    if (!response.ok) throw new Error("feedback request failed");
+    form.reset();
+    status.textContent = "感谢你的反馈，我们会认真看。";
+  } catch (error) {
+    status.textContent = "暂时提交失败，请稍后再试。";
+    status.classList.add("error");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function currentFeedbackAnalysis() {
+  const review = currentStep > 0 ? gameReview?.moves?.[currentStep - 1] : null;
+  const content = document.getElementById("professionalAnalysisContent")?.innerText.trim() || "";
+  if (!gameReview?.analysis_id || !review || !content || content.includes("正在生成结论")) {
+    return { analysisId: null, result: null };
+  }
+  const context = `第 ${review.move_number} 回合 · ${review.side === "white" ? "白方" : "黑方"} · ${review.san} ${review.quality_symbol || ""} ${review.quality_label || ""}`.trim();
+  return { analysisId: gameReview.analysis_id, result: `${context}\n\n${content}`.slice(0, 20000) };
 }
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = 12000) {
@@ -1512,6 +1625,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   renderBoard();
   connectAnalysisService();
+  document.getElementById("feedbackForm").addEventListener("submit", submitFeedback);
 
   document.getElementById("sourceInput").addEventListener("paste", () => {
     setTimeout(() => {

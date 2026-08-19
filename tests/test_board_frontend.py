@@ -29,6 +29,19 @@ def test_board_renders_file_and_rank_coordinates() -> None:
         assert ".board-coordinate {" in page
 
 
+def test_homepage_feedback_form_is_available_in_both_frontends() -> None:
+    for page in _pages():
+        assert 'id="feedbackForm"' in page
+        assert 'name="rating"' in page
+        assert 'id="feedbackSuggestion"' in page
+        assert 'maxlength="2000"' in page
+        assert 'event: "feedback"' in page
+        assert 'addEventListener("submit", submitFeedback)' in page
+        assert "function currentFeedbackAnalysis()" in page
+        assert "analysis_id: feedbackAnalysis.analysisId" in page
+        assert "analysis_result: feedbackAnalysis.result" in page
+
+
 def test_public_beta_is_guest_accessible_and_tracks_core_events() -> None:
     for page in _pages():
         assert "公测体验版 · 免费使用" in page
@@ -86,3 +99,7 @@ def test_admin_dashboard_is_separate_and_not_linked_from_product() -> None:
     assert "sessionStorage" in admin
     assert "总 Token" in admin
     assert "异常保护规则" in admin
+    assert 'id="feedbackList"' in admin
+    assert "用户评价" in admin
+    assert "用户建议" in admin
+    assert "查看对应分析结果" in admin

@@ -22,6 +22,7 @@ from .analytics import (
     AnalyticsStore,
     DailyStatistics,
     RecentAnalysis,
+    RecentFeedback,
 )
 from .analysis_report import (
     AnalysisReportResponse,
@@ -161,6 +162,7 @@ class AdminConfiguration(BaseModel):
 class AdminDashboard(BaseModel):
     statistics: DailyStatistics
     recent_analyses: list[RecentAnalysis]
+    recent_feedback: list[RecentFeedback]
     protection_policies: list[AdminProtectionPolicy]
     configuration: AdminConfiguration
 
@@ -293,9 +295,10 @@ async def admin_dashboard(
 ) -> AdminDashboard:
     store = _authorized_analytics_store(x_admin_key)
     requested_day = _admin_day(day)
-    statistics, recent = await asyncio.gather(
+    statistics, recent, feedback = await asyncio.gather(
         asyncio.to_thread(store.daily_statistics, requested_day),
         asyncio.to_thread(store.recent_analyses, requested_day, limit=limit),
+        asyncio.to_thread(store.recent_feedback, requested_day, limit=limit),
     )
     policies = [
         AdminProtectionPolicy(
@@ -309,6 +312,7 @@ async def admin_dashboard(
     return AdminDashboard(
         statistics=statistics,
         recent_analyses=recent,
+        recent_feedback=feedback,
         protection_policies=policies,
         configuration=AdminConfiguration(
             environment=settings.environment,

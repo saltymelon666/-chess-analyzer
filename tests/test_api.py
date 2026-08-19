@@ -226,10 +226,24 @@ def test_event_and_admin_statistics_endpoints(monkeypatch, tmp_path) -> None:
             "source_info": "direct",
         },
     )
+    feedback = client.post(
+        "/api/event",
+        json={
+            "visitor_id": "visitor_api_1234",
+            "event": "feedback",
+            "page": "/",
+            "analysis_id": "analysis_api_1234",
+            "rating": 4,
+            "suggestion": "希望增加更多残局示例",
+            "analysis_result": "第 8 回合 · 白方 · Nf3\n\n白方应先完成出子。",
+        },
+    )
     statistics = client.get("/api/admin/statistics")
 
     assert event.status_code == 202
     assert event.json() == {"accepted": True}
+    assert feedback.status_code == 202
+    assert feedback.json() == {"accepted": True}
     assert statistics.status_code == 200
     assert statistics.json()["visitors"] == 1
     dashboard = client.get("/api/admin/dashboard")
@@ -237,6 +251,10 @@ def test_event_and_admin_statistics_endpoints(monkeypatch, tmp_path) -> None:
     payload = dashboard.json()
     assert payload["statistics"]["page_views"] == 1
     assert payload["recent_analyses"] == []
+    assert len(payload["recent_feedback"]) == 1
+    assert payload["recent_feedback"][0]["rating"] == 4
+    assert payload["recent_feedback"][0]["suggestion"] == "希望增加更多残局示例"
+    assert payload["recent_feedback"][0]["analysis_result"].startswith("第 8 回合")
     assert payload["protection_policies"]
     assert payload["configuration"]["game_analysis_max_plies"] == 200
 
