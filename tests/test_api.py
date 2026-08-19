@@ -232,8 +232,10 @@ def test_event_and_admin_statistics_endpoints(monkeypatch, tmp_path) -> None:
             "visitor_id": "visitor_api_1234",
             "event": "feedback",
             "page": "/",
+            "analysis_id": "analysis_api_1234",
             "rating": 4,
             "suggestion": "希望增加更多残局示例",
+            "analysis_result": "第 8 回合 · 白方 · Nf3\n\n白方应先完成出子。",
         },
     )
     statistics = client.get("/api/admin/statistics")
@@ -249,6 +251,10 @@ def test_event_and_admin_statistics_endpoints(monkeypatch, tmp_path) -> None:
     payload = dashboard.json()
     assert payload["statistics"]["page_views"] == 1
     assert payload["recent_analyses"] == []
+    assert len(payload["recent_feedback"]) == 1
+    assert payload["recent_feedback"][0]["rating"] == 4
+    assert payload["recent_feedback"][0]["suggestion"] == "希望增加更多残局示例"
+    assert payload["recent_feedback"][0]["analysis_result"].startswith("第 8 回合")
     assert payload["protection_policies"]
     assert payload["configuration"]["game_analysis_max_plies"] == 200
 

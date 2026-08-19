@@ -76,17 +76,29 @@ def test_feedback_event_records_rating_and_suggestion(tmp_path: Path) -> None:
             visitor_id="visitor_feedback_1234",
             event="feedback",
             page="/",
+            analysis_id="analysis_feedback_1234",
             rating=5,
             suggestion="希望增加更多残局示例",
+            analysis_result="第 12 回合 · 白方 · Nf3\n\n双方子力接近。",
         )
     )
 
     with store._connect() as connection:
         feedback = connection.execute(
-            "SELECT event_name, rating, suggestion FROM events"
+            "SELECT event_name, rating, suggestion, analysis_id, analysis_result FROM events"
         ).fetchone()
 
-    assert tuple(feedback) == ("feedback", 5, "希望增加更多残局示例")
+    assert tuple(feedback) == (
+        "feedback",
+        5,
+        "希望增加更多残局示例",
+        "analysis_feedback_1234",
+        "第 12 回合 · 白方 · Nf3\n\n双方子力接近。",
+    )
+    recent = store.recent_feedback()
+    assert recent[0].rating == 5
+    assert recent[0].suggestion == "希望增加更多残局示例"
+    assert recent[0].analysis_result.startswith("第 12 回合")
 
 
 def test_request_protector_rejects_only_after_threshold() -> None:

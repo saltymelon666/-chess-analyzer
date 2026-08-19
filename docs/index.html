@@ -701,6 +701,7 @@ async function submitFeedback(event) {
   const button = form.querySelector("button[type=submit]");
   const rating = form.querySelector("input[name=rating]:checked")?.value;
   const suggestion = document.getElementById("feedbackSuggestion").value.trim();
+  const feedbackAnalysis = currentFeedbackAnalysis();
   if (!rating && !suggestion) {
     status.textContent = "请先评分或写下一条建议";
     status.classList.add("error");
@@ -713,7 +714,15 @@ async function submitFeedback(event) {
     const response = await fetchWithTimeout(apiUrl("/api/event"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ visitor_id: getVisitorId(), event: "feedback", page: window.location.pathname, rating: rating ? Number(rating) : null, suggestion: suggestion || null })
+      body: JSON.stringify({
+        visitor_id: getVisitorId(),
+        event: "feedback",
+        page: window.location.pathname,
+        rating: rating ? Number(rating) : null,
+        suggestion: suggestion || null,
+        analysis_id: feedbackAnalysis.analysisId,
+        analysis_result: feedbackAnalysis.result
+      })
     }, 8000);
     if (!response.ok) throw new Error("feedback request failed");
     form.reset();
@@ -724,6 +733,16 @@ async function submitFeedback(event) {
   } finally {
     button.disabled = false;
   }
+}
+
+function currentFeedbackAnalysis() {
+  const review = currentStep > 0 ? gameReview?.moves?.[currentStep - 1] : null;
+  const content = document.getElementById("professionalAnalysisContent")?.innerText.trim() || "";
+  if (!gameReview?.analysis_id || !review || !content || content.includes("正在生成结论")) {
+    return { analysisId: null, result: null };
+  }
+  const context = `第 ${review.move_number} 回合 · ${review.side === "white" ? "白方" : "黑方"} · ${review.san} ${review.quality_symbol || ""} ${review.quality_label || ""}`.trim();
+  return { analysisId: gameReview.analysis_id, result: `${context}\n\n${content}`.slice(0, 20000) };
 }
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = 12000) {
