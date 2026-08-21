@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>复习训练 · 棋盘研究所</title>
+  <meta name="description" content="重新走出棋谱复盘中的关键着法，把看懂变成真正掌握。">
+  <meta name="theme-color" content="#FFF9EF">
+  <script>
+    if (window.location.protocol === "file:") window.location.replace("http://127.0.0.1:8080/review.html");
+  </script>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><text y='56' font-size='56'>♟</text></svg>">
+  <style>
+    :root {
+      --bg:#FFF9EF; --panel:#FFFFFF; --panel-2:#FDF8F0; --line:#E8DED1;
+      --text:#292725; --muted:#6F6A64; --accent:#F4B942; --accent-dark:#765109;
+      --mint:#E8F3F2; --mint-dark:#39786A; --success:#55B987; --danger:#D96868;
+      --radius-lg:28px; --radius-md:18px; --radius-sm:12px;
+      --shadow:0 18px 50px rgba(91,70,43,.13); --board-size:min(58vw,650px);
+    }
+    * { box-sizing:border-box; }
+    html { color-scheme:light; scroll-behavior:smooth; }
+    body {
+      margin:0; min-height:100vh; overflow-x:hidden; color:var(--text);
+      font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;
+      background:
+        radial-gradient(circle at 4% 4%,rgba(255,205,91,.28),transparent 25%),
+        radial-gradient(circle at 96% 14%,rgba(117,202,188,.22),transparent 24%),
+        linear-gradient(180deg,#FFF9EE 0%,#FBF5E9 56%,#FFF9F0 100%);
+    }
+    body::before { content:""; position:fixed; inset:0; z-index:-1; pointer-events:none; opacity:.38; background-image:radial-gradient(circle,rgba(57,120,106,.11) 1.2px,transparent 1.35px); background-size:27px 27px; mask-image:linear-gradient(to bottom,#000,transparent 88%); }
+    ::selection { background:#F7D984; color:#3F2C08; }
+    button,a { font:inherit; }
+    button { border:0; cursor:pointer; }
+    button:focus-visible,a:focus-visible { outline:3px solid rgba(244,185,66,.55); outline-offset:3px; }
+    button:disabled { cursor:not-allowed; opacity:.5; }
+    .shell { max-width:1320px; margin:0 auto; padding:24px 28px 64px; }
+    .topbar { display:flex; align-items:center; justify-content:space-between; gap:18px; margin-bottom:28px; padding:10px; border:1px solid rgba(232,222,209,.82); border-radius:20px; background:rgba(255,255,255,.9); box-shadow:0 4px 0 rgba(117,87,47,.06),0 18px 42px rgba(91,70,43,.12); }
+    .brand { display:flex; align-items:center; gap:12px; color:var(--text); font-size:18px; font-weight:900; text-decoration:none; }
+    .brand-mark { display:grid; place-items:center; width:44px; height:44px; border-radius:15px; background:var(--accent); font-size:27px; box-shadow:0 7px 16px rgba(244,185,66,.28); }
+    .back-link { display:inline-flex; align-items:center; gap:8px; min-height:42px; padding:9px 14px; border:1px solid #D6E7E1; border-radius:999px; background:#F3FAF7; color:#326C60; font-size:14px; font-weight:900; text-decoration:none; }
+    .practice-layout { display:grid; grid-template-columns:minmax(520px,1.08fr) minmax(340px,.72fr); gap:34px; align-items:start; }
+    .board-panel { min-width:0; padding:22px; border:1px solid #DDE9E4; border-radius:var(--radius-lg); background:linear-gradient(150deg,#FFFDF9 0%,#F8FCFA 58%,#FFF8E6 100%); box-shadow:var(--shadow); }
+    .board-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:15px; color:var(--muted); font-size:13px; font-weight:800; }
+    .board-head span { padding:7px 11px; border:1px solid #E7DED2; border-radius:999px; background:rgba(255,255,255,.85); }
+    .board-shell { position:relative; width:var(--board-size); max-width:100%; aspect-ratio:1; margin:0 auto; overflow:hidden; border:9px solid #FFF8EA; outline:1px solid #DCCDBA; border-radius:20px; background:url("assets/chess/flat_chess_board_v2.webp") center/cover; box-shadow:0 14px 28px rgba(22,74,66,.12); touch-action:manipulation; }
+    .piece-img { position:absolute; z-index:3; width:calc(100% * 190 / 2048); height:calc(100% * 190 / 2048); object-fit:contain; transform:translate(-50%,-50%); pointer-events:none; user-select:none; -webkit-user-drag:none; }
+    .board-coordinate { position:absolute; z-index:8; display:grid; place-items:center; min-width:18px; height:18px; padding:0 4px; border-radius:6px; color:#FFF2C9; background:#164A42; font-size:clamp(10px,1.25vw,13px); line-height:1; font-weight:900; transform:translate(-50%,-50%); pointer-events:none; }
+    .board-hit { position:absolute; z-index:6; width:calc(100% * 215 / 2048); height:calc(100% * 215 / 2048); padding:0; transform:translate(-50%,-50%); border-radius:5px; background:transparent; }
+    .board-hit:hover { background:rgba(255,255,255,.09); }
+    .board-hit:focus-visible { outline:4px solid rgba(244,185,66,.88); outline-offset:-4px; }
+    .board-highlight { position:absolute; z-index:2; width:calc(100% * 215 / 2048); height:calc(100% * 215 / 2048); transform:translate(-50%,-50%); border-radius:8px; pointer-events:none; }
+    .board-highlight.selected { background:rgba(244,185,66,.5); outline:3px solid rgba(142,94,8,.58); }
+    .board-highlight.target { width:3.5%; height:3.5%; border-radius:50%; background:rgba(57,120,106,.78); }
+    .board-highlight.wrong { border:4px solid var(--danger); background:rgba(217,104,104,.24); }
+    .board-highlight.correct { border:4px solid var(--success); background:rgba(85,185,135,.25); }
+    .trainer { display:grid; gap:18px; min-width:0; }
+    .trainer-card { padding:26px; border:1px solid #E4D5C1; border-radius:var(--radius-lg); background:rgba(255,255,255,.96); box-shadow:var(--shadow); }
+    .trainer-meta { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:20px; color:var(--muted); font-size:13px; font-weight:850; }
+    .quality-badge { display:grid; place-items:center; min-width:34px; height:29px; padding:0 9px; border-radius:999px; font-size:13px; font-weight:950; }
+    .quality-inaccuracy { color:#8B6200; background:#FFF0B9; }
+    .quality-mistake { color:#A55317; background:#FFE1C6; }
+    .quality-blunder { color:#A33C3C; background:#FAD5D5; }
+    h1 { margin:0; font-size:clamp(28px,3.2vw,42px); line-height:1.18; letter-spacing:-.035em; text-wrap:balance; }
+    .prompt { margin:12px 0 0; color:var(--muted); font-size:16px; line-height:1.7; }
+    .status { min-height:88px; margin-top:22px; padding:16px 17px; border:1px solid #D7E8E1; border-radius:15px; background:#F4FAF8; color:#315F55; font-size:15px; font-weight:800; line-height:1.65; }
+    .status.wrong { border-color:#F0CACA; background:#FFF2F2; color:#984747; animation:statusNudge 260ms ease-out; }
+    .status.correct { border-color:#BFDCCE; background:#EDF8F3; color:#285F50; }
+    .attempts { margin-top:10px; color:var(--muted); font-size:12px; font-variant-numeric:tabular-nums; }
+    .promotion-picker { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:14px; padding:14px; border:1px solid #E8D59B; border-radius:15px; background:#FFF9E8; }
+    .promotion-picker p { grid-column:1/-1; margin:0 0 2px; color:#765109; font-size:13px; font-weight:900; }
+    .promotion-picker button { min-height:42px; border:1px solid #E4C97E; border-radius:12px; background:#fff; color:#5E4208; font-weight:900; }
+    .mastery-actions { display:grid; gap:9px; margin-top:16px; }
+    .mastery-actions[hidden] { display:none; }
+    .action-btn { min-height:46px; padding:11px 16px; border-radius:14px; color:var(--text); font-weight:900; transition:transform 140ms ease,box-shadow 140ms ease; }
+    .action-btn:hover { transform:translateY(-1px); box-shadow:0 8px 18px rgba(83,67,45,.12); }
+    .action-again { background:#F8F3EC; color:#6F6A64; }
+    .action-learning { background:var(--mint); color:#346C62; }
+    .action-mastered { background:var(--accent); color:#5E4208; }
+    .solution { margin-top:16px; padding-top:16px; border-top:1px solid var(--line); }
+    .solution[hidden] { display:none; }
+    .solution strong { color:var(--mint-dark); font-size:18px; }
+    .session-card { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:18px 20px; border:1px solid #D6E7E1; border-radius:var(--radius-md); background:#F3FAF7; }
+    .session-card strong { display:block; color:#315F55; font-size:24px; font-variant-numeric:tabular-nums; }
+    .session-card span { color:var(--muted); font-size:12px; }
+    .empty-state { padding:34px 26px; text-align:center; }
+    .empty-state[hidden] { display:none; }
+    .empty-state h1 { font-size:32px; }
+    .empty-state p { margin:12px auto 20px; max-width:34ch; color:var(--muted); line-height:1.7; }
+    .primary-link { display:inline-flex; min-height:44px; align-items:center; justify-content:center; padding:10px 18px; border-radius:999px; background:var(--accent); color:#5E4208; font-weight:900; text-decoration:none; box-shadow:0 7px 14px rgba(244,185,66,.22); }
+    .queue-section { margin-top:32px; padding:24px 26px; border:1px solid #D7E8E1; border-radius:var(--radius-lg); background:rgba(248,252,250,.94); box-shadow:0 14px 40px rgba(91,70,43,.09); }
+    .queue-head { display:flex; align-items:end; justify-content:space-between; gap:14px; margin-bottom:10px; }
+    .queue-head h2 { margin:0; font-size:25px; letter-spacing:-.025em; }
+    .queue-head p { margin:0; color:var(--muted); font-size:13px; }
+    .queue-list { display:grid; }
+    .queue-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:16px; align-items:center; padding:15px 0; border-top:1px dashed #D6E5DF; }
+    .queue-row:first-child { border-top:0; }
+    .queue-title { display:flex; align-items:center; gap:9px; flex-wrap:wrap; font-weight:900; }
+    .queue-meta { margin-top:5px; color:var(--muted); font-size:13px; line-height:1.55; }
+    .queue-actions { display:flex; gap:8px; }
+    .small-btn { padding:8px 12px; border-radius:999px; background:#E6F3EE; color:#326C60; font-size:13px; font-weight:900; }
+    .small-btn.remove { background:#F8F3EC; color:#746C64; }
+    .queue-empty { padding:18px 0 6px; color:var(--muted); text-align:center; }
+    .undo-bar { display:flex; align-items:center; justify-content:space-between; gap:14px; margin:10px 0 4px; padding:11px 14px; border:1px solid #E7D9C7; border-radius:13px; background:#FFF9EF; color:#675E55; font-size:13px; font-weight:800; }
+    .undo-bar button { padding:7px 12px; border-radius:999px; background:#E6F3EE; color:#326C60; font-weight:900; }
+    [hidden] { display:none!important; }
+    @keyframes statusNudge { 0%{transform:translateX(0)} 35%{transform:translateX(-5px)} 70%{transform:translateX(4px)} 100%{transform:translateX(0)} }
+    @media (max-width:940px) { :root{--board-size:min(86vw,650px)} .practice-layout{grid-template-columns:1fr} .trainer{grid-template-columns:minmax(0,1fr) minmax(240px,.42fr)} .trainer-card{grid-row:span 2} }
+    @media (max-width:700px) { .shell{padding:14px 12px 42px}.topbar{align-items:flex-start;margin-bottom:16px}.brand{font-size:16px}.brand-mark{width:40px;height:40px}.back-link{padding:8px 11px;font-size:13px}.board-panel{padding:10px;border-radius:20px}.board-shell{border-width:5px;border-radius:15px}.trainer{grid-template-columns:1fr}.trainer-card{padding:21px}.session-card{padding:15px 17px}.queue-section{margin-top:20px;padding:20px 18px}.queue-head{align-items:flex-start;flex-direction:column}.queue-row{grid-template-columns:1fr}.queue-actions{justify-content:flex-start}.queue-actions button{flex:1}.status{min-height:76px} }
+    @media (prefers-reduced-motion:reduce) { html{scroll-behavior:auto} *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important} }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <a class="brand" href="index.html"><span class="brand-mark">♟</span><span>棋盘研究所</span></a>
+      <a class="back-link" href="index.html">返回棋局分析</a>
+    </header>
+    <div class="undo-bar" id="undoBar" role="status" hidden><span id="undoMessage">已移除复习局面</span><button id="undoRemove" type="button">撤销</button></div>
+
+    <section class="practice-layout" id="practiceView" hidden>
+      <div class="board-panel">
+        <div class="board-head"><span id="turnLabel">轮到你走</span><span id="orientationLabel">当前行棋方在下</span></div>
+        <div class="board-shell" id="visualBoard" role="group" aria-label="复习训练棋盘"></div>
+      </div>
+      <aside class="trainer">
+        <section class="trainer-card">
+          <div class="trainer-meta"><span id="positionMeta">关键局面</span><span class="quality-badge" id="qualityBadge">?</span></div>
+          <h1>走出这个局面的最佳着法</h1>
+          <p class="prompt" id="practicePrompt">答案已经隐藏。点击棋子，再点击目标格。</p>
+          <div class="status" id="practiceStatus" role="status">先观察局面，找出当前最重要的任务。</div>
+          <div class="attempts" id="attemptCount">尝试 0 次</div>
+          <div class="promotion-picker" id="promotionPicker" hidden>
+            <p>选择升变棋子</p>
+            <button type="button" data-promotion="q">后</button><button type="button" data-promotion="r">车</button><button type="button" data-promotion="b">象</button><button type="button" data-promotion="n">马</button>
+          </div>
+          <div class="solution" id="solution" hidden>
+            <div>正确着法：<strong id="solutionMove"></strong></div>
+          </div>
+          <div class="mastery-actions" id="masteryActions" hidden>
+            <button class="action-btn action-again" type="button" data-mastery="again">还不熟 · 明天再练</button>
+            <button class="action-btn action-learning" type="button" data-mastery="learning">基本掌握 · 3天后</button>
+            <button class="action-btn action-mastered" type="button" data-mastery="mastered">已经掌握 · 7天后</button>
+          </div>
+        </section>
+        <section class="session-card"><div><strong id="dueCount">0</strong><span>当前待复习</span></div><div><strong id="completedCount">0</strong><span>本轮已完成</span></div></section>
+      </aside>
+    </section>
+
+    <section class="trainer-card empty-state" id="emptyState" hidden>
+      <h1 id="emptyTitle">还没有复习局面</h1>
+      <p id="emptyCopy">先回到棋局分析，把值得重新思考的失误加入复习。</p>
+      <a class="primary-link" href="index.html">去分析一盘棋</a>
+    </section>
+
+    <section class="queue-section" id="queueSection" hidden aria-labelledby="queueTitle">
+      <div class="queue-head"><div><h2 id="queueTitle">复习局面</h2><p>答案只会在你走对之后显示。</p></div><p id="queueSummary"></p></div>
+      <div class="queue-list" id="queueList"></div>
+    </section>
+  </main>
+
+  <script src="chess.js"></script>
+  <script>
+    const REVIEW_STORAGE_KEY = "pawnlab_review_positions_v1";
+    const REVIEW_STORAGE_VERSION = 1;
+    const REVIEW_STORAGE_LIMIT = 50;
+    const FILES = ["a","b","c","d","e","f","g","h"];
+    const BOARD_META = { size:2048, margin:164, square:215 };
+    const PIECE_ASSET = {
+      P:"assets/chess/pieces-v3/white_pawn.webp", N:"assets/chess/pieces-v3/white_knight.webp",
+      B:"assets/chess/pieces-v3/white_bishop.webp", R:"assets/chess/pieces-v3/white_rook.webp",
+      Q:"assets/chess/pieces-v3/white_queen.webp", K:"assets/chess/pieces-v3/white_king.webp",
+      p:"assets/chess/pieces-v3/black_pawn.webp", n:"assets/chess/pieces-v3/black_knight.webp",
+      b:"assets/chess/pieces-v3/black_bishop.webp", r:"assets/chess/pieces-v3/black_rook.webp",
+      q:"assets/chess/pieces-v3/black_queen.webp", k:"assets/chess/pieces-v3/black_king.webp"
+    };
+    const PIECE_NAMES = { p:"兵",n:"马",b:"象",r:"车",q:"后",k:"王" };
+    let reviewPositions = [];
+    let game = new Chess();
+    let practice = null;
+    let orientation = "white";
+    let completedThisSession = 0;
+    let lastRemoved = null;
+
+    function escapeHtml(value) {
+      return String(value ?? "").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");
+    }
+
+    function loadReviewPositions() {
+      try {
+        const stored = JSON.parse(localStorage.getItem(REVIEW_STORAGE_KEY) || "null");
+        if (!stored || stored.version !== REVIEW_STORAGE_VERSION || !Array.isArray(stored.items)) return [];
+        return stored.items.filter(item => item && item.id && item.beforeFen && item.bestMoveUci).slice(0,REVIEW_STORAGE_LIMIT);
+      } catch { return []; }
+    }
+
+    function saveReviewPositions() {
+      try {
+        localStorage.setItem(REVIEW_STORAGE_KEY,JSON.stringify({ version:REVIEW_STORAGE_VERSION,items:reviewPositions.slice(0,REVIEW_STORAGE_LIMIT) }));
+        return true;
+      } catch { return false; }
+    }
+
+    function isDue(item) {
+      const due = new Date(item.nextReviewAt || 0);
+      return !Number.isFinite(due.getTime()) || due <= new Date();
+    }
+
+    function dueLabel(item) {
+      if (!item.lastPracticedAt) return "尚未练习";
+      if (isDue(item)) return "现在可以复习";
+      return `${new Date(item.nextReviewAt).toLocaleDateString("zh-CN",{month:"numeric",day:"numeric"})} 再练`;
+    }
+
+    function boardCenter(row,col) {
+      const x = BOARD_META.margin + col * BOARD_META.square + BOARD_META.square / 2;
+      const y = BOARD_META.margin + row * BOARD_META.square + BOARD_META.square / 2;
+      return { left:`${x / BOARD_META.size * 100}%`,top:`${y / BOARD_META.size * 100}%` };
+    }
+
+    function displayCell(square) {
+      const file = FILES.indexOf(square[0]);
+      const rank = Number(square[1]);
+      const whiteRow = 8 - rank;
+      return orientation === "black" ? { row:7-whiteRow,col:7-file } : { row:whiteRow,col:file };
+    }
+
+    function squarePosition(square) {
+      const cell = displayCell(square);
+      return boardCenter(cell.row,cell.col);
+    }
+
+    function squareAtDisplayCell(row,col) {
+      if (orientation === "black") return `${FILES[7-col]}${row+1}`;
+      return `${FILES[col]}${8-row}`;
+    }
+
+    function parseFenPieces(fen) {
+      const pieces=[];
+      fen.split(" ")[0].split("/").forEach((rank,row) => {
+        let col=0;
+        for (const token of rank) {
+          if (/\d/.test(token)) col+=Number(token);
+          else { pieces.push({ piece:token,square:`${FILES[col]}${8-row}` }); col+=1; }
+        }
+      });
+      return pieces;
+    }
+
+    function appendHighlight(board,square,type) {
+      const marker=document.createElement("div");
+      marker.className=`board-highlight ${type}`;
+      Object.assign(marker.style,squarePosition(square));
+      board.appendChild(marker);
+    }
+
+    function renderBoard() {
+      const board=document.getElementById("visualBoard");
+      board.innerHTML="";
+      if (practice?.selectedSquare) appendHighlight(board,practice.selectedSquare,"selected");
+      (practice?.legalTargets || []).forEach(square => appendHighlight(board,square,"target"));
+      (practice?.wrongSquares || []).forEach(square => appendHighlight(board,square,"wrong"));
+      (practice?.correctSquares || []).forEach(square => appendHighlight(board,square,"correct"));
+
+      parseFenPieces(game.fen()).forEach(entry => {
+        const image=document.createElement("img");
+        image.className="piece-img"; image.src=PIECE_ASSET[entry.piece]; image.alt="";
+        Object.assign(image.style,squarePosition(entry.square)); board.appendChild(image);
+      });
+
+      for (let row=0;row<8;row+=1) for (let col=0;col<8;col+=1) {
+        const square=squareAtDisplayCell(row,col);
+        const button=document.createElement("button");
+        const piece=game.get(square);
+        button.type="button"; button.className="board-hit"; button.dataset.square=square;
+        button.tabIndex=practice?.focusSquare === square ? 0 : -1;
+        button.setAttribute("aria-pressed",String(practice?.selectedSquare === square));
+        button.setAttribute("aria-describedby","practiceStatus");
+        button.setAttribute("aria-label",`${square}${piece ? ` ${piece.color === "w" ? "白" : "黑"}${PIECE_NAMES[piece.type]}` : " 空格"}`);
+        Object.assign(button.style,boardCenter(row,col)); board.appendChild(button);
+      }
+
+      const fileLabels=orientation === "black" ? [...FILES].reverse() : FILES;
+      fileLabels.forEach((file,col) => {
+        const label=document.createElement("span"); label.className="board-coordinate"; label.textContent=file;
+        label.style.left=boardCenter(7,col).left; label.style.top=`${(BOARD_META.margin+BOARD_META.square*8+40)/BOARD_META.size*100}%`; board.appendChild(label);
+      });
+      for (let row=0;row<8;row+=1) {
+        const label=document.createElement("span"); label.className="board-coordinate";
+        label.textContent=orientation === "black" ? String(row+1) : String(8-row);
+        label.style.left=`${(BOARD_META.margin-40)/BOARD_META.size*100}%`; label.style.top=boardCenter(row,0).top; board.appendChild(label);
+      }
+      if (practice?.restoreFocus && practice.focusSquare) {
+        practice.restoreFocus=false;
+        requestAnimationFrame(() => board.querySelector(`button[data-square="${practice?.focusSquare}"]`)?.focus());
+      }
+    }
+
+    function setStatus(message,type="") {
+      const status=document.getElementById("practiceStatus");
+      status.className=`status${type ? ` ${type}` : ""}`; status.textContent=message;
+    }
+
+    function selectSquare(square) {
+      const piece=game.get(square);
+      if (!piece || piece.color !== game.turn()) return false;
+      practice.selectedSquare=square;
+      practice.focusSquare=square;
+      practice.legalTargets=game.moves({ square,verbose:true }).map(move => move.to);
+      practice.wrongSquares=[];
+      practice.restoreFocus=true;
+      renderBoard(); return true;
+    }
+
+    function attemptMove(from,square,promotion) {
+      const expected=practice.item.bestMoveUci;
+      const move=game.move({ from,to:square,promotion });
+      document.getElementById("promotionPicker").hidden=true;
+      practice.pendingPromotion=null;
+      if (!move) {
+        practice.selectedSquare=null; practice.legalTargets=[]; practice.wrongSquares=[from,square]; practice.restoreFocus=true;
+        setStatus("这不是合法走法。重新选择棋子，再试一次。","wrong"); renderBoard(); return;
+      }
+      const playedUci=`${from}${square}${move.promotion || ""}`;
+      practice.attempts+=1;
+      document.getElementById("attemptCount").textContent=`尝试 ${practice.attempts} 次`;
+      practice.selectedSquare=null; practice.legalTargets=[]; practice.focusSquare=square; practice.restoreFocus=true;
+      if (playedUci !== expected) {
+        game.undo(); practice.wrongSquares=[from,square]; practice.focusSquare=from;
+        setStatus(`还不对。${move.san} 不是这个局面的最佳选择，请继续寻找。`,"wrong"); renderBoard(); return;
+      }
+      practice.completed=true; practice.wrongSquares=[]; practice.correctSquares=[from,square];
+      setStatus("走对了！你已经找到了这个局面的关键着法。","correct");
+      document.getElementById("solutionMove").textContent=practice.item.bestMoveSan || expected;
+      document.getElementById("solution").hidden=false;
+      document.getElementById("masteryActions").hidden=false;
+      renderBoard();
+    }
+
+    function handleSquare(square) {
+      if (!practice || practice.completed) return;
+      practice.focusSquare=square;
+      if (!practice.selectedSquare) {
+        if (!selectSquare(square)) setStatus("请选择当前行棋方的一枚棋子。","wrong");
+        return;
+      }
+      if (selectSquare(square)) return;
+      const from=practice.selectedSquare;
+      const promotions=game.moves({ square:from,verbose:true }).filter(move => move.to === square && move.promotion);
+      if (promotions.length) {
+        practice.pendingPromotion={ from,to:square };
+        document.getElementById("promotionPicker").hidden=false;
+        setStatus("这步兵将到达底线。请选择要升变成的棋子。");
+        document.querySelector("#promotionPicker button")?.focus();
+        return;
+      }
+      attemptMove(from,square,"q");
+    }
+
+    function startPractice(item) {
+      if (!item) return;
+      try { game=new Chess(item.beforeFen); } catch {
+        reviewPositions=reviewPositions.filter(entry => entry.id !== item.id);
+        saveReviewPositions();
+        if (reviewPositions.length) startPractice(nextDuePosition() || reviewPositions[0]);
+        else showEmptyLibrary();
+        return;
+      }
+      orientation=game.turn() === "b" ? "black" : "white";
+      const firstMove=game.moves({ verbose:true })[0];
+      practice={ item,selectedSquare:null,legalTargets:[],wrongSquares:[],correctSquares:[],attempts:0,completed:false,focusSquare:firstMove?.from || "a1",restoreFocus:true,pendingPromotion:null };
+      document.getElementById("practiceView").hidden=false;
+      document.getElementById("emptyState").hidden=true;
+      document.getElementById("positionMeta").textContent=`第 ${item.moveNumber || "?"} 回合 · ${game.turn() === "b" ? "黑方" : "白方"}`;
+      const badge=document.getElementById("qualityBadge");
+      badge.textContent=item.qualitySymbol || "?"; badge.className=`quality-badge quality-${item.qualityKey || "mistake"}`;
+      badge.setAttribute("aria-label",item.qualityLabel || "需要复习的着法"); badge.title=item.qualityLabel || "需要复习的着法";
+      document.getElementById("turnLabel").textContent=game.turn() === "b" ? "黑方走棋" : "白方走棋";
+      document.getElementById("orientationLabel").textContent=game.turn() === "b" ? "黑方在下" : "白方在下";
+      document.getElementById("practicePrompt").textContent="答案已经隐藏。点击棋子，再点击目标格。";
+      document.getElementById("attemptCount").textContent="尝试 0 次";
+      document.getElementById("solution").hidden=true;
+      document.getElementById("masteryActions").hidden=true;
+      document.getElementById("promotionPicker").hidden=true;
+      setStatus("先观察局面，找出当前最重要的任务。");
+      history.replaceState(null,"",`review.html?id=${encodeURIComponent(item.id)}`);
+      updateCounts(); renderQueue(); renderBoard();
+    }
+
+    function nextDuePosition(excludeId="") {
+      return reviewPositions.find(item => item.id !== excludeId && isDue(item)) || null;
+    }
+
+    function completePractice(level) {
+      if (!practice?.completed) return;
+      const days={ again:1,learning:3,mastered:7 }[level] || 1;
+      const item=reviewPositions.find(entry => entry.id === practice.item.id);
+      if (item) {
+        const now=new Date(); item.mastery=level; item.lastPracticedAt=now.toISOString(); item.nextReviewAt=new Date(now.getTime()+days*86400000).toISOString();
+      }
+      saveReviewPositions(); completedThisSession+=1;
+      const next=nextDuePosition(practice.item.id);
+      if (next) startPractice(next);
+      else showSessionComplete();
+    }
+
+    function showSessionComplete() {
+      practice=null;
+      document.getElementById("practiceView").hidden=true;
+      const empty=document.getElementById("emptyState"); empty.hidden=false;
+      document.getElementById("emptyTitle").textContent="本轮复习完成";
+      document.getElementById("emptyCopy").textContent="当前到期的局面已经全部完成。你也可以从下方列表选择任意局面继续练习。";
+      history.replaceState(null,"","review.html"); updateCounts(); renderQueue();
+    }
+
+    function removePosition(id) {
+      const removedIndex=reviewPositions.findIndex(item => item.id === id);
+      if (removedIndex < 0) return;
+      const [removedItem]=reviewPositions.splice(removedIndex,1);
+      lastRemoved={ item:removedItem,index:removedIndex };
+      document.getElementById("undoMessage").textContent=`已移除“第 ${removedItem.moveNumber || "?"} 回合”复习局面`;
+      document.getElementById("undoBar").hidden=false;
+      saveReviewPositions();
+      if (practice?.item.id === id) {
+        const next=nextDuePosition(id) || reviewPositions[0];
+        if (next) startPractice(next); else showEmptyLibrary();
+      } else { updateCounts(); renderQueue(); }
+    }
+
+    function undoRemove() {
+      if (!lastRemoved) return;
+      const restoredItem=lastRemoved.item;
+      reviewPositions.splice(Math.min(lastRemoved.index,reviewPositions.length),0,restoredItem);
+      lastRemoved=null; document.getElementById("undoBar").hidden=true;
+      saveReviewPositions();
+      if (!practice) { startPractice(restoredItem); return; }
+      updateCounts(); renderQueue();
+    }
+
+    function showEmptyLibrary() {
+      practice=null;
+      document.getElementById("practiceView").hidden=true;
+      document.getElementById("queueSection").hidden=true;
+      const empty=document.getElementById("emptyState"); empty.hidden=false;
+      document.getElementById("emptyTitle").textContent="还没有复习局面";
+      document.getElementById("emptyCopy").textContent="先回到棋局分析，把值得重新思考的失误加入复习。";
+    }
+
+    function updateCounts() {
+      const due=reviewPositions.filter(isDue).length;
+      document.getElementById("dueCount").textContent=String(due);
+      document.getElementById("completedCount").textContent=String(completedThisSession);
+      document.getElementById("queueSummary").textContent=`共 ${reviewPositions.length} 个 · ${due} 个待复习`;
+    }
+
+    function renderQueue() {
+      const section=document.getElementById("queueSection");
+      section.hidden=reviewPositions.length === 0;
+      if (!reviewPositions.length) return;
+      document.getElementById("queueList").innerHTML=reviewPositions.map(item => {
+        const side=item.side === "black" ? "黑方" : "白方";
+        const loss=item.centipawnLoss == null ? "评价发生变化" : `损失 ${item.centipawnLoss} cp`;
+        const active=practice?.item.id === item.id;
+        return `<article class="queue-row"><div><div class="queue-title"><span class="quality-badge quality-${escapeHtml(item.qualityKey || "mistake")}">${escapeHtml(item.qualitySymbol || "?")}</span><span>第 ${escapeHtml(item.moveNumber || "?")} 回合 · ${side}</span></div><div class="queue-meta">${escapeHtml(item.event || "PGN 棋谱")} · ${escapeHtml(loss)} · ${escapeHtml(dueLabel(item))}</div></div><div class="queue-actions"><button class="small-btn" type="button" data-action="start" data-id="${escapeHtml(item.id)}" ${active ? "disabled" : ""}>${active ? "练习中" : "练习"}</button><button class="small-btn remove" type="button" data-action="remove" data-id="${escapeHtml(item.id)}">移除</button></div></article>`;
+      }).join("");
+    }
+
+    document.addEventListener("DOMContentLoaded",() => {
+      reviewPositions=loadReviewPositions(); updateCounts(); renderQueue();
+      document.getElementById("visualBoard").addEventListener("click",event => {
+        const square=event.target.closest("button[data-square]")?.dataset.square;
+        if (square) handleSquare(square);
+      });
+      document.getElementById("visualBoard").addEventListener("keydown",event => {
+        const current=event.target.closest("button[data-square]"); if (!current || !practice) return;
+        if (["Enter"," "].includes(event.key)) { event.preventDefault(); handleSquare(current.dataset.square); return; }
+        const delta={ ArrowLeft:[0,-1],ArrowRight:[0,1],ArrowUp:[-1,0],ArrowDown:[1,0] }[event.key];
+        if (!delta) return;
+        event.preventDefault();
+        const cell=displayCell(current.dataset.square);
+        const row=Math.max(0,Math.min(7,cell.row+delta[0]));
+        const col=Math.max(0,Math.min(7,cell.col+delta[1]));
+        practice.focusSquare=squareAtDisplayCell(row,col); practice.restoreFocus=true; renderBoard();
+      });
+      document.getElementById("promotionPicker").addEventListener("click",event => {
+        const promotion=event.target.closest("button[data-promotion]")?.dataset.promotion;
+        if (promotion && practice?.pendingPromotion) attemptMove(practice.pendingPromotion.from,practice.pendingPromotion.to,promotion);
+      });
+      document.getElementById("masteryActions").addEventListener("click",event => {
+        const level=event.target.closest("button[data-mastery]")?.dataset.mastery;
+        if (level) completePractice(level);
+      });
+      document.getElementById("queueList").addEventListener("click",event => {
+        const button=event.target.closest("button[data-action]"); if (!button) return;
+        if (button.dataset.action === "start") startPractice(reviewPositions.find(item => item.id === button.dataset.id));
+        if (button.dataset.action === "remove") removePosition(button.dataset.id);
+      });
+      document.getElementById("undoRemove").addEventListener("click",undoRemove);
+      if (!reviewPositions.length) { showEmptyLibrary(); return; }
+      const requestedId=new URLSearchParams(location.search).get("id");
+      const requested=reviewPositions.find(item => item.id === requestedId);
+      startPractice(requested || nextDuePosition() || reviewPositions[0]);
+    });
+  </script>
+</body>
+</html>
