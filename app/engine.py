@@ -10,6 +10,11 @@ from .models import EngineResult, MoveResult, VariationMove
 
 
 MAX_PV_PLIES = 10
+STABILITY_RECHECK_MIN_DEPTH = 16
+STABILITY_CONFIRM_MIN_DEPTH = 20
+STABILITY_GAP_CP = 50
+STABILITY_SWING_CP = 50
+STABILITY_SCORE_CHANGE_CP = 25
 
 
 class StockfishService:
@@ -82,7 +87,27 @@ class StockfishService:
         engine = chess.engine.SimpleEngine.popen_uci(str(self.executable))
         try:
             self._configure_engine(engine)
-            return [self._analyze_board(engine, board, depth) for board in boards]
+            results = [self._analyze_board(engine, board, depth) for board in boards]
+            if depth >= STABILITY_RECHECK_MIN_DEPTH:
+                return results
+
+            for index, board in enumerate(boards):
+                if not self._needs_stability_recheck(results, index):
+                    continue
+                initial = results[index]
+                confirmed = self._analyze_board(
+                    engine,
+                    board,
+                    max(STABILITY_RECHECK_MIN_DEPTH, depth + 4),
+                )
+                if self._materially_changed(initial, confirmed):
+                    confirmed = self._analyze_board(
+                        engine,
+                        board,
+                        max(STABILITY_CONFIRM_MIN_DEPTH, depth + 8),
+                    )
+                results[index] = confirmed
+            return results
         finally:
             engine.quit()
 
@@ -119,11 +144,12 @@ class StockfishService:
         max_depth = 0
         max_nodes = 0
         max_time_ms = 0
-        for rank, info in enumerate(infos, start=1):
+        for fallback_rank, info in enumerate(infos, start=1):
             score = info.get("score")
             pv = info.get("pv", [])
             if score is None or not pv:
                 continue
+            rank = int(info.get("multipv", fallback_rank))
             white_score = score.pov(chess.WHITE)
             mate_in = white_score.mate()
             centipawn = None if mate_in is not None else white_score.score()
@@ -155,6 +181,9 @@ class StockfishService:
 
         if not top_moves:
             raise RuntimeError("Stockfish 未返回可用分析结果")
+        top_moves.sort(key=lambda item: item.rank)
+        if top_moves[0].rank != 1:
+            raise RuntimeError("Stockfish 首选路线校验失败，拒绝用次选路线替代")
         best = top_moves[0]
         return EngineResult(
             evaluation=self._format_evaluation(best.centipawn, best.mate_in),
@@ -165,6 +194,49 @@ class StockfishService:
             time_ms=max_time_ms,
             top_moves=top_moves,
         )
+
+    @staticmethod
+    def _needs_stability_recheck(results: list[EngineResult], index: int) -> bool:
+        result = results[index]
+        if not result.top_moves:
+            return False
+
+        best = result.top_moves[0]
+        if best.mate_in is not None:
+            return True
+        if len(result.top_moves) >= 2:
+            second = result.top_moves[1]
+            if second.mate_in is not None:
+                return True
+            if best.centipawn is not None and second.centipawn is not None:
+                if abs(best.centipawn - second.centipawn) >= STABILITY_GAP_CP:
+                    return True
+
+        for neighbor_index in (index - 1, index + 1):
+            if not 0 <= neighbor_index < len(results):
+                continue
+            neighbor = results[neighbor_index]
+            if result.mate_in is not None or neighbor.mate_in is not None:
+                return True
+            if result.centipawn is None or neighbor.centipawn is None:
+                continue
+            if abs(result.centipawn - neighbor.centipawn) >= STABILITY_SWING_CP:
+                return True
+        return False
+
+    @staticmethod
+    def _materially_changed(initial: EngineResult, confirmed: EngineResult) -> bool:
+        initial_best = initial.top_moves[0] if initial.top_moves else None
+        confirmed_best = confirmed.top_moves[0] if confirmed.top_moves else None
+        if initial_best is None or confirmed_best is None:
+            return True
+        if initial_best.move != confirmed_best.move:
+            return True
+        if initial.mate_in != confirmed.mate_in:
+            return True
+        if initial.centipawn is None or confirmed.centipawn is None:
+            return initial.centipawn != confirmed.centipawn
+        return abs(initial.centipawn - confirmed.centipawn) > STABILITY_SCORE_CHANGE_CP
 
     def _terminal_result(self, board: chess.Board, depth: int) -> EngineResult:
         if board.is_checkmate():
