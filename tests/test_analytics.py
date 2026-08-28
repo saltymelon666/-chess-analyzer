@@ -181,4 +181,9 @@ def test_postgres_backend_uses_portable_schema_and_placeholders(monkeypatch) -> 
     statements = "\n".join(statement for statement, _ in executed)
     assert "BIGSERIAL PRIMARY KEY" in statements
     assert "AUTOINCREMENT" not in statements
+    assert "ALTER TABLE events ADD COLUMN IF NOT EXISTS rating INTEGER" in statements
+    assert "ALTER TABLE events ADD COLUMN IF NOT EXISTS suggestion TEXT" in statements
+    assert (
+        "ALTER TABLE events ADD COLUMN IF NOT EXISTS analysis_result TEXT" in statements
+    )
     assert executed[-1] == ("SELECT %s", (1,))
