@@ -21,8 +21,10 @@ from .analytics import (
     AnalyticsEventResponse,
     AnalyticsStore,
     DailyStatistics,
+    FeedbackSummary,
     RecentAnalysis,
     RecentFeedback,
+    StatisticsSummary,
 )
 from .analysis_report import (
     AnalysisReportResponse,
@@ -161,8 +163,10 @@ class AdminConfiguration(BaseModel):
 
 class AdminDashboard(BaseModel):
     statistics: DailyStatistics
+    historical_statistics: StatisticsSummary
     recent_analyses: list[RecentAnalysis]
     recent_feedback: list[RecentFeedback]
+    feedback_summary: FeedbackSummary
     protection_policies: list[AdminProtectionPolicy]
     configuration: AdminConfiguration
 
@@ -291,14 +295,16 @@ async def admin_statistics(
 async def admin_dashboard(
     x_admin_key: str | None = Header(default=None),
     day: str | None = Query(default=None, alias="date"),
-    limit: int = Query(default=50, ge=1, le=100),
+    limit: int = Query(default=100, ge=1, le=1000),
 ) -> AdminDashboard:
     store = _authorized_analytics_store(x_admin_key)
     requested_day = _admin_day(day)
-    statistics, recent, feedback = await asyncio.gather(
+    statistics, historical, recent, feedback, feedback_totals = await asyncio.gather(
         asyncio.to_thread(store.daily_statistics, requested_day),
-        asyncio.to_thread(store.recent_analyses, requested_day, limit=limit),
-        asyncio.to_thread(store.recent_feedback, requested_day, limit=limit),
+        asyncio.to_thread(store.all_time_statistics),
+        asyncio.to_thread(store.analysis_history, limit=limit),
+        asyncio.to_thread(store.feedback_history, limit=limit),
+        asyncio.to_thread(store.feedback_summary),
     )
     policies = [
         AdminProtectionPolicy(
@@ -311,8 +317,10 @@ async def admin_dashboard(
     ]
     return AdminDashboard(
         statistics=statistics,
+        historical_statistics=historical,
         recent_analyses=recent,
         recent_feedback=feedback,
+        feedback_summary=feedback_totals,
         protection_policies=policies,
         configuration=AdminConfiguration(
             environment=settings.environment,

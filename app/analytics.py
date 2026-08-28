@@ -85,8 +85,7 @@ class AnalyticsEventResponse(BaseModel):
     accepted: bool = True
 
 
-class DailyStatistics(BaseModel):
-    date: str
+class StatisticsSummary(BaseModel):
     visitors: int
     page_views: int
     uploads: int
@@ -104,6 +103,18 @@ class DailyStatistics(BaseModel):
     deepseek_total_tokens: int
     estimated_ai_cost: float | None = None
     upload_to_analysis_rate: float | None = None
+
+
+class DailyStatistics(StatisticsSummary):
+    date: str
+    all_time: StatisticsSummary | None = None
+
+
+class FeedbackSummary(BaseModel):
+    total_feedback: int
+    rating_count: int
+    average_rating: float | None
+    suggestion_count: int
 
 
 class RecentAnalysis(BaseModel):
@@ -409,46 +420,51 @@ class AnalyticsStore:
                 (self._now(), analysis_id),
             )
 
-    def daily_statistics(self, day: datetime | None = None) -> DailyStatistics:
-        local_now = day.astimezone(self.timezone) if day else datetime.now(self.timezone)
-        local_start = datetime.combine(local_now.date(), time.min, tzinfo=self.timezone)
-        start = local_start.astimezone(timezone.utc).isoformat(timespec="milliseconds")
-        end = (local_start + timedelta(days=1)).astimezone(timezone.utc).isoformat(timespec="milliseconds")
-        with self._lock, self._connect() as connection:
-            visitors_row = self._execute(
-                connection,
-                "SELECT COUNT(DISTINCT visitor_id) AS visitors FROM events WHERE created_at >= ? AND created_at < ?",
-                (start, end),
-            ).fetchone()
-            visitors = visitors_row["visitors"]
-            events = self._execute(
-                connection,
-                """
-                SELECT
-                    SUM(CASE WHEN event_name = 'page_view' THEN 1 ELSE 0 END) AS page_views,
-                    SUM(CASE WHEN event_name = 'upload_pgn' THEN 1 ELSE 0 END) AS uploads,
-                    SUM(CASE WHEN event_name = 'upload_pgn' AND success = 1 THEN 1 ELSE 0 END) AS upload_successes,
-                    SUM(CASE WHEN event_name = 'upload_pgn' AND success = 0 THEN 1 ELSE 0 END) AS upload_failures
-                FROM events WHERE created_at >= ? AND created_at < ?
-                """,
-                (start, end),
-            ).fetchone()
-            row = self._execute(
-                connection,
-                """
-                SELECT COUNT(*) AS analyses,
-                       SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS successes,
-                       SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failures,
-                       AVG(CASE WHEN status = 'success' THEN total_ms END) AS average_ms,
-                       COALESCE(SUM(stockfish_ms), 0) AS stockfish_ms,
-                       COALESCE(SUM(deepseek_ms), 0) AS deepseek_ms,
-                       COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
-                       COALESCE(SUM(completion_tokens), 0) AS completion_tokens,
-                       COALESCE(SUM(total_tokens), 0) AS total_tokens
-                FROM analysis_logs WHERE created_at >= ? AND created_at < ?
-                """,
-                (start, end),
-            ).fetchone()
+    def _statistics_for_window(
+        self,
+        connection,
+        *,
+        start: str | None = None,
+        end: str | None = None,
+    ) -> StatisticsSummary:
+        window = ""
+        parameters: tuple = ()
+        if start is not None and end is not None:
+            window = " WHERE created_at >= ? AND created_at < ?"
+            parameters = (start, end)
+        visitors_row = self._execute(
+            connection,
+            f"SELECT COUNT(DISTINCT visitor_id) AS visitors FROM events{window}",
+            parameters,
+        ).fetchone()
+        events = self._execute(
+            connection,
+            f"""
+            SELECT
+                SUM(CASE WHEN event_name = 'page_view' THEN 1 ELSE 0 END) AS page_views,
+                SUM(CASE WHEN event_name = 'upload_pgn' THEN 1 ELSE 0 END) AS uploads,
+                SUM(CASE WHEN event_name = 'upload_pgn' AND success = 1 THEN 1 ELSE 0 END) AS upload_successes,
+                SUM(CASE WHEN event_name = 'upload_pgn' AND success = 0 THEN 1 ELSE 0 END) AS upload_failures
+            FROM events{window}
+            """,
+            parameters,
+        ).fetchone()
+        row = self._execute(
+            connection,
+            f"""
+            SELECT COUNT(*) AS analyses,
+                   SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS successes,
+                   SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failures,
+                   AVG(CASE WHEN status = 'success' THEN total_ms END) AS average_ms,
+                   COALESCE(SUM(stockfish_ms), 0) AS stockfish_ms,
+                   COALESCE(SUM(deepseek_ms), 0) AS deepseek_ms,
+                   COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
+                   COALESCE(SUM(completion_tokens), 0) AS completion_tokens,
+                   COALESCE(SUM(total_tokens), 0) AS total_tokens
+            FROM analysis_logs{window}
+            """,
+            parameters,
+        ).fetchone()
         analyses = int(row["analyses"] or 0)
         uploads = int(events["uploads"] or 0)
         successes = int(row["successes"] or 0)
@@ -463,9 +479,8 @@ class AnalyticsStore:
                 + completion_tokens * self.output_price_per_million / 1_000_000,
                 6,
             )
-        return DailyStatistics(
-            date=local_now.date().isoformat(),
-            visitors=int(visitors or 0),
+        return StatisticsSummary(
+            visitors=int(visitors_row["visitors"] or 0),
             page_views=int(events["page_views"] or 0),
             uploads=uploads,
             upload_successes=int(events["upload_successes"] or 0),
@@ -482,6 +497,24 @@ class AnalyticsStore:
             deepseek_total_tokens=int(row["total_tokens"] or 0),
             estimated_ai_cost=estimated_cost,
             upload_to_analysis_rate=round(analyses / uploads, 4) if uploads else None,
+        )
+
+    def all_time_statistics(self) -> StatisticsSummary:
+        with self._lock, self._connect() as connection:
+            return self._statistics_for_window(connection)
+
+    def daily_statistics(self, day: datetime | None = None) -> DailyStatistics:
+        local_now = day.astimezone(self.timezone) if day else datetime.now(self.timezone)
+        local_start = datetime.combine(local_now.date(), time.min, tzinfo=self.timezone)
+        start = local_start.astimezone(timezone.utc).isoformat(timespec="milliseconds")
+        end = (local_start + timedelta(days=1)).astimezone(timezone.utc).isoformat(timespec="milliseconds")
+        with self._lock, self._connect() as connection:
+            daily = self._statistics_for_window(connection, start=start, end=end)
+            all_time = self._statistics_for_window(connection)
+        return DailyStatistics(
+            date=local_now.date().isoformat(),
+            all_time=all_time,
+            **daily.model_dump(),
         )
 
     def recent_analyses(
@@ -533,3 +566,55 @@ class AnalyticsStore:
                 (start, end, min(100, max(1, limit))),
             ).fetchall()
         return [RecentFeedback.model_validate(dict(row)) for row in rows]
+
+    def analysis_history(self, *, limit: int = 100) -> list[RecentAnalysis]:
+        with self._lock, self._connect() as connection:
+            rows = self._execute(
+                connection,
+                """
+                SELECT analysis_id, visitor_id, created_at, completed_at, pgn_length,
+                       move_count, stockfish_ms, deepseek_ms, total_ms,
+                       prompt_tokens, completion_tokens, total_tokens, status
+                FROM analysis_logs
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (min(1000, max(1, limit)),),
+            ).fetchall()
+        return [RecentAnalysis.model_validate(dict(row)) for row in rows]
+
+    def feedback_history(self, *, limit: int = 100) -> list[RecentFeedback]:
+        with self._lock, self._connect() as connection:
+            rows = self._execute(
+                connection,
+                """
+                SELECT created_at, visitor_id, analysis_id, rating, suggestion, analysis_result
+                FROM events
+                WHERE event_name = 'feedback'
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (min(1000, max(1, limit)),),
+            ).fetchall()
+        return [RecentFeedback.model_validate(dict(row)) for row in rows]
+
+    def feedback_summary(self) -> FeedbackSummary:
+        with self._lock, self._connect() as connection:
+            row = self._execute(
+                connection,
+                """
+                SELECT COUNT(*) AS total_feedback,
+                       SUM(CASE WHEN rating IS NOT NULL THEN 1 ELSE 0 END) AS rating_count,
+                       AVG(rating) AS average_rating,
+                       SUM(CASE WHEN suggestion IS NOT NULL AND TRIM(suggestion) <> '' THEN 1 ELSE 0 END) AS suggestion_count
+                FROM events
+                WHERE event_name = 'feedback'
+                """,
+            ).fetchone()
+        average_rating = row["average_rating"]
+        return FeedbackSummary(
+            total_feedback=int(row["total_feedback"] or 0),
+            rating_count=int(row["rating_count"] or 0),
+            average_rating=round(float(average_rating), 2) if average_rating is not None else None,
+            suggestion_count=int(row["suggestion_count"] or 0),
+        )

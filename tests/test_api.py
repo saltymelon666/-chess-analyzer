@@ -250,11 +250,18 @@ def test_event_and_admin_statistics_endpoints(monkeypatch, tmp_path) -> None:
     assert dashboard.status_code == 200
     payload = dashboard.json()
     assert payload["statistics"]["page_views"] == 1
+    assert payload["historical_statistics"]["page_views"] == 1
     assert payload["recent_analyses"] == []
     assert len(payload["recent_feedback"]) == 1
     assert payload["recent_feedback"][0]["rating"] == 4
     assert payload["recent_feedback"][0]["suggestion"] == "希望增加更多残局示例"
     assert payload["recent_feedback"][0]["analysis_result"].startswith("第 8 回合")
+    assert payload["feedback_summary"] == {
+        "total_feedback": 1,
+        "rating_count": 1,
+        "average_rating": 4.0,
+        "suggestion_count": 1,
+    }
     assert payload["protection_policies"]
     assert payload["configuration"]["game_analysis_max_plies"] == 200
 
@@ -271,6 +278,7 @@ def test_admin_dashboard_supports_date_and_rejects_invalid_date(
 
     assert selected.status_code == 200
     assert selected.json()["statistics"]["date"] == "2026-08-11"
+    assert "historical_statistics" in selected.json()
     assert invalid.status_code == 422
 
 
