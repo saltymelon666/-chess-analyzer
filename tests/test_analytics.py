@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import app.analytics as analytics_module
@@ -99,6 +100,73 @@ def test_feedback_event_records_rating_and_suggestion(tmp_path: Path) -> None:
     assert recent[0].rating == 5
     assert recent[0].suggestion == "希望增加更多残局示例"
     assert recent[0].analysis_result.startswith("第 12 回合")
+
+
+def test_all_time_history_and_feedback_summary_include_older_records(
+    tmp_path: Path,
+) -> None:
+    store = AnalyticsStore(tmp_path / "all-time.sqlite3")
+    store.record_event(
+        AnalyticsEventRequest(
+            visitor_id="visitor_history_1234",
+            event="page_view",
+            page="/",
+        )
+    )
+    store.start_analysis(
+        "analysis_history_1234",
+        "visitor_history_1234",
+        "1. e4 e5",
+    )
+    store.record_event(
+        AnalyticsEventRequest(
+            visitor_id="visitor_history_1234",
+            event="feedback",
+            rating=3,
+            suggestion="希望增加残局内容",
+        )
+    )
+    yesterday = datetime.now(store.timezone) - timedelta(days=1)
+    yesterday_start = datetime.combine(
+        yesterday.date(), datetime.min.time(), tzinfo=store.timezone
+    ).astimezone(timezone.utc)
+    old_timestamp = yesterday_start.isoformat(timespec="milliseconds")
+    with store._connect() as connection:
+        connection.execute("UPDATE events SET created_at = ?", (old_timestamp,))
+        connection.execute("UPDATE analysis_logs SET created_at = ?", (old_timestamp,))
+
+    store.record_event(
+        AnalyticsEventRequest(
+            visitor_id="visitor_today_1234",
+            event="page_view",
+            page="/",
+        )
+    )
+    store.record_event(
+        AnalyticsEventRequest(
+            visitor_id="visitor_today_1234",
+            event="feedback",
+            rating=5,
+        )
+    )
+
+    daily = store.daily_statistics()
+    historical = store.all_time_statistics()
+    feedback = store.feedback_summary()
+
+    assert daily.page_views == 1
+    assert daily.all_time is not None
+    assert daily.all_time.page_views == 2
+    assert historical.page_views == 2
+    assert [item.analysis_id for item in store.analysis_history()] == [
+        "analysis_history_1234"
+    ]
+    assert len(store.recent_feedback()) == 1
+    assert len(store.feedback_history()) == 2
+    assert feedback.total_feedback == 2
+    assert feedback.rating_count == 2
+    assert feedback.average_rating == 4
+    assert feedback.suggestion_count == 1
 
 
 def test_request_protector_rejects_only_after_threshold() -> None:

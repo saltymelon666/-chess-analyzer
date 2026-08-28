@@ -155,10 +155,16 @@ def test_admin_dashboard_is_separate_and_not_linked_from_product() -> None:
     assert "总 Token" in admin
     assert "异常保护规则" in admin
     assert 'id="allTimeMetrics"' in admin
-    assert "stats.all_time" in admin
+    assert "payload.historical_statistics" in admin
+    assert 'id="dateInput"' not in admin
+    assert "/api/admin/dashboard?limit=1000" in admin
+    assert "全部历史统计" in admin
+    assert "分析历史记录" in admin
+    assert 'id="feedbackSummary"' in admin
     assert 'id="feedbackList"' in admin
-    assert "用户评价" in admin
-    assert "用户建议" in admin
+    assert "评分与反馈" in admin
+    assert "平均评分" in admin
+    assert "文字反馈" in admin
     assert "查看对应分析结果" in admin
 
 
