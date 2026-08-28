@@ -1,6 +1,14 @@
 # 棋盘研究所项目状态
 
-更新时间：2026-08-27
+更新时间：2026-08-28
+
+## 31. 2026-08-28 PostgreSQL Analytics 初始化修复
+
+- 线上运营后台出现“后台统计暂不可用”时，确认 Analytics 存储没有完成初始化；棋局分析服务和健康检查仍正常，但访问统计、分析日志和用户反馈会被静默跳过写入。
+- 根因是反馈字段已经包含在 `CREATE TABLE` 中，初始化随后仍执行普通 `ALTER TABLE ... ADD COLUMN`。PostgreSQL 遇到重复列后会把当前事务标记为失败，即使 Python 捕获重复列异常，后续语句仍会失败并使 `analytics_store` 回落为 `None`。
+- PostgreSQL 迁移改用原生 `ADD COLUMN IF NOT EXISTS`，旧数据库可补列、新数据库和已迁移数据库均不会触发事务失败；SQLite 继续保留原有兼容迁移路径。
+- PostgreSQL 可移植性回归测试新增三个反馈字段的幂等迁移断言。Analytics/API 专项测试 `21 passed`；基于最新 `main` 的独立 worktree 完整测试为 `292 passed, 5 failed, 1 warning`：4 项是主线已有的公测文案、`chess.js` 加载方式、后台历史统计前端和开局上下文断言漂移，另 1 项是独立 worktree 没有仓库忽略的本地 `stockfish.exe`，本轮没有新增 Analytics/API 失败。
+- 修复尚待合并并重启 Render 服务；部署后必须用有效 `ADMIN_STATISTICS_KEY` 验证 `/api/admin/dashboard`、提交一条实际反馈并确认后台可读取，不能仅以 `/api/health` 返回 200 作为 Analytics 恢复依据。
 
 ## 30. 2026-08-27 Stockfish 低深度路线稳定性保护
 

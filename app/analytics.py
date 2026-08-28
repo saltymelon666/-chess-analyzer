@@ -230,19 +230,29 @@ class AnalyticsStore:
                         connection.execute(statement)
             else:
                 connection.executescript(schema)
-            for statement in (
-                "ALTER TABLE events ADD COLUMN rating INTEGER",
-                "ALTER TABLE events ADD COLUMN suggestion TEXT",
-                "ALTER TABLE events ADD COLUMN analysis_result TEXT",
-            ):
-                try:
-                    self._execute(connection, statement)
-                except Exception as error:
-                    if not any(
-                        marker in str(error).lower()
-                        for marker in ("duplicate column", "already exists")
-                    ):
-                        raise
+            feedback_columns = (
+                ("rating", "INTEGER"),
+                ("suggestion", "TEXT"),
+                ("analysis_result", "TEXT"),
+            )
+            if self._postgres:
+                for column_name, column_type in feedback_columns:
+                    connection.execute(
+                        f"ALTER TABLE events ADD COLUMN IF NOT EXISTS {column_name} {column_type}"
+                    )
+            else:
+                for column_name, column_type in feedback_columns:
+                    try:
+                        self._execute(
+                            connection,
+                            f"ALTER TABLE events ADD COLUMN {column_name} {column_type}",
+                        )
+                    except Exception as error:
+                        if not any(
+                            marker in str(error).lower()
+                            for marker in ("duplicate column", "already exists")
+                        ):
+                            raise
 
     @staticmethod
     def _now() -> str:
