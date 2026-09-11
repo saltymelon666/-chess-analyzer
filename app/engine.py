@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from typing import Callable, TypeVar
 
 import chess
 import chess.engine
@@ -15,6 +16,12 @@ STABILITY_CONFIRM_MIN_DEPTH = 20
 STABILITY_GAP_CP = 50
 STABILITY_SWING_CP = 50
 STABILITY_SCORE_CHANGE_CP = 25
+DEFAULT_QUEUE_TIMEOUT_SECONDS = 10.0
+T = TypeVar("T")
+
+
+class StockfishBusyError(RuntimeError):
+    """Raised when the single Stockfish worker is still serving another request."""
 
 
 class StockfishService:
@@ -27,6 +34,7 @@ class StockfishService:
         hash_mb: int,
         multipv: int,
         timeout_seconds: float,
+        queue_timeout_seconds: float = DEFAULT_QUEUE_TIMEOUT_SECONDS,
     ) -> None:
         self.executable = executable
         self.depth = depth
@@ -34,6 +42,7 @@ class StockfishService:
         self.hash_mb = hash_mb
         self.multipv = multipv
         self.timeout_seconds = timeout_seconds
+        self.queue_timeout_seconds = max(0.01, queue_timeout_seconds)
         self._lock = asyncio.Lock()
 
     def available(self) -> bool:
@@ -48,11 +57,10 @@ class StockfishService:
         if not self.available():
             raise RuntimeError(f"找不到 Stockfish：{self.executable}")
 
-        async with self._lock:
-            return await asyncio.wait_for(
-                asyncio.to_thread(self._analyze_sync, board),
-                timeout=self.timeout_seconds,
-            )
+        return await self._run_exclusive(
+            lambda: self._analyze_sync(board),
+            timeout_seconds=self.timeout_seconds,
+        )
 
     async def analyze_many(
         self,
@@ -69,11 +77,51 @@ class StockfishService:
                 raise ValueError(f"无效的 FEN：{exc}") from exc
         if not self.available():
             raise RuntimeError(f"找不到 Stockfish：{self.executable}")
-        async with self._lock:
+        return await self._run_exclusive(
+            lambda: self._analyze_many_sync(boards, depth),
+            timeout_seconds=timeout_seconds,
+        )
+
+    async def _run_exclusive(
+        self,
+        worker: Callable[[], T],
+        *,
+        timeout_seconds: float,
+    ) -> T:
+        try:
+            await asyncio.wait_for(
+                self._lock.acquire(),
+                timeout=min(self.queue_timeout_seconds, timeout_seconds),
+            )
+        except asyncio.TimeoutError as exc:
+            raise StockfishBusyError("Stockfish 正在处理其他整盘分析") from exc
+
+        work_task = asyncio.create_task(asyncio.to_thread(worker))
+        release_immediately = True
+        try:
             return await asyncio.wait_for(
-                asyncio.to_thread(self._analyze_many_sync, boards, depth),
+                asyncio.shield(work_task),
                 timeout=timeout_seconds,
             )
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            # A cancelled to_thread call keeps running. Keep the single-worker
+            # lock until that thread exits so a timeout cannot start a second
+            # Stockfish process and overload the service.
+            release_immediately = False
+            work_task.add_done_callback(self._release_after_background_work)
+            raise
+        finally:
+            if release_immediately:
+                self._lock.release()
+
+    def _release_after_background_work(self, task: asyncio.Task[object]) -> None:
+        try:
+            task.exception()
+        except (asyncio.CancelledError, Exception):
+            pass
+        finally:
+            if self._lock.locked():
+                self._lock.release()
 
     def _analyze_sync(self, board: chess.Board) -> EngineResult:
         engine = chess.engine.SimpleEngine.popen_uci(str(self.executable))

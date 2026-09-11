@@ -159,6 +159,7 @@ def test_admin_dashboard_is_separate_and_not_linked_from_product() -> None:
     assert 'id="dateInput"' not in admin
     assert "/api/admin/dashboard?limit=1000" in admin
     assert "全部历史统计" in admin
+    assert 'log.status === "running" ? "运行中"' in admin
     assert "分析历史记录" in admin
     assert 'id="feedbackSummary"' in admin
     assert 'id="feedbackList"' in admin

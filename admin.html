@@ -287,7 +287,7 @@
         const values = [
           new Date(log.created_at).toLocaleString("zh-CN"),
           shortId(log.analysis_id),
-          log.status === "success" ? "成功" : "失败",
+          log.status === "success" ? "成功" : (log.status === "running" ? "运行中" : "失败"),
           log.move_count === null ? "—" : log.move_count,
           log.pgn_length,
           formatMs(log.stockfish_ms),

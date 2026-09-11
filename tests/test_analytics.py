@@ -176,6 +176,19 @@ def test_request_protector_rejects_only_after_threshold() -> None:
     assert not protector.allow("analysis", "client", per_minute=2, per_day=10).allowed
 
 
+def test_started_analysis_is_reported_as_running_not_failed(tmp_path: Path) -> None:
+    store = AnalyticsStore(tmp_path / "running-analysis.sqlite3")
+    store.start_analysis("analysis_running_1234", "visitor_running_1234", "1. e4 e5")
+
+    statistics = store.daily_statistics()
+    recent = store.recent_analyses()
+
+    assert statistics.analyses == 0
+    assert statistics.successes == 0
+    assert statistics.failures == 0
+    assert recent[0].status == "running"
+
+
 def test_deepseek_failure_updates_the_existing_analysis_status(tmp_path: Path) -> None:
     store = AnalyticsStore(tmp_path / "failed-analysis.sqlite3")
     store.start_analysis("analysis_failed_1234", "visitor_failed_1234", "1. e4 e5")

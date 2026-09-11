@@ -130,7 +130,7 @@ class RecentAnalysis(BaseModel):
     prompt_tokens: int
     completion_tokens: int
     total_tokens: int
-    status: Literal["success", "failed"]
+    status: Literal["running", "success", "failed"]
 
 
 class RecentFeedback(BaseModel):
@@ -452,9 +452,9 @@ class AnalyticsStore:
         row = self._execute(
             connection,
             f"""
-            SELECT COUNT(*) AS analyses,
+            SELECT SUM(CASE WHEN completed_at IS NOT NULL THEN 1 ELSE 0 END) AS analyses,
                    SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS successes,
-                   SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failures,
+                   SUM(CASE WHEN status = 'failed' AND completed_at IS NOT NULL THEN 1 ELSE 0 END) AS failures,
                    AVG(CASE WHEN status = 'success' THEN total_ms END) AS average_ms,
                    COALESCE(SUM(stockfish_ms), 0) AS stockfish_ms,
                    COALESCE(SUM(deepseek_ms), 0) AS deepseek_ms,
@@ -533,7 +533,8 @@ class AnalyticsStore:
                 """
                 SELECT analysis_id, visitor_id, created_at, completed_at, pgn_length,
                        move_count, stockfish_ms, deepseek_ms, total_ms,
-                       prompt_tokens, completion_tokens, total_tokens, status
+                       prompt_tokens, completion_tokens, total_tokens,
+                       CASE WHEN completed_at IS NULL THEN 'running' ELSE status END AS status
                 FROM analysis_logs
                 WHERE created_at >= ? AND created_at < ?
                 ORDER BY created_at DESC
@@ -574,7 +575,8 @@ class AnalyticsStore:
                 """
                 SELECT analysis_id, visitor_id, created_at, completed_at, pgn_length,
                        move_count, stockfish_ms, deepseek_ms, total_ms,
-                       prompt_tokens, completion_tokens, total_tokens, status
+                       prompt_tokens, completion_tokens, total_tokens,
+                       CASE WHEN completed_at IS NULL THEN 'running' ELSE status END AS status
                 FROM analysis_logs
                 ORDER BY created_at DESC
                 LIMIT ?
