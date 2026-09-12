@@ -1599,19 +1599,13 @@ function renderProfessionalAnalysis(payload) {
 
   if (lines.length) {
     const routeCards = lines.map(line => {
-      const tags = (line.strategyTags || []).map(tag => `<span class="professional-tag">${escapeHtml(tagNames[tag] || tag)}</span>`).join("");
       const phases = (line.continuationPhases || []).map(phase => {
-        const explanation = completeProfessionalSentence(phase.explanation);
         const moves = (phase.moves || []).join(" → ");
-        return moves ? `<div class="professional-phase"><div class="professional-moves">${escapeHtml(moves)}</div>${explanation ? `<p>${escapeHtml(explanation)}</p>` : ""}</div>` : "";
+        return moves ? `<div class="professional-phase"><div class="professional-moves">${escapeHtml(moves)}</div></div>` : "";
       }).join("");
-      const advantages = professionalList(line.advantages, item => escapeHtml(expandedProfessionalPoint(item, "advantage")));
-      const risks = professionalList(line.risks, item => escapeHtml(expandedProfessionalPoint(item, "risk")));
-      const notes = advantages || risks ? `<div class="professional-route-notes">${advantages ? `<div class="professional-route-note"><span class="professional-label">优点</span>${advantages}</div>` : ""}${risks ? `<div class="professional-route-note risk"><span class="professional-label">风险</span>${risks}</div>` : ""}</div>` : "";
       const source = (activeReview?.candidate_lines || []).find(item => item.rank === line.rank);
       const evaluation = source?.mate != null ? `将杀 ${source.mate}` : source?.evaluation != null ? `${source.evaluation >= 0 ? "+" : ""}${(source.evaluation / 100).toFixed(2)}` : "";
-      const purpose = completeProfessionalSentence(line.directPurpose);
-      return `<article class="professional-route"><div class="professional-route-head"><b class="professional-route-title">路线 ${escapeHtml(line.rank)}</b></div><div class="professional-route-meta"><span class="professional-route-move">第一步：${escapeHtml(line.firstMove)}</span>${evaluation ? `<span class="professional-route-eval">Stockfish评价：${escapeHtml(evaluation)}</span>` : ""}</div><div class="professional-tags">${tags}</div>${purpose ? `<p><span class="professional-label">第一步作用：</span>${escapeHtml(purpose)}</p>` : ""}${line.opponentResponse ? `<p><span class="professional-label">对手回应：</span>${escapeHtml(line.opponentResponse)}</p>` : ""}${phases}${notes}</article>`;
+      return `<article class="professional-route"><div class="professional-route-head"><b class="professional-route-title">路线 ${escapeHtml(line.rank)}</b></div><div class="professional-route-meta"><span class="professional-route-move">第一步：${escapeHtml(line.firstMove)}</span>${evaluation ? `<span class="professional-route-eval">Stockfish评价：${escapeHtml(evaluation)}</span>` : ""}</div>${phases}</article>`;
     }).join("");
     parts.push(`<section class="professional-section professional-routes-section"><h4>⭐ Stockfish 三条研究路线</h4><div class="professional-routes">${routeCards}</div></section>`);
   }
