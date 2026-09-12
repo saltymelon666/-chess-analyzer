@@ -11,7 +11,14 @@ from .strategic_plans import StrategicPlanPackage
 from .threat_analysis import ThreatPackage
 
 
-NARRATIVE_CLAIM_VERSION = "1.0"
+NARRATIVE_CLAIM_VERSION = "1.1"
+LEGACY_NARRATIVE_MARKERS = (
+    "先看全局：",
+    "实战把选择摆上棋盘：",
+    "再看关键选择：",
+    "从计划看，已经得到验证的方向是：",
+    "这段变化留给初学者的原则是：",
+)
 NarrativeClaimKind = Literal[
     "position_fact",
     "move_event",
@@ -49,12 +56,13 @@ class VerifiedNarrativeClaim(BaseModel):
 class NarrativeClaimPackage(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
-    version: Literal["1.0"] = NARRATIVE_CLAIM_VERSION
+    version: Literal["1.1"] = NARRATIVE_CLAIM_VERSION
     claims: list[VerifiedNarrativeClaim] = Field(default_factory=list)
     recommended_claim_refs: list[str] = Field(alias="recommendedClaimRefs", default_factory=list)
     boundary: str = (
         "核心正文只能重述这些命题。路线中同时出现的事件不能自动写成因果关系；"
         "没有独立命题支持时，禁止使用造成、使得、支撑、限制、削弱、打开、迫使等因果表述。"
+        "正文按棋理自然推进，不显示固定步骤标题或栏目口号。"
     )
 
     @property
@@ -137,7 +145,7 @@ def build_narrative_claim_package(
             f"position:{len([item for item in claims if item.kind == 'position_fact']) + 1}",
             "position_fact",
             "before_move",
-            f"走棋前，{fact.description}",
+            f"更具体地说，{fact.description}",
             [fact.id],
             "python-chess",
             recommend=True,
@@ -149,8 +157,8 @@ def build_narrative_claim_package(
         "move_event",
         "after_played_move",
         (
-            f"{side_text}走{move.played_move.san}，{piece_text}从"
-            f"{move.played_move.from_square}走到{move.played_move.to_square}。"
+            f"实战中，{side_text}选择{move.played_move.san}：{piece_text}从"
+            f"{move.played_move.from_square}来到{move.played_move.to_square}。"
         ),
         [played_ref],
         "python-chess",
@@ -258,21 +266,25 @@ def build_narrative_claim_package(
 
     if move.best_move_uci:
         if move.played_move.uci == move.best_move_uci:
-            comparison = f"{move.played_move.san}就是Stockfish当前首选。"
+            comparison = (
+                f"引擎的首选与实战一致：{move.played_move.san}并非退而求其次，"
+                "它就是当前第一选择。"
+            )
         elif move.centipawn_loss is None:
             comparison = (
-                f"Stockfish当前首选是{move.best_move_san or move.best_move_uci}，"
-                f"而不是实战的{move.played_move.san}；现有数据没有提供可靠分差。"
+                f"引擎首选{move.best_move_san or move.best_move_uci}，而实战走了"
+                f"{move.played_move.san}；现有数据没有提供可靠分差，因此不能"
+                "从分数倒推两种选择的机制差异。"
             )
         elif move.centipawn_loss < 50:
             comparison = (
-                f"{move.played_move.san}与{move.best_move_san or move.best_move_uci}评价差距很小，"
-                "程序没有把它判为必须受到惩罚的选择。"
+                f"引擎把{move.played_move.san}与{move.best_move_san or move.best_move_uci}"
+                "放得很近，评价差距不足以支持“这步必须受罚”的说法。"
             )
         else:
             comparison = (
-                f"{move.played_move.san}相对{move.best_move_san or move.best_move_uci}"
-                f"损失约{move.centipawn_loss / 100:.2f}兵的评价。"
+                f"分歧从这里出现：与首选{move.best_move_san or move.best_move_uci}相比，"
+                f"{move.played_move.san}使评价下降约{move.centipawn_loss / 100:.2f}兵。"
             )
         add(
             "comparison",
@@ -288,7 +300,7 @@ def build_narrative_claim_package(
             "comparison",
             "evaluation_comparison",
             "after_played_move",
-            "Stockfish没有提供可验证的首选路线，因此这里不能比较实战着与候选着。",
+            "当前没有可验证的首选路线，实战着与候选着也就不能作可靠比较。",
             [played_ref, f"evaluation:before:{move.index}", f"evaluation:after:{move.index}"],
             "stockfish",
             recommend=True,
@@ -305,22 +317,24 @@ def build_narrative_claim_package(
         )
         if inferior and move.complexity_factors.direct_piece_loss and reply_detail:
             reply_statement = (
-                f"关键转折的具体线索是，{move.played_move.san}后的最强回应是"
-                f"{reply.san}，这一步{reply_detail}。它与前述评价差同时成立，"
-                "但现有数据没有证明这次吃子单独造成全部分差。"
+                f"惩罚首先以具体着法出现：{move.played_move.san}之后，"
+                f"{_side_text(_opposite(move.side))}最强回应是{reply.san}，这一步"
+                f"{reply_detail}。它和评价下降同时得到验证，但现有数据不足以证明"
+                "这次吃子解释了全部分差。"
             )
         elif inferior:
             detail = f"，这一步{reply_detail}" if reply_detail else ""
             reply_statement = (
-                f"关键转折在于，{move.played_move.san}后的最强回应是{reply.san}{detail}。"
-                "当前数据确认的是评价差与整条验证路线，不能把后段事件提前说成"
-                "这第一回应的直接效果。"
+                f"分岔口出现在对手的回答上：{move.played_move.san}之后，"
+                f"{_side_text(_opposite(move.side))}最强回应是{reply.san}{detail}。"
+                "当前能够确认的是评价差和整条验证路线；如果关键事件出现在后续，"
+                "就不能倒推成第一回应的直接效果。"
             )
         else:
             detail = f"，这一步{reply_detail}" if reply_detail else ""
             reply_statement = (
-                f"在{move.played_move.san}后的验证路线中，对手首先以{reply.san}回应"
-                f"{detail}。"
+                f"这一步并没有结束争论：在{move.played_move.san}后的验证路线中，"
+                f"{_side_text(_opposite(move.side))}首先以{reply.san}回应{detail}。"
             )
         add(
             "reply",
@@ -386,15 +400,35 @@ def compose_verified_core_paragraph(
     }
     paragraphs: list[str] = []
     if groups["position"]:
-        paragraphs.append("先看全局：" + "".join(groups["position"]))
+        paragraphs.append("".join(groups["position"]))
     if groups["move"]:
-        paragraphs.append("实战把选择摆上棋盘：" + "".join(groups["move"]))
+        paragraphs.append("".join(groups["move"]))
     if groups["verdict"]:
-        paragraphs.append("再看关键选择：" + "".join(groups["verdict"]))
+        paragraphs.append("".join(groups["verdict"]))
     if groups["plan"]:
-        paragraphs.append("从计划看，已经得到验证的方向是：" + "".join(groups["plan"]))
+        paragraphs.append(
+            "后续计划只有在变化支持时才站得住；这里得到验证的方向是："
+            + "".join(groups["plan"])
+        )
     if groups["teaching"]:
-        paragraphs.append("这段变化留给初学者的原则是：" + "".join(groups["teaching"]))
+        teaching_text = "".join(groups["teaching"])
+        if "所有将军" in teaching_text:
+            lead = "这段变化提醒我们，强制着的检查次序不能颠倒："
+        elif "连续交换" in teaching_text:
+            lead = "这里真正值得记住的不是一次吃子，而是计算次序："
+        elif "完成易位" in teaching_text:
+            lead = "易位只是动作，随后的安全与协调才是检验："
+        elif "升变" in teaching_text:
+            lead = "兵走到终点并不代表计算结束："
+        else:
+            quiet_leads = (
+                "这里值得带走的不是需要背诵的答案，而是一种检查习惯：",
+                "把这一步真正学会，关键不在记住着法，而在记住检查顺序：",
+                "下一次遇到相似局面，可以先从同一个问题入手：",
+            )
+            move_surface = "".join(groups["move"])
+            lead = quiet_leads[sum(ord(character) for character in move_surface) % len(quiet_leads)]
+        paragraphs.append(lead + teaching_text)
     return "".join(paragraphs)
 
 
@@ -426,7 +460,7 @@ def resolve_narrative_claims(
     )
     has_non_best_comparison = bool(
         comparison_claim
-        and "就是Stockfish当前首选" not in comparison_claim.statement
+        and "首选与实战一致" not in comparison_claim.statement
     )
     event_text = event_claim.statement if event_claim else ""
     needs_concrete_reply = bool(
@@ -523,21 +557,18 @@ def _evaluation_posture_statement(move: MoveReview) -> str:
     mate_in = move.before.mate_in
     if mate_in is not None:
         side = "白方" if mate_in > 0 else "黑方"
-        return f"走棋前，Stockfish确认{side}存在强制将杀。"
+        return f"轮到{_side_text(move.side)}落子时，引擎已经确认{side}存在强制将杀。"
     centipawn = move.before.centipawn
     if centipawn is None:
-        return "走棋前，Stockfish没有提供足以判断优势归属的可靠评价。"
+        return f"轮到{_side_text(move.side)}落子时，引擎没有提供足以判断优势归属的可靠评价。"
     if abs(centipawn) <= 25:
-        return "走棋前，Stockfish判断局面大致均衡，双方都没有形成决定性优势。"
+        return f"轮到{_side_text(move.side)}落子时，局面在引擎眼中大致均衡，双方都没有决定性优势。"
     side = "白方" if centipawn > 0 else "黑方"
-    level = (
-        "轻微"
-        if abs(centipawn) <= 100
-        else "明显"
-        if abs(centipawn) <= 300
-        else "决定性"
-    )
-    return f"走棋前，Stockfish判断{side}{level}占优。"
+    if abs(centipawn) <= 100:
+        return f"轮到{_side_text(move.side)}落子时，引擎只给{side}轻微优势，局面远未失去弹性。"
+    if abs(centipawn) <= 300:
+        return f"轮到{_side_text(move.side)}落子时，引擎认为{side}已经明显占优。"
+    return f"轮到{_side_text(move.side)}落子时，引擎认为{side}已经取得决定性优势。"
 
 
 def _move_event_detail(move: VariationMove, *, captured_side: str) -> str:
@@ -564,20 +595,20 @@ def _teaching_statement(
     has_control: bool,
 ) -> str:
     if move.played_move.check or move.played_move.checkmate:
-        return "类似局面中，先检查所有将军和直接威胁，再研究较慢的计划。"
+        return "先检查所有将军和直接威胁，再研究较慢的计划。"
     if move.played_move.capture:
-        return "类似局面中，先把连续交换逐步算清，再判断眼前收益能否保住。"
+        return "先把连续交换逐步算清，再判断眼前收益能否保住。"
     if move.played_move.castling:
-        return "类似局面中，完成易位后先核对王的安全，再看车是否顺利参加战斗。"
+        return "完成易位后先核对王的安全，再看车是否顺利参加战斗。"
     if move.played_move.promotion:
-        return "类似局面中，升变后先检查新棋子的将军、攻击和对手最强回应。"
+        return "升变后先检查新棋子的将军、攻击和对手最强回应。"
     if has_target:
-        return "类似局面中，先检查落子后新增攻击哪些具体目标，再计算对手最强回应。"
+        return "先检查落子后新增攻击哪些具体目标，再计算对手最强回应。"
     if has_defense:
-        return "类似局面中，先比较落子前后的保护关系，再判断防守是否真正改善。"
+        return "先比较落子前后的保护关系，再判断防守是否真正改善。"
     if has_control:
-        return "类似局面中，先比较落子前后新增和失去的控制格，再判断这步是否配合当前计划。"
-    return "类似局面中，先核对这步实际改变的格子和对手最强回应，再评价它的战略意义。"
+        return "先比较落子前后新增和失去的控制格，再判断这步是否配合当前计划。"
+    return "先核对这步实际改变的格子和对手最强回应，再评价它的战略意义。"
 
 
 def _side_text(side: str) -> str:

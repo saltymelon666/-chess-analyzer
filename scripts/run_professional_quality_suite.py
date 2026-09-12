@@ -36,6 +36,7 @@ from app.professional_analysis import (
     build_professional_payload,
 )
 from app.narrative_claims import (
+    LEGACY_NARRATIVE_MARKERS,
     NarrativeClaimPackage,
     evaluate_narrative_claim_grounding,
     resolve_narrative_claims,
@@ -141,13 +142,13 @@ def thought_path_summary(
     punishment_mode = "not_applicable"
     punishment_handled = not inferior
     if inferior and any(
-        "没有证明这次吃子单独造成全部分差" in item.statement
+        "现有数据不足以证明这次吃子解释了全部分差" in item.statement
         for item in reply_claims
     ):
         punishment_mode = "immediate_capture"
         punishment_handled = True
     elif inferior and any(
-        "不能把后段事件提前说成" in item.statement for item in reply_claims
+        "不能倒推成第一回应的直接效果" in item.statement for item in reply_claims
     ):
         punishment_mode = "route_boundary"
         punishment_handled = True
@@ -159,19 +160,28 @@ def thought_path_summary(
         and item.source == "stockfish"
         and item.scope == "before_move"
     ), None)
-    global_posture = (
-        global_posture_claim is not None
-        and core.startswith("先看全局：走棋前")
-        and global_posture_claim.statement in core
-    )
+    played_claim = next((item for item in selected if item.claim_id.endswith(":played")), None)
+    comparison_claim = next((
+        item for item in selected if item.kind == "evaluation_comparison"
+    ), None)
+    teaching_claim = next((item for item in selected if item.kind == "teaching_rule"), None)
+    indices = {
+        "global": core.find(global_posture_claim.statement) if global_posture_claim else -1,
+        "played": core.find(played_claim.statement) if played_claim else -1,
+        "comparison": core.find(comparison_claim.statement) if comparison_claim else -1,
+        "teaching": core.find(teaching_claim.statement) if teaching_claim else -1,
+    }
+    global_posture = global_posture_claim is not None and indices["global"] == 0
     key_choice = (
         "evaluation_comparison" in kinds
-        and "再看关键选择：" in core
+        and min(indices["played"], indices["comparison"]) >= 0
+        and indices["played"] < indices["comparison"]
     )
     teaching_summary = (
         "teaching_rule" in kinds
-        and "这段变化留给初学者的原则是：" in core
+        and indices["teaching"] > indices["comparison"] >= 0
     )
+    legacy_template_free = not any(marker in core for marker in LEGACY_NARRATIVE_MARKERS)
     return {
         "globalPosture": global_posture,
         "keyChoice": key_choice,
@@ -179,11 +189,13 @@ def thought_path_summary(
         "inferiorMove": inferior,
         "punishmentHandled": punishment_handled,
         "punishmentMode": punishment_mode,
+        "legacyTemplateFree": legacy_template_free,
         "complete": (
             global_posture
             and key_choice
             and teaching_summary
             and punishment_handled
+            and legacy_template_free
         ),
     }
 
@@ -499,6 +511,7 @@ def render_report(results: list[dict[str, Any]], cache_ms: int | None, model: st
     )
     thought_rows = [item["thoughtPath"] for item in results if item.get("thoughtPath")]
     complete_thought_paths = sum(bool(item["complete"]) for item in thought_rows)
+    template_free_paths = sum(bool(item.get("legacyTemplateFree")) for item in thought_rows)
     inferior_rows = [item for item in thought_rows if item["inferiorMove"]]
     handled_punishments = sum(bool(item["punishmentHandled"]) for item in inferior_rows)
     immediate_capture_clues = sum(
@@ -510,6 +523,7 @@ def render_report(results: list[dict[str, Any]], cache_ms: int | None, model: st
     thought_summary = (
         f"- 强制思考路径完整：{complete_thought_paths}/{len(thought_rows)}"
         f"（可评估覆盖{len(thought_rows)}/{count}）。\n"
+        f"- 固定栏目口号已清除：{template_free_paths}/{len(thought_rows)}。\n"
         f"- 次佳着惩罚处理：{handled_punishments}/{len(inferior_rows)}；"
         f"其中首应立即吃子线索{immediate_capture_clues}局，"
         f"严格保留路线边界{bounded_punishments}局。"
