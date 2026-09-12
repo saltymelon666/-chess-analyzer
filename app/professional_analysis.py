@@ -196,6 +196,7 @@ class ProfessionalAnalysisService:
                 complexity.level,
             )
             _apply_verified_narrative_surface_guard(safe, move, narrative_claims)
+            safe = _fit_resolved_analysis_length(safe, move, complexity.level)
             errors = validate_professional_analysis(safe, context)
             if errors:
                 raise RuntimeError("安全专业分析未通过事实校验")
@@ -340,6 +341,7 @@ class ProfessionalAnalysisService:
                 )
                 parsed = _fit_resolved_analysis_length(parsed, move, complexity.level)
                 _apply_verified_narrative_surface_guard(parsed, move, narrative_claims)
+                parsed = _fit_resolved_analysis_length(parsed, move, complexity.level)
                 attempt_postprocess_ms = round((time.perf_counter() - postprocess_started) * 1000)
                 postprocess_ms += attempt_postprocess_ms
                 resolved_started = time.perf_counter()
@@ -400,6 +402,7 @@ class ProfessionalAnalysisService:
             complexity.level,
         )
         _apply_verified_narrative_surface_guard(safe, move, narrative_claims)
+        safe = _fit_resolved_analysis_length(safe, move, complexity.level)
         postprocess_ms += round((time.perf_counter() - postprocess_started) * 1000)
         validation_started = time.perf_counter()
         safe_errors = validate_professional_analysis(safe, context)
