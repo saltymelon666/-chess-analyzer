@@ -394,6 +394,8 @@
     .review-explanation { background:linear-gradient(145deg,#FFF9E8,#FFFDF7); box-shadow:inset 0 1px 0 #fff; }
     .professional-section { box-shadow:0 4px 0 rgba(91,70,43,.035),0 16px 34px rgba(91,70,43,.11); animation:cardRise .44s cubic-bezier(.2,.75,.25,1) backwards; }
     .professional-position-section { background:#FFFDF8; border-color:#E6D4AE; }
+    .professional-commentary-section { background:linear-gradient(145deg,#FFF7D9,#FFFDF5); border-color:#E8C86E; }
+    .professional-core-narrative { font-size:clamp(18px,1.6vw,21px) !important; line-height:1.85 !important; }
     .professional-plan-section { background:#F2F9F6; border-color:#C8E2D9; animation-delay:.06s; }
     .move-quality-section { background:#FFF8E7; border-color:#E9D19A; animation-delay:.09s; }
     .professional-routes-section { background:#F3F8FA; border-color:#CDE0E7; animation-delay:.12s; }
@@ -1562,6 +1564,11 @@ function renderProfessionalAnalysis(payload) {
   const openingCard = opening?.displayName ? `<div class="professional-opening"><div class="professional-opening-kicker">📚 当前开局</div><strong class="professional-opening-name">${escapeHtml(opening.displayName)}</strong><p class="professional-opening-source">${escapeHtml(opening.eco || "")} · ${escapeHtml(opening.name || "")}</p><p>${escapeHtml(opening.description || "")}</p><div class="professional-opening-ideas"><p><span class="professional-label">白方常见思路：</span>${escapeHtml(opening.whitePlan || "")}</p><p><span class="professional-label">黑方常见思路：</span>${escapeHtml(opening.blackPlan || "")}</p></div>${openingThemes.length ? `<p class="professional-opening-themes"><span class="professional-label">常见战术主题：</span>${openingThemes.map(escapeHtml).join("、")}</p>` : ""}</div>` : "";
   if (openingCard || positionParagraphs.length) {
     parts.push(`<section class="professional-section professional-position-section"><h4>双方子力与局面</h4>${openingCard}${positionParagraphs.map(item => `<p>${escapeHtml(item)}</p>`).join("")}</section>`);
+  }
+
+  const coreNarrative = completeProfessionalSentence(played.intention);
+  if (coreNarrative) {
+    parts.push(`<section class="professional-section professional-commentary-section"><h4>♟ 局面解读</h4><p class="professional-core-narrative">${escapeHtml(coreNarrative)}</p></section>`);
   }
 
   document.getElementById("professionalComplexity").textContent = complexityNames[analysis.complexity] || "专业分析";

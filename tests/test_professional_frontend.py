@@ -108,6 +108,14 @@ def test_professional_report_only_renders_conclusion_sections() -> None:
         assert "played.continuationPhases" in page
 
 
+def test_verified_core_commentary_is_visible_in_the_professional_panel() -> None:
+    for page in _pages():
+        assert "const coreNarrative = completeProfessionalSentence(played.intention);" in page
+        assert 'if (coreNarrative) {' in page
+        assert "♟ 局面解读" in page
+        assert "professional-core-narrative" in page
+
+
 def test_castling_history_sentences_are_removed_from_position_display() -> None:
     for page in _pages():
         assert "function professionalPositionSentences(value)" in page
