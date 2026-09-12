@@ -1,10 +1,12 @@
+import asyncio
+import threading
 from pathlib import Path
 
 import chess
 import chess.engine
 import pytest
 
-from app.engine import StockfishService
+from app.engine import StockfishBusyError, StockfishService
 from app.models import EngineResult, MoveResult
 
 
@@ -46,6 +48,60 @@ async def test_invalid_fen_is_rejected() -> None:
     )
     with pytest.raises(ValueError, match="无效的 FEN"):
         await service.analyze("not-a-fen")
+
+
+@pytest.mark.asyncio
+async def test_busy_stockfish_request_has_bounded_queue_wait() -> None:
+    service = StockfishService(
+        ROOT / "stockfish.exe",
+        depth=1,
+        threads=1,
+        hash_mb=16,
+        multipv=1,
+        timeout_seconds=5,
+        queue_timeout_seconds=0.01,
+    )
+    service.available = lambda: True
+    await service._lock.acquire()
+    try:
+        with pytest.raises(StockfishBusyError, match="正在处理其他整盘分析"):
+            await service.analyze_many(
+                [chess.STARTING_FEN],
+                depth=1,
+                timeout_seconds=5,
+            )
+    finally:
+        service._lock.release()
+
+
+@pytest.mark.asyncio
+async def test_timed_out_worker_keeps_lock_until_background_thread_finishes() -> None:
+    service = StockfishService(
+        ROOT / "stockfish.exe",
+        depth=1,
+        threads=1,
+        hash_mb=16,
+        multipv=1,
+        timeout_seconds=5,
+    )
+    started = threading.Event()
+    release = threading.Event()
+
+    def slow_worker() -> None:
+        started.set()
+        release.wait(timeout=2)
+
+    with pytest.raises(asyncio.TimeoutError):
+        await service._run_exclusive(slow_worker, timeout_seconds=0.01)
+
+    assert started.is_set()
+    assert service._lock.locked()
+    release.set()
+    for _ in range(100):
+        if not service._lock.locked():
+            break
+        await asyncio.sleep(0.01)
+    assert not service._lock.locked()
 
 
 def test_illegal_move_invalidates_complete_engine_pv() -> None:

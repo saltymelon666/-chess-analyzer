@@ -331,6 +331,65 @@ def test_game_review_records_analysis_without_changing_analysis_flow(monkeypatch
     assert statistics.successes == 1
 
 
+def test_game_review_returns_retryable_busy_response(monkeypatch, tmp_path) -> None:
+    store = AnalyticsStore(tmp_path / "busy-review-analytics.sqlite3")
+    monkeypatch.setattr(api, "analytics_store", store)
+
+    async def fake_analyze_pgn(**kwargs):
+        raise api.StockfishBusyError("busy")
+
+    monkeypatch.setattr(api, "analyze_pgn", fake_analyze_pgn)
+    client = TestClient(api.app)
+    response = client.post(
+        "/api/game-review",
+        json={
+            "pgn": "1. e4 e5",
+            "visitor_id": "visitor_busy_1234",
+            "analysis_id": "analysis_busy_1234",
+        },
+    )
+
+    assert response.status_code == 503
+    assert response.headers["retry-after"] == "10"
+    assert response.json()["detail"] == "当前分析任务较多，请稍后重试"
+
+
+def test_professional_failure_does_not_overwrite_successful_game_status(
+    monkeypatch, tmp_path
+) -> None:
+    store = AnalyticsStore(tmp_path / "separate-professional-status.sqlite3")
+    monkeypatch.setattr(api, "analytics_store", store)
+    analysis_id = "analysis_professional_failure_1234"
+    store.start_analysis(analysis_id, "visitor_professional_1234", "1. e4 e5")
+    store.finish_analysis(
+        analysis_id,
+        success=True,
+        stockfish_ms=100,
+        total_ms=100,
+        move_count=2,
+    )
+    api.game_cache.clear()
+    api.professional_cache.clear()
+    api.professional_tasks.clear()
+    api.game_cache[analysis_id] = [sample_move_review()]
+
+    async def fail_professional_analysis(*args, **kwargs):
+        raise RuntimeError("DeepSeek unavailable")
+
+    monkeypatch.setattr(api, "_generate_professional_analysis", fail_professional_analysis)
+    client = TestClient(api.app)
+    response = client.post(
+        "/api/professional-analysis",
+        json={"analysis_id": analysis_id, "move_index": 1},
+    )
+
+    assert response.status_code == 200
+    assert "暂不可用" in response.json()["warning"]
+    statistics = store.daily_statistics()
+    assert statistics.successes == 1
+    assert statistics.failures == 0
+
+
 def test_game_review_attaches_french_euwe_context_before_be7(monkeypatch) -> None:
     pgn = "1. e4 e6 2. d4 d5 3. e5 c5 4. c3 Nc6 5. Nf3 Bd7 6. Be2 Nge7 7. O-O Ng6 8. g3 Be7"
     board = chess.Board()

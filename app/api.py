@@ -36,7 +36,7 @@ from .chess_facts import build_engine_fact_package, build_move_fact_package
 from .config import load_settings
 from .config import OFFICIAL_DEEPSEEK_BASE_URL
 from .deepseek_connection import check_deepseek_connection
-from .engine import StockfishService
+from .engine import StockfishBusyError, StockfishService
 from .endgame_knowledge import (
     EndgameKnowledgeRepository,
     EndgameLookupRequest,
@@ -508,6 +508,20 @@ async def game_review(request: GameReviewRequest) -> GameReviewResponse:
             total_ms=elapsed_ms,
         )
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except StockfishBusyError as exc:
+        elapsed_ms = round((time.perf_counter() - started) * 1000)
+        await _record_analytics(
+            "finish_analysis",
+            analysis_id,
+            success=False,
+            stockfish_ms=elapsed_ms,
+            total_ms=elapsed_ms,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="当前分析任务较多，请稍后重试",
+            headers={"Retry-After": "10"},
+        ) from exc
     except asyncio.TimeoutError as exc:
         elapsed_ms = round((time.perf_counter() - started) * 1000)
         await _record_analytics(
@@ -705,7 +719,6 @@ async def professional_analysis(request: MoveExplanationRequest) -> Professional
         )
     except (httpx.HTTPError, RuntimeError) as exc:
         logger.warning("Professional analysis unavailable: %s", exc)
-        await _record_analytics("mark_analysis_failed", request.analysis_id)
         return ProfessionalAnalysisResponse(
             openingContext=opening_context,
             book_references=book_references,
@@ -714,7 +727,6 @@ async def professional_analysis(request: MoveExplanationRequest) -> Professional
         )
     except Exception:
         logger.exception("Unexpected professional analysis error")
-        await _record_analytics("mark_analysis_failed", request.analysis_id)
         return ProfessionalAnalysisResponse(
             openingContext=opening_context,
             book_references=book_references,
@@ -781,7 +793,6 @@ async def analysis_report(request: MoveExplanationRequest) -> AnalysisReportResp
         )
     except Exception as exc:
         logger.exception("Unexpected analysis report error")
-        await _record_analytics("mark_analysis_failed", request.analysis_id)
         raise HTTPException(status_code=503, detail="专业复盘报告暂不可用") from exc
     finally:
         task = analysis_report_tasks.get(cache_key)
