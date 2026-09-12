@@ -95,8 +95,12 @@ def test_professional_report_only_renders_conclusion_sections() -> None:
         assert "const lines = analysis.candidateLines || [];" in page
         assert "const routeCards = lines.map(line =>" in page
         assert "直接目的：" not in page
-        assert "第一步作用：" in page
-        assert "line.directPurpose" in page
+        assert "第一步作用：" not in page
+        assert "line.directPurpose" not in page
+        assert "line.opponentResponse" not in page
+        assert "line.advantages" not in page
+        assert "line.risks" not in page
+        assert '<div class="professional-moves">${escapeHtml(moves)}</div></div>' in page
         assert "line.events" not in page
         assert "professional-route-event" not in page
         assert "const needsMoveExplanation = Boolean(activeReview" in page
@@ -114,6 +118,16 @@ def test_verified_core_commentary_is_visible_in_the_professional_panel() -> None
         assert 'if (coreNarrative) {' in page
         assert "♟ 局面解读" in page
         assert "professional-core-narrative" in page
+
+
+def test_research_routes_only_render_move_evaluation_and_variation() -> None:
+    for page in _pages():
+        assert "第一步作用：" not in page
+        assert "line.directPurpose" not in page
+        assert "line.opponentResponse" not in page
+        assert "line.advantages" not in page
+        assert "line.risks" not in page
+        assert '<div class="professional-moves">${escapeHtml(moves)}</div></div>' in page
 
 
 def test_castling_history_sentences_are_removed_from_position_display() -> None:
