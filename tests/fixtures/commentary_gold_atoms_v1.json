@@ -1,0 +1,117 @@
+{
+  "version": "commentary-gold-v1",
+  "annotationMethod": "人工规则审校：仅使用Stockfish首选路线、python-chess验证事实和固定结构字段，不使用待评价的DeepSeek正文生成金标。",
+  "positions": [
+    {
+      "id": "tactic-2",
+      "goldAtoms": [
+        {
+          "atomId": "tactic-2-verdict",
+          "kind": "verdict",
+          "summary": "明确Rxf7+是程序首选",
+          "acceptableEvidenceSets": [["move:played:1", "evaluation:before:1", "evaluation:after:1"]],
+          "acceptableClaimPaths": ["playedMoveAnalysis.evaluationReason"],
+          "requiredTextGroups": [["Rxf7+"], ["最佳着", "首选"]]
+        },
+        {
+          "atomId": "tactic-2-double-attack",
+          "kind": "mechanism",
+          "summary": "说明Rxf7+形成对兵与王的双攻",
+          "acceptableEvidenceSets": [["fact:move-1-before:threat:direct_piece_loss:white:c4-f7", "fact:move-1-before:threat:direct_piece_loss:black:g5-f7"]],
+          "acceptableClaimPaths": ["playedMoveAnalysis.intention", "playedMoveAnalysis.positiveEffects[*]"],
+          "requiredTextGroups": [["Rxf7+"], ["同时攻击", "双攻"], ["黑兵"], ["黑王"]]
+        },
+        {
+          "atomId": "tactic-2-forcing-check",
+          "kind": "mechanism",
+          "summary": "说明首选着通过吃兵形成将军",
+          "acceptableEvidenceSets": [["line:1"]],
+          "acceptableClaimPaths": ["candidateLines[0].directPurpose"],
+          "requiredTextGroups": [["Rxf7+"], ["吃掉兵", "吃兵"], ["将军"]]
+        },
+        {
+          "atomId": "tactic-2-response",
+          "kind": "opponent_resource",
+          "summary": "指出黑方首要回应Qxf7",
+          "acceptableEvidenceSets": [["line:1"]],
+          "acceptableClaimPaths": ["candidateLines[0].opponentResponse"],
+          "requiredTextGroups": [["Qxf7"]]
+        }
+      ]
+    },
+    {
+      "id": "king-attack-2",
+      "goldAtoms": [
+        {
+          "atomId": "king-attack-2-verdict",
+          "kind": "verdict",
+          "summary": "明确Ng5是程序首选",
+          "acceptableEvidenceSets": [["move:played:1", "evaluation:before:1", "evaluation:after:1"]],
+          "acceptableClaimPaths": ["playedMoveAnalysis.evaluationReason"],
+          "requiredTextGroups": [["Ng5"], ["最佳着", "首选"]]
+        },
+        {
+          "atomId": "king-attack-2-double-attack",
+          "kind": "mechanism",
+          "summary": "说明Ng5同时攻击黑后、黑象和f7兵",
+          "acceptableEvidenceSets": [["fact:move-1-before:threat:direct_piece_loss:white:c4-f7", "fact:move-1-before:threat:direct_piece_loss:black:g5-f7"]],
+          "acceptableClaimPaths": ["playedMoveAnalysis.intention", "playedMoveAnalysis.positiveEffects[*]"],
+          "requiredTextGroups": [["Ng5"], ["同时攻击", "双攻"], ["黑后"], ["黑象"], ["f7"]]
+        },
+        {
+          "atomId": "king-attack-2-first-step",
+          "kind": "mechanism",
+          "summary": "首选路线必须从Ng5开始",
+          "acceptableEvidenceSets": [["line:1"]],
+          "acceptableClaimPaths": ["candidateLines[0].directPurpose"],
+          "requiredTextGroups": [["Ng5"], ["f3"], ["g5"]]
+        },
+        {
+          "atomId": "king-attack-2-response",
+          "kind": "opponent_resource",
+          "summary": "指出黑方首要回应Qc4",
+          "acceptableEvidenceSets": [["line:1"]],
+          "acceptableClaimPaths": ["candidateLines[0].opponentResponse"],
+          "requiredTextGroups": [["Qc4"]]
+        }
+      ]
+    },
+    {
+      "id": "simplify-1",
+      "goldAtoms": [
+        {
+          "atomId": "simplify-1-verdict",
+          "kind": "verdict",
+          "summary": "明确Qxb8是程序首选",
+          "acceptableEvidenceSets": [["move:played:1", "evaluation:before:1", "evaluation:after:1"]],
+          "acceptableClaimPaths": ["playedMoveAnalysis.evaluationReason"],
+          "requiredTextGroups": [["Qxb8"], ["最佳着", "首选"]]
+        },
+        {
+          "atomId": "simplify-1-double-attack",
+          "kind": "mechanism",
+          "summary": "说明Qxb8同时攻击b6兵与f8车",
+          "acceptableEvidenceSets": [["fact:move-1-before:threat:direct_piece_loss:black:a7-b8", "fact:move-1-before:threat:direct_piece_loss:white:f8-b8"]],
+          "acceptableClaimPaths": ["playedMoveAnalysis.intention", "playedMoveAnalysis.positiveEffects[*]"],
+          "requiredTextGroups": [["Qxb8"], ["同时攻击", "双攻"], ["b6"], ["f8"]]
+        },
+        {
+          "atomId": "simplify-1-queen-exchange",
+          "kind": "mechanism",
+          "summary": "说明Qxb8直接换后",
+          "acceptableEvidenceSets": [["line:1"]],
+          "acceptableClaimPaths": ["candidateLines[0].directPurpose"],
+          "requiredTextGroups": [["Qxb8"], ["吃掉后", "换后", "交换后"]]
+        },
+        {
+          "atomId": "simplify-1-response",
+          "kind": "opponent_resource",
+          "summary": "指出黑方首要回应Rxb8",
+          "acceptableEvidenceSets": [["line:1"]],
+          "acceptableClaimPaths": ["candidateLines[0].opponentResponse"],
+          "requiredTextGroups": [["Rxb8"]]
+        }
+      ]
+    }
+  ]
+}

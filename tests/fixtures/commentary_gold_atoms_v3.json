@@ -1,0 +1,43 @@
+{
+  "version": "commentary-gold-v3",
+  "baseFile": "commentary_gold_atoms_v2.json",
+  "annotationMethod": "计划原子只取StrategicPlanAnalyzer基于至少两条已验证Stockfish路线和结构事实产生的high置信度计划；不从DeepSeek正文或类别级expected.strategy推导当前计划。",
+  "coverage": {"verifiedPlanPositions": 9, "newDetailAtoms": 17},
+  "positions": [
+    {"id": "opening-1", "detailAtoms": [
+      {"atomId": "opening-1-plan-white-c4", "kind": "practical_plan", "tier": "detail", "summary": "白方准备c4中心突破", "acceptableEvidenceSets": [["line:1", "line:2"]], "acceptableClaimPaths": ["plans.white[*].description"], "requiredTextGroups": [["c4", "中心兵"], ["中心", "突破"]]},
+      {"atomId": "opening-1-plan-black-c5", "kind": "practical_plan", "tier": "detail", "summary": "黑方准备c5中心突破", "acceptableEvidenceSets": [["line:1", "line:2", "line:3"]], "acceptableClaimPaths": ["plans.black[*].description"], "requiredTextGroups": [["c5", "中心兵"], ["中心", "突破", "挑战"]]},
+      {"atomId": "opening-1-plan-black-b8-knight", "kind": "practical_plan", "tier": "detail", "summary": "黑方改善b8马活动", "acceptableEvidenceSets": [["line:2", "line:3"]], "acceptableClaimPaths": ["plans.black[*].description"], "requiredTextGroups": [["b8", "边线马", "角落马"], ["马"], ["活动", "出动", "协调"]]}
+    ]},
+    {"id": "opening-2", "detailAtoms": [
+      {"atomId": "opening-2-plan-white-b1-knight", "kind": "practical_plan", "tier": "detail", "summary": "白方改善b1马活动", "acceptableEvidenceSets": [["line:1", "line:3"]], "acceptableClaimPaths": ["plans.white[*].description"], "requiredTextGroups": [["b1", "马"], ["活动", "出动", "协调"]]},
+      {"atomId": "opening-2-plan-black-c5", "kind": "practical_plan", "tier": "detail", "summary": "黑方准备c5中心突破", "acceptableEvidenceSets": [["line:1", "line:3"]], "acceptableClaimPaths": ["plans.black[*].description"], "requiredTextGroups": [["c5"], ["中心", "突破", "挑战"]]},
+      {"atomId": "opening-2-plan-black-d5", "kind": "practical_plan", "tier": "detail", "summary": "黑方准备d5中心突破", "acceptableEvidenceSets": [["line:1", "line:3"]], "acceptableClaimPaths": ["plans.black[*].description"], "requiredTextGroups": [["d5"], ["中心", "突破", "挑战"]]}
+    ]},
+    {"id": "opening-3", "detailAtoms": [
+      {"atomId": "opening-3-plan-white-f1-bishop", "kind": "practical_plan", "tier": "detail", "summary": "白方改善f1象活动", "acceptableEvidenceSets": [["line:2", "line:3"]], "acceptableClaimPaths": ["plans.white[*].description"], "requiredTextGroups": [["f1", "王翼象"], ["象"], ["活动", "出动", "协调"]]},
+      {"atomId": "opening-3-plan-black-g8-knight", "kind": "practical_plan", "tier": "detail", "summary": "黑方改善g8马活动", "acceptableEvidenceSets": [["line:1", "line:3"]], "acceptableClaimPaths": ["plans.black[*].description"], "requiredTextGroups": [["g8", "后翼马"], ["马"], ["活动", "出动", "协调"]]}
+    ]},
+    {"id": "tactic-1", "detailAtoms": [
+      {"atomId": "tactic-1-plan-white-c6-pawn", "kind": "practical_plan", "tier": "detail", "summary": "白方集中攻击c6弱兵", "acceptableEvidenceSets": [["line:1", "line:2"]], "acceptableClaimPaths": ["plans.white[*].description"], "requiredTextGroups": [["c6"], ["兵"], ["攻击", "集中"]]}
+    ]},
+    {"id": "tactic-2", "detailAtoms": [
+      {"atomId": "tactic-2-plan-white-king-safety", "kind": "practical_plan", "tier": "detail", "summary": "白方交换王区攻击子改善王安全", "acceptableEvidenceSets": [["line:1", "line:3"]], "acceptableClaimPaths": ["plans.white[*].description"], "requiredTextGroups": [["交换"], ["王", "王区"], ["安全"]]},
+      {"atomId": "tactic-2-plan-black-king-safety", "kind": "practical_plan", "tier": "detail", "summary": "黑方交换王区攻击子改善王安全", "acceptableEvidenceSets": [["line:1", "line:3"]], "acceptableClaimPaths": ["plans.black[*].description"], "requiredTextGroups": [["交换"], ["王", "王区"], ["安全", "威胁"]]},
+      {"atomId": "tactic-2-plan-white-passed-pawn", "kind": "practical_plan", "tier": "detail", "summary": "白方制造e线通路兵", "acceptableEvidenceSets": [["line:1", "line:2", "line:3"]], "acceptableClaimPaths": ["plans.white[*].description"], "requiredTextGroups": [["e线"], ["通路兵"]]}
+    ]},
+    {"id": "king-attack-1", "detailAtoms": [
+      {"atomId": "king-attack-1-plan-white-passed-pawn", "kind": "practical_plan", "tier": "detail", "summary": "白方制造f线通路兵", "acceptableEvidenceSets": [["line:1", "line:2", "line:3"]], "acceptableClaimPaths": ["plans.white[*].description"], "requiredTextGroups": [["f线"], ["通路兵"]]}
+    ]},
+    {"id": "king-attack-2", "detailAtoms": [
+      {"atomId": "king-attack-2-plan-white-e6-break", "kind": "practical_plan", "tier": "detail", "summary": "白方准备e6中心突破", "acceptableEvidenceSets": [["line:2", "line:3"]], "acceptableClaimPaths": ["plans.white[*].description"], "requiredTextGroups": [["e6", "中心兵"], ["中心", "突破", "推进"]]}
+    ]},
+    {"id": "king-attack-3", "detailAtoms": [
+      {"atomId": "king-attack-3-plan-white-d-file", "kind": "practical_plan", "tier": "detail", "summary": "白车占据d开放线", "acceptableEvidenceSets": [["line:2", "line:3"]], "acceptableClaimPaths": ["plans.white[*].description"], "requiredTextGroups": [["d"], ["开放线", "线路"], ["车"]]},
+      {"atomId": "king-attack-3-plan-black-d-file", "kind": "practical_plan", "tier": "detail", "summary": "黑车占据d开放线", "acceptableEvidenceSets": [["line:1", "line:3"]], "acceptableClaimPaths": ["plans.black[*].description"], "requiredTextGroups": [["d"], ["开放线", "线路"], ["车"]]}
+    ]},
+    {"id": "center-1", "detailAtoms": [
+      {"atomId": "center-1-plan-white-e4-break", "kind": "practical_plan", "tier": "detail", "summary": "白方准备e4中心突破", "acceptableEvidenceSets": [["line:1", "line:2", "line:3"]], "acceptableClaimPaths": ["plans.white[*].description"], "requiredTextGroups": [["e4", "中心兵"], ["中心", "突破", "推进"]]}
+    ]}
+  ]
+}

@@ -213,6 +213,14 @@ def test_lookup_by_exact_fen(repository: OpeningKnowledgeRepository) -> None:
     assert result.opening is not None
     assert result.opening.eco == "A00"
 
+    presentation = repository.presentation_from_lookup(
+        result,
+        catalog_position_confirmed=True,
+    )
+
+    assert presentation is not None
+    assert presentation.query_ply == 0
+
 
 def test_lookup_rejects_mismatched_pgn_and_fen(repository: OpeningKnowledgeRepository) -> None:
     with pytest.raises(ValueError, match="不一致"):

@@ -5,6 +5,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Iterable
 
+import chess
 from pydantic import ValidationError
 
 from .analysis_focus import AnalysisFocus, select_analysis_focus
@@ -31,11 +32,26 @@ from .strategic_plans import StrategicPlanPackage
 
 
 VAGUE_CLAIMS = ("加强中心", "注意防守", "改善子力", "形成压力", "准备进攻", "局面复杂")
+SANITIZED_CLAIM_FALLBACK = "这条变化还要看对手接下来怎么应对。"
+SANITIZED_CLAIM_FALLBACKS = {
+    SANITIZED_CLAIM_FALLBACK,
+    "当前应继续比较各条路线的实际结果。",
+}
 
 SIDE_NAMES = {"white": "白方", "black": "黑方"}
 INCOMPLETE_ENDINGS = (
     "正在", "准备", "为了", "通过", "因为", "因此", "意大", "可以让", "正",
     "需要", "能够", "可以", "以及", "同时", "并", "从", "向", "的",
+)
+
+# DeepSeek prose is explanatory only. Concrete board events and material gains
+# must be rebuilt from referenced ply facts instead of being paraphrased by the
+# model.  Keep material-result synonyms here as well: replacing "吃掉" with
+# "赢得" used to hide the same unsupported claim from the event validator.
+UNVERIFIED_EVENT_CLAIM_PATTERN = re.compile(
+    r"(?:吃子|吃掉|捕获|拿掉|将军|将杀|绝杀|赢兵|得兵|获兵|赢子|"
+    r"(?:赢得|获得|夺取|白赚|净赚|赚取).{0,10}(?:中心兵|兵|卒|子力|棋子|马|象|车|后)|"
+    r"(?:获得|取得|形成|建立|扩大).{0,6}物质优势)"
 )
 
 REFERENCE_OUTPUT_CONTRACT = {
@@ -68,6 +84,7 @@ REFERENCE_OUTPUT_CONTRACT = {
         "continuationExplanation": "causal explanation",
         "errorType": "tactical|strategic|both|none",
         "evidenceRefs": ["existing-id"],
+        "claimRefs": ["existing narrative-claim-id"],
     },
     "candidateLines": [{
         "lineRef": "line-id",
@@ -225,7 +242,7 @@ def _drop_unknown_strategy_tags(payload: object) -> None:
             line["strategyTags"] = [
                 tag for tag in tags
                 if isinstance(tag, str) and tag in _ALLOWED_STRATEGY_TAGS
-            ]
+            ][:3]
 
 
 def normalize_professional_draft_literals(
@@ -264,6 +281,30 @@ def normalize_professional_draft_literals(
         if not isinstance(value, str):
             return value
 
+        sentences = [
+            sentence.strip()
+            for sentence in re.split(r"(?<=[。！？!?；;])", value)
+            if sentence.strip()
+        ]
+        safe_sentences = [
+            sentence
+            for sentence in sentences
+            if not UNVERIFIED_EVENT_CLAIM_PATTERN.search(sentence)
+        ]
+        if len(safe_sentences) != len(sentences):
+            issues.append(DraftValidationIssue(
+                path,
+                "硬事实保护",
+                "已整句移除由模型补写的吃子、将军、将杀或子力收益",
+            ))
+            value = "".join(safe_sentences)
+            if not value:
+                value = (
+                    "不先处理的话，对手下一步就能把这个威胁落到实处。"
+                    if path == "mainDanger.consequence"
+                    else SANITIZED_CLAIM_FALLBACK
+                )
+
         def replace_uci(match: re.Match[str]) -> str:
             issues.append(DraftValidationIssue(path, "不属于Stockfish的走法", f"已移除自由文本UCI：{match.group(1)}"))
             return "该走法"
@@ -300,6 +341,24 @@ def normalize_professional_draft_literals(
         move,
         context.allowed_evidence_ids,
     )
+    program_owned_ref_paths = [
+        (payload["mainDanger"], move.played_move.id or f"move:played:{move.index}"),
+        (payload["playedMoveAnalysis"], move.played_move.id or f"move:played:{move.index}"),
+        (payload["comparison"], move.candidate_lines[0].id if move.candidate_lines else None),
+    ]
+    for item, required_source in program_owned_ref_paths:
+        item["evidenceRefs"] = [
+            ref for ref in item.get("evidenceRefs", []) if ref in source_by_alias
+        ]
+        required_alias = aliases_by_source.get(required_source or "")
+        if required_alias and required_alias not in item["evidenceRefs"]:
+            item["evidenceRefs"].append(required_alias)
+    for item in payload["candidateLines"]:
+        item["evidenceRefs"] = [
+            ref for ref in item.get("evidenceRefs", []) if ref in source_by_alias
+        ]
+        if item["lineRef"] not in item["evidenceRefs"]:
+            item["evidenceRefs"].append(item["lineRef"])
     for side in ("white", "black"):
         for index, plan in enumerate(payload["plans"][side]):
             original_refs = list(plan["evidenceRefs"])
@@ -362,6 +421,14 @@ def validate_professional_draft(
     allowed_squares = {item.lower() for item in context.allowed_squares}
     allowed_moves = {item.replace("0", "O").rstrip("+#") for item in context.allowed_moves}
     for path, text in _walk_free_text(payload):
+        if _is_program_owned_narrative_path(path):
+            continue
+        if UNVERIFIED_EVENT_CLAIM_PATTERN.search(text):
+            issues.append(DraftValidationIssue(
+                path,
+                "硬事实保护",
+                "自由解释声称了吃子、将军、将杀或子力收益；这些结论必须由程序根据对应ply事实生成",
+            ))
         malformed = sorted(set(re.findall(r"(?<![A-Za-z0-9])([A-Za-z][0-9])(?![A-Za-z0-9])", text)))
         for square in malformed:
             if not re.fullmatch(r"[a-h][1-8]", square, re.I):
@@ -463,9 +530,17 @@ def resolve_professional_draft(
     strategic_plan_package: StrategicPlanPackage | None = None,
 ) -> ProfessionalAnalysis:
     focus = select_analysis_focus(move)
-    draft = ProfessionalAnalysisDraft.model_validate(
-        _sanitize_draft_event_words(draft.model_dump(by_alias=True))
-    )
+    unsafe_paths = [
+        path
+        for path, text in _walk_free_text(draft.model_dump(by_alias=True))
+        if not _is_program_owned_narrative_path(path)
+        and UNVERIFIED_EVENT_CLAIM_PATTERN.search(text)
+    ]
+    if unsafe_paths:
+        raise ValueError(
+            "professional draft contains program-owned event claims: "
+            + ", ".join(unsafe_paths)
+        )
     source_by_alias, aliases_by_source = _reference_maps(
         move,
         context.allowed_evidence_ids,
@@ -502,7 +577,12 @@ def resolve_professional_draft(
             explanation = _complete_display_sentence(
                 explanations.get(plan.plan_id, "")
             )
-            description = explanation or _complete_display_sentence(plan.goal)
+            if explanation in SANITIZED_CLAIM_FALLBACKS:
+                explanation = ""
+            program_goal = _complete_display_sentence(plan.goal)
+            description = program_goal
+            if explanation and explanation != program_goal:
+                description += explanation
             preparation = _complete_display_sentence(
                 "；".join(plan.structural_evidence[:2])
             )
@@ -582,6 +662,8 @@ def resolve_professional_draft(
     )
 
     def phase(ply_refs: list[str], explanation: str, label: str) -> list[ProfessionalContinuationPhase]:
+        if not ply_refs:
+            return []
         return [ProfessionalContinuationPhase(
             phase=label,
             moves=[plies_by_id[ref].san for ref in ply_refs],
@@ -591,20 +673,31 @@ def resolve_professional_draft(
 
     def result_position(line: Any) -> str:
         if line is None:
-            return "没有提供实战续算的结果局面。"
+            return "这里没有继续展开变化。"
         facts = line.resulting_position_facts
         if facts:
-            return f"路线结束时轮到{facts.side_to_move}方行棋；具体子力后果只在路线确实发生重要得失时说明。"
-        return "路线结束后没有额外的结果局面事实。"
+            return (
+                f"算到这里，轮到{_human_side(facts.side_to_move)}走。"
+            )
+        return "这条变化算到这里为止。"
 
     played = draft.played_move_analysis
-    strongest = plies_by_id[played.strongest_reply_ref]
+    strongest = plies_by_id.get(played.strongest_reply_ref or "")
+    no_reply_text = (
+        "棋局已经结束，没有对手回应。"
+        if chess.Board(move.after_fen).is_game_over(claim_draw=True)
+        else "没有可用的对手续算路线，无法确认最强回应。"
+    )
     played_analysis = ProfessionalPlayedMoveAnalysis(
         move=move.played_move.san,
         intention=played.intention,
         positiveEffects=played.positive_effects,
         problems=played.problems,
-        strongestResponse=strongest.san,
+        strongestResponse=(
+            strongest.san
+            if strongest is not None
+            else no_reply_text
+        ),
         continuationPhases=phase(played.ply_refs, played.continuation_explanation, "实战续算"),
         resultingPosition=result_position(actual),
         evaluationReason=f"实战前评价{move.before.evaluation}，实战后评价{move.after.evaluation}。",
@@ -615,6 +708,7 @@ def resolve_professional_draft(
             f"evaluation:before:{move.index}",
             f"evaluation:after:{move.index}",
         ),
+        claimRefs=played.claim_refs,
     )
 
     candidate_lines = []
@@ -641,7 +735,7 @@ def resolve_professional_draft(
             advantages=item.advantages,
             risks=item.risks,
             events=route_events,
-            whyThisRank=f"该路线由Stockfish列为第{line.rank}候选。",
+            whyThisRank="",
             evidenceRefs=refs(item.evidence_refs, item.line_ref),
         ))
 
@@ -734,7 +828,7 @@ def _program_direct_purpose(line: Any) -> str:
         "queen": "后",
         "king": "王",
     }.get(piece_key, "棋子")
-    action = f"第一步{side}{piece_name}从{first.from_square}走到{first.to_square}（{first.san}）"
+    action = f"第一步先走{first.san}，{side}{piece_name}从{first.from_square}来到{first.to_square}"
     effects: list[str] = []
     if first.capture:
         captured_key = (first.captured_piece or "").split("_")[-1]
@@ -754,7 +848,7 @@ def _program_direct_purpose(line: Any) -> str:
         effects.append("形成将军")
     if effects:
         return f"{action}，并{'、'.join(effects)}。"
-    return f"{action}，作为这条Stockfish路线的起点。"
+    return f"{action}。"
 
 
 def _evidence_descriptions(move: MoveReview) -> dict[str, str]:
@@ -763,7 +857,7 @@ def _evidence_descriptions(move: MoveReview) -> dict[str, str]:
         f"evaluation:after:{move.index}": f"实战后评价{move.after.evaluation}",
         f"complexity:{move.index}": f"复杂度{move.complexity}",
         move.played_move.id or f"move:played:{move.index}": (
-            f"{move.played_move.piece}从{move.played_move.from_square}走到"
+            f"{_human_piece(move.played_move.piece)}从{move.played_move.from_square}走到"
             f"{move.played_move.to_square}（{move.played_move.san}）"
         ),
     }
@@ -774,7 +868,9 @@ def _evidence_descriptions(move: MoveReview) -> dict[str, str]:
             f"{move.position_facts.material.get('valueDifferenceWhiteMinusBlack', 0)}"
         )
     for piece in move.position_facts.pieces:
-        result[piece["id"]] = f"{piece['side']}_{piece['piece']}位于{piece['square']}"
+        result[piece["id"]] = (
+            f"{_human_piece(piece['piece'], piece['side'])}位于{piece['square']}"
+        )
     for position in (move.position_facts, move.position_facts_after):
         for group in (
             position.piece_activity,
@@ -785,13 +881,38 @@ def _evidence_descriptions(move: MoveReview) -> dict[str, str]:
             for fact in group:
                 result[fact.id] = fact.description
         for fact in (*position.immediate_checks, *position.immediate_captures):
-            result[fact.id] = f"{fact.piece}从{fact.from_square}走到{fact.to_square}（{fact.san}）"
+            result[fact.id] = (
+                f"{_human_piece(fact.piece)}从{fact.from_square}走到"
+                f"{fact.to_square}（{fact.san}）"
+            )
     for line in [*move.candidate_lines, *([move.actual_move_line] if move.actual_move_line else [])]:
         first_san = line.moves[0].san if line.moves else "未提供首着"
         result[line.id] = f"Stockfish第{line.rank}路线首着{first_san}"
         for item in line.moves:
-            result[item.id] = f"{item.side}_{item.piece}从{item.from_square}走到{item.to_square}（{item.san}）"
+            result[item.id] = (
+                f"{_human_piece(item.piece, item.side)}从{item.from_square}走到"
+                f"{item.to_square}（{item.san}）"
+            )
     return result
+
+
+def _human_side(side: str) -> str:
+    return "白方" if side == "white" else "黑方" if side == "black" else "一方"
+
+
+def _human_piece(piece: str, side: str | None = None) -> str:
+    parts = piece.split("_")
+    inferred_side = parts[0] if parts and parts[0] in {"white", "black"} else side
+    piece_name = {
+        "pawn": "兵",
+        "knight": "马",
+        "bishop": "象",
+        "rook": "车",
+        "queen": "后",
+        "king": "王",
+    }.get(parts[-1], "棋子")
+    prefix = "白" if inferred_side == "white" else "黑" if inferred_side == "black" else ""
+    return f"{prefix}{piece_name}"
 
 
 def _explanation_with_evidence(explanation: str, refs: list[str], descriptions: dict[str, str]) -> str:
@@ -802,7 +923,7 @@ def _explanation_with_evidence(explanation: str, refs: list[str], descriptions: 
     available = [descriptions[ref] for ref in refs if ref in descriptions]
     concrete = next((item for item in available if _is_concrete_description(item)), None)
     verified = [concrete or available[0]] if available else []
-    return explanation if not verified else f"事实依据：{'、'.join(verified)}，因此{explanation}"
+    return explanation if not verified else f"先看{'、'.join(verified)}，{explanation}"
 
 
 def _ground_vague_claims(
@@ -840,11 +961,12 @@ def _ground_vague_claims(
             descriptions.get(default_ref, candidates[0] if candidates else ""),
         )
         if evidence:
-            grounded = value
-            for phrase in VAGUE_CLAIMS:
-                if phrase in grounded:
-                    grounded = grounded.replace(phrase, f"依据{evidence[:90]}可判断{phrase}")
-            return grounded
+            route_match = re.search(
+                r"Stockfish第\d+路线首着([^，。；\s]+)",
+                evidence,
+            )
+            lead = f"看{route_match.group(1)}这步" if route_match else evidence[:90]
+            return f"{lead}，{value}"
     return value
 
 
@@ -860,35 +982,6 @@ def _normalized_level(value: str) -> str:
         return "short_term"
     if value == "none":
         return "long_term"
-    return value
-
-
-def _sanitize_draft_event_words(value: Any, key: str = "") -> Any:
-    reference_keys = {
-        "evidenceRefs", "dangerRef", "targetRef", "moveRef",
-        "strongestReplyRef", "lineRef", "plyRefs", "planId",
-    }
-    if key in reference_keys:
-        return value
-    if isinstance(value, dict):
-        return {
-            child_key: _sanitize_draft_event_words(child, child_key)
-            for child_key, child in value.items()
-        }
-    if isinstance(value, list):
-        return [_sanitize_draft_event_words(child, key) for child in value]
-    if isinstance(value, str):
-        replacements = (
-            ("将杀", "决定性威胁"),
-            ("绝杀", "决定性威胁"),
-            ("将军", "直接威胁"),
-            ("吃子", "子力收益"),
-            ("吃掉", "赢得"),
-            ("捕获", "处理"),
-            ("拿掉", "处理"),
-        )
-        for source, replacement in replacements:
-            value = value.replace(source, replacement)
     return value
 
 
@@ -916,7 +1009,7 @@ def _sanitize_grounding_description(value: str, context: ProfessionalValidationC
     if not context.allows_check:
         value = value.replace("将军", "直接威胁")
     if not context.allows_capture:
-        value = value.replace("吃子", "子力收益").replace("吃掉", "赢得")
+        value = value.replace("吃子", "具体战术").replace("吃掉", "处理")
     return value
 
 
@@ -1006,6 +1099,30 @@ def _walk_free_text(value: Any, path: str = "", key: str = "") -> Iterable[tuple
     elif isinstance(value, list):
         for index, child in enumerate(value):
             yield from _walk_free_text(child, f"{path}[{index}]", key)
+
+
+def _is_program_owned_narrative_path(path: str) -> bool:
+    """Fields rebuilt from claims or verified PV mechanics after draft parsing."""
+    if path in {
+        "playedMoveAnalysis.intention",
+        "playedMoveAnalysis.continuationExplanation",
+        "comparison.mainDifference",
+        "comparison.whyFirstLineIsBest",
+    }:
+        return True
+    if path.startswith("playedMoveAnalysis.positiveEffects["):
+        return True
+    if not path.startswith("candidateLines["):
+        return False
+    return any(
+        marker in path
+        for marker in (
+            "].directPurpose",
+            "].continuationExplanation",
+            "].advantages[",
+            "].risks[",
+        )
+    )
 
 
 def _format_path(location: Iterable[Any]) -> str:
