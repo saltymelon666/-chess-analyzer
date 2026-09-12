@@ -87,7 +87,7 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .book_case_transfer import BookCaseTransferPackage
-PROFESSIONAL_PROMPT_VERSION = "professional-v41-forced-thought-path"
+PROFESSIONAL_PROMPT_VERSION = "professional-v42-natural-chess-book-prose"
 PROFESSIONAL_TOKEN_LIMITS = {"simple": 1500, "normal": 2600, "complex": 3400}
 STRATEGY_TAGS = [
     "king_attack",
@@ -674,7 +674,8 @@ def professional_system_prompt() -> str:
         "analogous_position与principle_only摘录都不是当前局面事实，禁止复制其中的棋子、格子、"
         "着法、评价或结论。"
         "narrativeClaims是核心正文唯一允许表达的棋理命题目录。模型只能通过claimRefs选择命题，"
-        "不得扩展命题中的因果、目标、计划或时序；后端会按claimRefs重建核心正文。"
+        "不得扩展命题中的因果、目标、计划或时序；后端会按claimRefs将核心正文重建为"
+        "没有固定栏目口号的连贯棋书叙述。"
         "confirmedOpening若存在，其名称、ECO和变例由程序确认；不得重新判断、改名或补写其他变例。"
         "开局背景只是常见思路，只有当前事实包另有支持时才能把它表述成当前局面的事实或计划。"
         "PV只是参考变化，不是必然发生。"
@@ -746,7 +747,7 @@ def professional_user_prompt(payload: dict[str, Any], complexity: str) -> str:
 6. positionAssessment只允许输出summary，不得输出material、kingSafety、pieceActivity或pawnStructure；这些动态栏目全部由后端重点选择器按selectedFacts回填。
 7. positionAssessment.summary必须是围绕corePainPoint的完整段落，只说明理解核心问题必需的局面条件。不得为了显得全面而同时罗列子力、王安全、中心和两翼；不能只写“当前局面某方子”之类残句。
 8. plans.white和plans.black必须返回空数组。战略计划只能通过planExplanations按chessFacts.plans中的plan_id解释；没有程序计划时planExplanations返回空数组。禁止创建planId、修改计划类型或增加棋步。
-9. playedMoveAnalysis.claimRefs必须从narrativeClaims.claims中选择1—6项，至少覆盖走前全局态势、实战选择、引擎比较和teaching_rule；若数据含直接惩罚或对手回应，也要优先选择。intention只说明所选命题的组织意图，后端将按这些claimRefs重建页面核心正文。不得在intention增加命题目录之外的因果、计划、目标或时序。最终正文按“全局态势 → 关键选择或转折 → 棋理启示”组织，从实战落子方角度解释，不能把走完这步后轮到的一方说反。多步后果只在对应路线区连同中间条件完整证明。positiveEffects和problems只记录必要补充，不重复评价。
+9. playedMoveAnalysis.claimRefs必须从narrativeClaims.claims中选择1—6项，至少覆盖走前全局态势、实战选择、引擎比较和teaching_rule；若数据含直接惩罚或对手回应，也要优先选择。intention只说明所选命题的组织意图，后端将按这些claimRefs重建页面核心正文。不得在intention增加命题目录之外的因果、计划、目标或时序。最终正文按“全局态势 → 关键选择或转折 → 棋理启示”自然推进，不显示“先看全局”“再看关键选择”等固定栏目口号；从实战落子方角度解释，不能把走完这步后轮到的一方说反。多步后果只在对应路线区连同中间条件完整证明。positiveEffects和problems只记录必要补充，不重复评价。
 10. 每条candidateLines的directPurpose、continuationExplanation、advantages和risks必须使用完整具体中文；优点和风险要说明对子力、空间、兵形或线路的实际影响，不能只写标签。用棋手复盘时会说的短句直接讲清“为什么”和“接下来怎样”，避免“阶段性、当前交换段、实际结果、符合当前局面需求、继续比较路线、作为路线起点、该项不作评价”等报告腔套话。
 11. 弱点、王安全、子力活动、兵形、全局威胁与路线内部事件由后端重点选择器生成，不要输出这些字段；不要自行拆分PV阶段。strategyTags只能使用：{strategy_tags}。
 12. 草稿解释文字目标为{length}个中文字符；后端会追加结构化事实并回填真实走法。complexity必须是{complexity}。

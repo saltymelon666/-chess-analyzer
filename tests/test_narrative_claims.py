@@ -2,6 +2,7 @@ import chess
 
 from app.models import EvidenceFact, MoveFacts
 from app.narrative_claims import (
+    LEGACY_NARRATIVE_MARKERS,
     build_narrative_claim_package,
     compose_verified_core_paragraph,
     evaluate_narrative_claim_grounding,
@@ -101,10 +102,16 @@ def test_global_posture_and_engine_comparison_are_always_in_the_core_path() -> N
     assert not any(character.isdigit() for character in position.statement)
     assert selected[0].kind == "position_fact"
     assert comparison in selected
-    assert paragraph.startswith("先看全局：走棋前")
+    assert paragraph.startswith(position.statement)
     assert paragraph.index(position.statement) < paragraph.index(move.played_move.san)
     assert paragraph.index(move.played_move.san) < paragraph.index(comparison.statement)
-    assert paragraph.index(comparison.statement) < paragraph.index("这段变化留给初学者")
+    teaching = next(item for item in selected if item.kind == "teaching_rule")
+    assert paragraph.index(comparison.statement) < paragraph.index(teaching.statement)
+    assert not any(marker in paragraph for marker in LEGACY_NARRATIVE_MARKERS)
+    assert any(
+        phrase in paragraph
+        for phrase in ("需要背诵", "记住检查顺序", "同一个问题入手")
+    )
 
 
 def test_priority_position_fact_cannot_replace_stockfish_global_posture() -> None:
@@ -120,7 +127,7 @@ def test_priority_position_fact_cannot_replace_stockfish_global_posture() -> Non
     assert selected[0].claim_id == "claim:1:position:evaluation"
     assert selected[0].source == "stockfish"
     assert any(priority.id in item.evidence_refs for item in selected)
-    assert paragraph.startswith(f"先看全局：{selected[0].statement}")
+    assert paragraph.startswith(selected[0].statement)
 
 
 def test_inferior_move_path_names_reply_without_inventing_a_single_cause() -> None:
@@ -138,11 +145,11 @@ def test_inferior_move_path_names_reply_without_inventing_a_single_cause() -> No
     assert kinds.index("move_event") < kinds.index("evaluation_comparison")
     assert kinds.index("evaluation_comparison") < kinds.index("opponent_resource")
     assert kinds.index("opponent_resource") < kinds.index("teaching_rule")
-    assert "关键转折在于" in reply.statement
+    assert "分岔口出现在对手的回答上" in reply.statement
     assert move.actual_move_line is not None
     assert move.actual_move_line.moves[0].san in reply.statement
-    assert "不能把后段事件提前说成" in reply.statement
-    assert paragraph.index("先看全局") < paragraph.index("关键转折在于")
+    assert "不能倒推成第一回应的直接效果" in reply.statement
+    assert paragraph.index(selected[0].statement) < paragraph.index(reply.statement)
 
 
 def test_claim_grounding_metric_requires_the_verified_statement_in_core_text() -> None:
@@ -239,7 +246,7 @@ def test_move_event_precedes_capture_or_check_detail() -> None:
     package = build_narrative_claim_package(move)
     paragraph = compose_verified_core_paragraph(package)
 
-    assert paragraph.index("白方走h4") < paragraph.index("这一步吃掉黑兵")
+    assert paragraph.index("白方选择h4") < paragraph.index("这一步吃掉黑兵")
 
 
 def test_actual_line_first_ply_is_used_as_opponent_reply() -> None:
