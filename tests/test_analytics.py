@@ -205,6 +205,15 @@ def test_deepseek_failure_updates_the_existing_analysis_status(tmp_path: Path) -
     assert statistics.failures == 1
 
 
+def test_discard_analysis_removes_request_that_never_started(tmp_path: Path) -> None:
+    store = AnalyticsStore(tmp_path / "discarded-analysis.sqlite3")
+    store.start_analysis("analysis_discarded_1234", "visitor_discarded_1234", "1. e4 e5")
+
+    store.discard_analysis("analysis_discarded_1234")
+
+    assert store.analysis_history() == []
+
+
 def test_event_payload_rejects_unexpected_personal_fields() -> None:
     try:
         AnalyticsEventRequest.model_validate(

@@ -104,6 +104,41 @@ async def test_timed_out_worker_keeps_lock_until_background_thread_finishes() ->
     assert not service._lock.locked()
 
 
+@pytest.mark.asyncio
+async def test_timeout_signals_batch_worker_to_stop() -> None:
+    service = StockfishService(
+        ROOT / "stockfish.exe",
+        depth=1,
+        threads=1,
+        hash_mb=16,
+        multipv=1,
+        timeout_seconds=5,
+    )
+    started = threading.Event()
+    release = threading.Event()
+    cancelled = threading.Event()
+
+    def slow_worker() -> None:
+        started.set()
+        release.wait(timeout=2)
+
+    with pytest.raises(asyncio.TimeoutError):
+        await service._run_exclusive(
+            slow_worker,
+            timeout_seconds=0.01,
+            on_cancel=cancelled.set,
+        )
+
+    assert started.is_set()
+    assert cancelled.is_set()
+    release.set()
+    for _ in range(100):
+        if not service._lock.locked():
+            break
+        await asyncio.sleep(0.01)
+    assert not service._lock.locked()
+
+
 def test_illegal_move_invalidates_complete_engine_pv() -> None:
     board = chess.Board()
     legal = chess.Move.from_uci("e2e4")

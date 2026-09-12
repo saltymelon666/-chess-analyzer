@@ -169,6 +169,16 @@ def test_admin_dashboard_is_separate_and_not_linked_from_product() -> None:
     assert "查看对应分析结果" in admin
 
 
+def test_game_review_waits_and_retries_when_backend_is_busy() -> None:
+    for page in _pages():
+        assert 'fetchWithTimeout(apiUrl("/api/game-review")' in page
+        assert "285000" in page
+        assert 'response.headers.get("Retry-After")' in page
+        assert "分析服务器繁忙" in page
+        assert "整盘分析可能需要 1—3 分钟" in page
+        assert "整盘分析等待超时" in page
+
+
 def test_feedback_submits_current_analysis_context() -> None:
     for page in _pages():
         assert "function currentFeedbackAnalysis()" in page
