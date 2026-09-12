@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 from pathlib import Path
 from typing import Callable, TypeVar
 
@@ -16,7 +17,7 @@ STABILITY_CONFIRM_MIN_DEPTH = 20
 STABILITY_GAP_CP = 50
 STABILITY_SWING_CP = 50
 STABILITY_SCORE_CHANGE_CP = 25
-DEFAULT_QUEUE_TIMEOUT_SECONDS = 10.0
+DEFAULT_QUEUE_TIMEOUT_SECONDS = 30.0
 T = TypeVar("T")
 
 
@@ -77,9 +78,11 @@ class StockfishService:
                 raise ValueError(f"无效的 FEN：{exc}") from exc
         if not self.available():
             raise RuntimeError(f"找不到 Stockfish：{self.executable}")
+        cancel_event = threading.Event()
         return await self._run_exclusive(
-            lambda: self._analyze_many_sync(boards, depth),
+            lambda: self._analyze_many_sync(boards, depth, cancel_event=cancel_event),
             timeout_seconds=timeout_seconds,
+            on_cancel=cancel_event.set,
         )
 
     async def _run_exclusive(
@@ -87,6 +90,7 @@ class StockfishService:
         worker: Callable[[], T],
         *,
         timeout_seconds: float,
+        on_cancel: Callable[[], None] | None = None,
     ) -> T:
         try:
             await asyncio.wait_for(
@@ -104,6 +108,8 @@ class StockfishService:
                 timeout=timeout_seconds,
             )
         except (asyncio.TimeoutError, asyncio.CancelledError):
+            if on_cancel is not None:
+                on_cancel()
             # A cancelled to_thread call keeps running. Keep the single-worker
             # lock until that thread exits so a timeout cannot start a second
             # Stockfish process and overload the service.
@@ -131,15 +137,25 @@ class StockfishService:
         finally:
             engine.quit()
 
-    def _analyze_many_sync(self, boards: list[chess.Board], depth: int) -> list[EngineResult]:
+    def _analyze_many_sync(
+        self,
+        boards: list[chess.Board],
+        depth: int,
+        *,
+        cancel_event: threading.Event | None = None,
+    ) -> list[EngineResult]:
         engine = chess.engine.SimpleEngine.popen_uci(str(self.executable))
         try:
             self._configure_engine(engine)
-            results = [self._analyze_board(engine, board, depth) for board in boards]
+            results: list[EngineResult] = []
+            for board in boards:
+                self._raise_if_cancelled(cancel_event)
+                results.append(self._analyze_board(engine, board, depth))
             if depth >= STABILITY_RECHECK_MIN_DEPTH:
                 return results
 
             for index, board in enumerate(boards):
+                self._raise_if_cancelled(cancel_event)
                 if not self._needs_stability_recheck(results, index):
                     continue
                 initial = results[index]
@@ -149,6 +165,7 @@ class StockfishService:
                     max(STABILITY_RECHECK_MIN_DEPTH, depth + 4),
                 )
                 if self._materially_changed(initial, confirmed):
+                    self._raise_if_cancelled(cancel_event)
                     confirmed = self._analyze_board(
                         engine,
                         board,
@@ -158,6 +175,11 @@ class StockfishService:
             return results
         finally:
             engine.quit()
+
+    @staticmethod
+    def _raise_if_cancelled(cancel_event: threading.Event | None) -> None:
+        if cancel_event is not None and cancel_event.is_set():
+            raise RuntimeError("Stockfish analysis cancelled after request timeout")
 
     def _configure_engine(self, engine: chess.engine.SimpleEngine) -> None:
         options: dict[str, int] = {}

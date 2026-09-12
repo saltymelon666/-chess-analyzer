@@ -350,8 +350,9 @@ def test_game_review_returns_retryable_busy_response(monkeypatch, tmp_path) -> N
     )
 
     assert response.status_code == 503
-    assert response.headers["retry-after"] == "10"
+    assert response.headers["retry-after"] == "5"
     assert response.json()["detail"] == "当前分析任务较多，请稍后重试"
+    assert store.analysis_history() == []
 
 
 def test_professional_failure_does_not_overwrite_successful_game_status(

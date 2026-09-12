@@ -509,18 +509,11 @@ async def game_review(request: GameReviewRequest) -> GameReviewResponse:
         )
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except StockfishBusyError as exc:
-        elapsed_ms = round((time.perf_counter() - started) * 1000)
-        await _record_analytics(
-            "finish_analysis",
-            analysis_id,
-            success=False,
-            stockfish_ms=elapsed_ms,
-            total_ms=elapsed_ms,
-        )
+        await _record_analytics("discard_analysis", analysis_id)
         raise HTTPException(
             status_code=503,
             detail="当前分析任务较多，请稍后重试",
-            headers={"Retry-After": "10"},
+            headers={"Retry-After": "5"},
         ) from exc
     except asyncio.TimeoutError as exc:
         elapsed_ms = round((time.perf_counter() - started) * 1000)

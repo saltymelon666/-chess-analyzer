@@ -420,6 +420,15 @@ class AnalyticsStore:
                 (self._now(), analysis_id),
             )
 
+    def discard_analysis(self, analysis_id: str) -> None:
+        """Remove a request that never acquired an analysis worker."""
+        with self._lock, self._connect() as connection:
+            self._execute(
+                connection,
+                "DELETE FROM analysis_logs WHERE analysis_id = ?",
+                (analysis_id,),
+            )
+
     def _statistics_for_window(
         self,
         connection,

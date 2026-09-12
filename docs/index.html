@@ -1228,7 +1228,7 @@ async function analyzeGame() {
   button.disabled = true;
   button.textContent = "正在评价整盘棋...";
   document.getElementById("loading").style.display = "block";
-  const stages = ["正在整理棋谱……", "正在寻找关键局面……", "正在准备每步评价……"];
+  const stages = ["正在整理棋谱……", "正在寻找关键局面……", "整盘分析可能需要 1—3 分钟，请保持页面打开……"];
   let stage = 0;
   document.getElementById("loadingText").textContent = stages[0];
   clearInterval(loadingStageTimer);
@@ -1238,12 +1238,23 @@ async function analyzeGame() {
   }, 3500);
 
   try {
-    const response = await fetch(apiUrl("/api/game-review"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pgn })
-    });
-    const payload = await response.json().catch(() => ({}));
+    let response;
+    let payload;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      response = await fetchWithTimeout(apiUrl("/api/game-review"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pgn })
+      }, 285000);
+      payload = await response.json().catch(() => ({}));
+      if (response.status !== 503 || attempt === 3) break;
+      const retrySeconds = Math.min(15, Math.max(1, Number(response.headers.get("Retry-After")) || 5));
+      stage = stages.length - 1;
+      stages[stage] = `分析服务器繁忙，${retrySeconds} 秒后自动重试（${attempt}/2）……`;
+      document.getElementById("loadingText").textContent = stages[stage];
+      await new Promise(resolve => setTimeout(resolve, retrySeconds * 1000));
+      stages[stage] = "已重新进入分析队列，请保持页面打开……";
+    }
     if (!response.ok) throw new Error(payload.detail || `整盘分析服务错误 (${response.status})`);
     gameReview = payload;
     payload.moves?.forEach((review, index) => {
@@ -1260,7 +1271,8 @@ async function analyzeGame() {
     updateMoveReviewPanel();
     document.getElementById("backendStatus").textContent = `逐步评价完成 · 共 ${payload.move_count} 步 · 深度 ${payload.depth}`;
   } catch (e) {
-    showError("逐步评价失败：" + e.message);
+    const reason = e.name === "AbortError" ? "整盘分析等待超时，请稍后重试" : e.message;
+    showError("逐步评价失败：" + reason);
   } finally {
     clearInterval(loadingStageTimer);
     loadingStageTimer = null;
