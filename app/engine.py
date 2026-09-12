@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+from collections import OrderedDict
 from pathlib import Path
 from typing import Callable, TypeVar
 
@@ -18,6 +19,8 @@ STABILITY_GAP_CP = 50
 STABILITY_SWING_CP = 50
 STABILITY_SCORE_CHANGE_CP = 25
 DEFAULT_QUEUE_TIMEOUT_SECONDS = 30.0
+MAX_STABILITY_RECHECKS = 12
+MAX_ENGINE_CACHE_ENTRIES = 2048
 T = TypeVar("T")
 
 
@@ -45,6 +48,7 @@ class StockfishService:
         self.timeout_seconds = timeout_seconds
         self.queue_timeout_seconds = max(0.01, queue_timeout_seconds)
         self._lock = asyncio.Lock()
+        self._result_cache: OrderedDict[tuple[str, int], EngineResult] = OrderedDict()
 
     def available(self) -> bool:
         return self.executable.is_file()
@@ -130,10 +134,15 @@ class StockfishService:
                 self._lock.release()
 
     def _analyze_sync(self, board: chess.Board) -> EngineResult:
+        cached = self._cached_result(board, self.depth)
+        if cached is not None:
+            return cached
         engine = chess.engine.SimpleEngine.popen_uci(str(self.executable))
         try:
             self._configure_engine(engine)
-            return self._analyze_board(engine, board, self.depth)
+            result = self._analyze_board(engine, board, self.depth)
+            self._cache_result(board, self.depth, result)
+            return result
         finally:
             engine.quit()
 
@@ -144,20 +153,34 @@ class StockfishService:
         *,
         cancel_event: threading.Event | None = None,
     ) -> list[EngineResult]:
+        cached_results = [self._cached_result(board, depth) for board in boards]
+        if all(result is not None for result in cached_results):
+            return [result for result in cached_results if result is not None]
+
         engine = chess.engine.SimpleEngine.popen_uci(str(self.executable))
         try:
             self._configure_engine(engine)
             results: list[EngineResult] = []
-            for board in boards:
+            for board, cached in zip(boards, cached_results):
                 self._raise_if_cancelled(cancel_event)
-                results.append(self._analyze_board(engine, board, depth))
+                results.append(cached or self._analyze_board(engine, board, depth))
             if depth >= STABILITY_RECHECK_MIN_DEPTH:
+                self._cache_results(boards, depth, results)
                 return results
 
-            for index, board in enumerate(boards):
+            recheck_indices = sorted(
+                (
+                    index
+                    for index in range(len(boards))
+                    if results[index].depth < STABILITY_RECHECK_MIN_DEPTH
+                    and self._needs_stability_recheck(results, index)
+                ),
+                key=lambda index: self._stability_recheck_priority(results, index),
+                reverse=True,
+            )[:MAX_STABILITY_RECHECKS]
+            for index in recheck_indices:
                 self._raise_if_cancelled(cancel_event)
-                if not self._needs_stability_recheck(results, index):
-                    continue
+                board = boards[index]
                 initial = results[index]
                 confirmed = self._analyze_board(
                     engine,
@@ -172,6 +195,7 @@ class StockfishService:
                         max(STABILITY_CONFIRM_MIN_DEPTH, depth + 8),
                     )
                 results[index] = confirmed
+            self._cache_results(boards, depth, results)
             return results
         finally:
             engine.quit()
@@ -180,6 +204,30 @@ class StockfishService:
     def _raise_if_cancelled(cancel_event: threading.Event | None) -> None:
         if cancel_event is not None and cancel_event.is_set():
             raise RuntimeError("Stockfish analysis cancelled after request timeout")
+
+    def _cached_result(self, board: chess.Board, depth: int) -> EngineResult | None:
+        key = (board.fen(), depth)
+        cached = self._result_cache.get(key)
+        if cached is None:
+            return None
+        self._result_cache.move_to_end(key)
+        return cached.model_copy(deep=True)
+
+    def _cache_result(self, board: chess.Board, depth: int, result: EngineResult) -> None:
+        key = (board.fen(), depth)
+        self._result_cache[key] = result.model_copy(deep=True)
+        self._result_cache.move_to_end(key)
+        while len(self._result_cache) > MAX_ENGINE_CACHE_ENTRIES:
+            self._result_cache.popitem(last=False)
+
+    def _cache_results(
+        self,
+        boards: list[chess.Board],
+        depth: int,
+        results: list[EngineResult],
+    ) -> None:
+        for board, result in zip(boards, results):
+            self._cache_result(board, depth, result)
 
     def _configure_engine(self, engine: chess.engine.SimpleEngine) -> None:
         options: dict[str, int] = {}
@@ -267,32 +315,35 @@ class StockfishService:
 
     @staticmethod
     def _needs_stability_recheck(results: list[EngineResult], index: int) -> bool:
+        return StockfishService._stability_recheck_priority(results, index) >= STABILITY_GAP_CP
+
+    @staticmethod
+    def _stability_recheck_priority(results: list[EngineResult], index: int) -> int:
         result = results[index]
         if not result.top_moves:
-            return False
+            return 0
 
         best = result.top_moves[0]
         if best.mate_in is not None:
-            return True
+            return 1_000_000
+        priority = 0
         if len(result.top_moves) >= 2:
             second = result.top_moves[1]
             if second.mate_in is not None:
-                return True
+                return 1_000_000
             if best.centipawn is not None and second.centipawn is not None:
-                if abs(best.centipawn - second.centipawn) >= STABILITY_GAP_CP:
-                    return True
+                priority = max(priority, abs(best.centipawn - second.centipawn))
 
         for neighbor_index in (index - 1, index + 1):
             if not 0 <= neighbor_index < len(results):
                 continue
             neighbor = results[neighbor_index]
             if result.mate_in is not None or neighbor.mate_in is not None:
-                return True
+                return 1_000_000
             if result.centipawn is None or neighbor.centipawn is None:
                 continue
-            if abs(result.centipawn - neighbor.centipawn) >= STABILITY_SWING_CP:
-                return True
-        return False
+            priority = max(priority, abs(result.centipawn - neighbor.centipawn))
+        return priority
 
     @staticmethod
     def _materially_changed(initial: EngineResult, confirmed: EngineResult) -> bool:

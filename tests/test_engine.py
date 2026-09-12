@@ -228,6 +228,83 @@ def test_batch_analysis_rechecks_unstable_low_depth_choice(monkeypatch) -> None:
     assert (id(after), 20) in calls
 
 
+def test_batch_analysis_reuses_cached_positions(monkeypatch) -> None:
+    service = StockfishService(
+        ROOT / "stockfish.exe",
+        depth=10,
+        threads=1,
+        hash_mb=16,
+        multipv=2,
+        timeout_seconds=20,
+    )
+    board = chess.Board()
+    calls = 0
+    engine_starts = 0
+
+    class DummyEngine:
+        def quit(self) -> None:
+            pass
+
+    def fake_start_engine(_path):
+        nonlocal engine_starts
+        engine_starts += 1
+        return DummyEngine()
+
+    monkeypatch.setattr(chess.engine.SimpleEngine, "popen_uci", fake_start_engine)
+    monkeypatch.setattr(service, "_configure_engine", lambda _: None)
+
+    def fake_analyze(_engine, board: chess.Board, depth: int) -> EngineResult:
+        nonlocal calls
+        calls += 1
+        return _engine_result(0, "e2e4", depth=depth)
+
+    monkeypatch.setattr(service, "_analyze_board", fake_analyze)
+
+    first = service._analyze_many_sync([board], 10)
+    second = service._analyze_many_sync([board], 10)
+
+    assert first[0] == second[0]
+    assert calls == 1
+    assert engine_starts == 1
+
+
+def test_batch_analysis_caps_deep_rechecks_to_most_unstable_positions(monkeypatch) -> None:
+    service = StockfishService(
+        ROOT / "stockfish.exe",
+        depth=10,
+        threads=1,
+        hash_mb=16,
+        multipv=2,
+        timeout_seconds=20,
+    )
+    boards = []
+    for halfmove_clock in range(15):
+        board = chess.Board()
+        board.halfmove_clock = halfmove_clock
+        boards.append(board)
+    rechecked: list[int] = []
+
+    class DummyEngine:
+        def quit(self) -> None:
+            pass
+
+    monkeypatch.setattr(chess.engine.SimpleEngine, "popen_uci", lambda _: DummyEngine())
+    monkeypatch.setattr(service, "_configure_engine", lambda _: None)
+
+    def fake_analyze(_engine, board: chess.Board, depth: int) -> EngineResult:
+        if depth == 10:
+            return _engine_result(0, "best", second_cp=-(50 + board.halfmove_clock), depth=10)
+        rechecked.append(board.halfmove_clock)
+        return _engine_result(0, "best", second_cp=0, depth=depth)
+
+    monkeypatch.setattr(service, "_analyze_board", fake_analyze)
+
+    service._analyze_many_sync(boards, 10)
+
+    assert len(rechecked) == 12
+    assert set(rechecked) == set(range(3, 15))
+
+
 def test_engine_refuses_to_promote_second_line_when_rank_one_is_invalid() -> None:
     service = StockfishService(
         ROOT / "stockfish.exe",
