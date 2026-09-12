@@ -411,6 +411,7 @@ class ProfessionalPlayedMoveAnalysis(BaseModel):
     evaluation_reason: str = Field(alias="evaluationReason")
     error_type: Literal["tactical", "strategic", "both", "none"] = Field(alias="errorType")
     evidence_refs: list[str] = Field(alias="evidenceRefs", min_length=1)
+    claim_refs: list[str] = Field(alias="claimRefs", default_factory=list)
 
 
 class ProfessionalCandidateLineAnalysis(BaseModel):
@@ -536,11 +537,12 @@ class ProfessionalDraftPlayedMoveAnalysis(BaseModel):
     intention: str = Field(min_length=4, max_length=500)
     positive_effects: list[str] = Field(alias="positiveEffects", default_factory=list, max_length=3)
     problems: list[str] = Field(default_factory=list, max_length=3)
-    strongest_reply_ref: str = Field(alias="strongestReplyRef")
-    ply_refs: list[str] = Field(alias="plyRefs", min_length=1, max_length=10)
+    strongest_reply_ref: str | None = Field(alias="strongestReplyRef", default=None)
+    ply_refs: list[str] = Field(alias="plyRefs", default_factory=list, max_length=10)
     continuation_explanation: str = Field(alias="continuationExplanation", min_length=4, max_length=500)
     error_type: Literal["tactical", "strategic", "both", "none"] = Field(alias="errorType")
     evidence_refs: list[str] = Field(alias="evidenceRefs", min_length=1, max_length=100)
+    claim_refs: list[str] = Field(alias="claimRefs", default_factory=list, max_length=8)
 
 
 class ProfessionalDraftCandidateLine(BaseModel):

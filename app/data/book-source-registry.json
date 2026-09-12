@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "book-source-registry-1.0",
+  "authorityBoundary": "来源登记不等于事实入库；只有精确棋盘、行棋方和合法走法完成校验后，条目才可进入运行时知识层。",
+  "sources": [
+    {"title":"Chess Fundamentals — annotated book games","author":"José Raúl Capablanca","year":1921,"url":"https://www.gutenberg.org/files/33870/33870-h/33870-h.htm","categories":["annotated_games","author_annotations","strategy"],"status":"14_book_games_214_annotations_imported","notes":"Part II: all 14 illustrative games, 1171 printed plies and 214 author annotations. Games 3 and 6 stop at the last printed move; the original later-resignation statements are retained. No external moves are appended. All printed mainlines legally replayed; prose variations and historical assessments are not engine-verified. English annotations retained; no automatic position-prompt injection."},
+    {"title":"My Chess Career","author":"José Raúl Capablanca","year":1920,"url":"https://en.wikisource.org/wiki/My_Chess_Career","categories":["complete_games","author_annotations"],"status":"priority_next_not_imported","notes":"Prioritize full mainlines and move-linked author annotations; prose-only extraction is deferred."},
+    {"title":"Studies of chess","author":"F. D. Philidor","year":1803,"url":"https://www.gutenberg.org/ebooks/78804","categories":["opening","middlegame","endgame"],"status":"research_imported"},
+    {"title":"Chess Generalship, Vol. I. Grand Reconnaissance","author":"Franklin K. Young","year":1917,"url":"https://www.gutenberg.org/ebooks/55278","categories":["middlegame","strategy"],"status":"research_imported"},
+    {"title":"Maxims and Hints on Angling, Chess, Shooting, and Other Matters","author":"Richard Penn","year":1833,"url":"https://www.gutenberg.org/ebooks/36821","categories":["general","strategy"],"status":"research_imported"},
+    {"title":"Hoyle's Games Modernized","author":"Louis Hoffmann","year":1898,"url":"https://www.gutenberg.org/ebooks/39445","categories":["opening","middlegame","endgame"],"status":"research_imported"},
+    {"title":"Foster's Complete Hoyle","author":"R. F. Foster","year":1913,"url":"https://www.gutenberg.org/ebooks/53881","categories":["opening","middlegame","endgame"],"status":"research_imported"},
+    {"title":"The Blue Book of Chess","author":"Howard Staunton and later editors","year":1897,"url":"https://www.gutenberg.org/ebooks/16377","categories":["opening","middlegame","endgame"],"status":"already_imported"},
+    {"title":"Chess and Checkers: The Way to Mastership","author":"Edward Lasker","year":1918,"url":"https://www.gutenberg.org/ebooks/4913","categories":["opening","middlegame","endgame"],"status":"principles_and_positions_imported"},
+    {"title":"Chess Strategy","author":"Edward Lasker","year":1915,"url":"https://www.gutenberg.org/ebooks/5614","categories":["opening","middlegame","endgame","strategy"],"status":"principles_and_positions_imported"},
+    {"title":"Chess Fundamentals","author":"José Raúl Capablanca","year":1921,"url":"https://www.gutenberg.org/ebooks/33870","categories":["opening","middlegame","endgame","strategy"],"status":"principles_and_positions_imported"},
+    {"title":"Chess History and Reminiscences","author":"H. E. Bird","year":1893,"url":"https://www.gutenberg.org/ebooks/4902","categories":["history","general"],"status":"reviewed_not_imported_low_runtime_value"},
+    {"title":"The Exploits and Triumphs, in Europe, of Paul Morphy, the Chess Champion","author":"Frederick Milnes Edge","year":1859,"url":"https://www.gutenberg.org/ebooks/34180","categories":["history","biography"],"status":"reviewed_not_imported_low_runtime_value"},
+    {"title":"Chess Studies; or, Endings of Games","author":"Josef Kling and Bernhard Horwitz","year":1851,"url":"https://openlibrary.org/works/OL44974260W/Chess_studies","categories":["endgame"],"status":"20_exact_positions_tablebase_verified"},
+    {"title":"Checkmates for Three Pieces","author":"William Brett Fishburne","year":null,"url":"https://www.gutenberg.org/ebooks/4542","categories":["endgame","checkmate"],"status":"580_exact_positions_python_chess_verified"},
+    {"title":"Checkmates for Four Pieces","author":"William Brett Fishburne","year":null,"url":"https://www.gutenberg.org/ebooks/4656","categories":["endgame","checkmate"],"status":"reviewed_deferred_large_dataset"}
+  ]
+}

@@ -110,7 +110,7 @@ class OpeningPresentation(BaseModel):
         alias="matchType"
     )
     matched_ply: int = Field(alias="matchedPly", ge=1)
-    query_ply: int = Field(alias="queryPly", ge=1)
+    query_ply: int = Field(alias="queryPly", ge=0)
     confidence: Literal["exact", "high"]
     description: str
     white_plan: str = Field(alias="whitePlan")

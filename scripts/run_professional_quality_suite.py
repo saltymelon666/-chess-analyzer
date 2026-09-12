@@ -18,19 +18,35 @@ if str(PROJECT_ROOT) not in sys.path:
 from app import api
 from app.analysis_focus import select_analysis_focus
 from app.chess_facts import build_move_fact_package
+from app.commentary_quality import (
+    CoreRouteGoldSpec,
+    GoldCommentaryAtom,
+    build_core_route_gold_atoms,
+    evaluate_commentary_quality,
+    extract_commentary_claims,
+)
 from app.config import load_settings
 from app.engine import StockfishService
 from app.game_review import analyze_pgn
 from app.professional_analysis import (
     ProfessionalAnalysisService,
     ProfessionalAttemptDiagnostic,
+    compute_professional_complexity,
     professional_cache_key,
+    build_professional_payload,
+)
+from app.narrative_claims import (
+    NarrativeClaimPackage,
+    evaluate_narrative_claim_grounding,
+    resolve_narrative_claims,
 )
 from app.professional_validation import build_validation_context, validate_professional_analysis
 from app.threat_analysis import ThreatAnalyzer, assess_initiative
+from app.unified_book_knowledge import UnifiedBookKnowledgeRepository
 
 
 DEFAULT_FIXTURES = Path("tests/fixtures/professional_validation_positions.json")
+DEFAULT_GOLD_ATOMS = Path("tests/fixtures/commentary_gold_atoms_v3.json")
 DEFAULT_RESULTS = Path("docs/professional-analysis-quality-results.json")
 DEFAULT_REPORT = Path("docs/professional-analysis-quality-report.md")
 
@@ -104,6 +120,74 @@ def valid_routes(move: Any, analysis: Any) -> bool:
     )
 
 
+def thought_path_summary(
+    move: Any,
+    analysis: Any,
+    package: NarrativeClaimPackage,
+) -> dict[str, Any]:
+    selected = resolve_narrative_claims(
+        package,
+        analysis.played_move_analysis.claim_refs,
+    )
+    core = analysis.played_move_analysis.intention
+    kinds = {item.kind for item in selected}
+    inferior = bool(
+        move.best_move_uci
+        and move.played_move.uci != move.best_move_uci
+        and move.centipawn_loss is not None
+        and move.centipawn_loss >= 50
+    )
+    reply_claims = [item for item in selected if item.kind == "opponent_resource"]
+    punishment_mode = "not_applicable"
+    punishment_handled = not inferior
+    if inferior and any(
+        "没有证明这次吃子单独造成全部分差" in item.statement
+        for item in reply_claims
+    ):
+        punishment_mode = "immediate_capture"
+        punishment_handled = True
+    elif inferior and any(
+        "不能把后段事件提前说成" in item.statement for item in reply_claims
+    ):
+        punishment_mode = "route_boundary"
+        punishment_handled = True
+    global_posture_claim = next((
+        item
+        for item in selected
+        if item.claim_id.endswith(":position:evaluation")
+        and item.kind == "position_fact"
+        and item.source == "stockfish"
+        and item.scope == "before_move"
+    ), None)
+    global_posture = (
+        global_posture_claim is not None
+        and core.startswith("先看全局：走棋前")
+        and global_posture_claim.statement in core
+    )
+    key_choice = (
+        "evaluation_comparison" in kinds
+        and "再看关键选择：" in core
+    )
+    teaching_summary = (
+        "teaching_rule" in kinds
+        and "这段变化留给初学者的原则是：" in core
+    )
+    return {
+        "globalPosture": global_posture,
+        "keyChoice": key_choice,
+        "teachingSummary": teaching_summary,
+        "inferiorMove": inferior,
+        "punishmentHandled": punishment_handled,
+        "punishmentMode": punishment_mode,
+        "complete": (
+            global_posture
+            and key_choice
+            and teaching_summary
+            and punishment_handled
+        ),
+    }
+
+
 def cache_latency_ms(move: Any, generated: Any) -> int:
     analysis_id = "professional-quality-cache-check"
     depth = max(line.depth for line in move.candidate_lines)
@@ -128,13 +212,37 @@ def cache_latency_ms(move: Any, generated: Any) -> int:
     return elapsed
 
 
+def load_gold_atoms(path: Path) -> dict[str, list[dict[str, Any]]]:
+    document = json.loads(path.read_text(encoding="utf-8"))
+    result: dict[str, list[dict[str, Any]]] = {}
+    base_file = document.get("baseFile")
+    if base_file:
+        result = load_gold_atoms(path.parent / base_file)
+    for item in document["positions"]:
+        atoms = result.setdefault(item["id"], [])
+        if "coreRoute" in item:
+            atoms.extend(
+                atom.model_dump(by_alias=True)
+                for atom in build_core_route_gold_atoms(
+                    item["id"],
+                    CoreRouteGoldSpec.model_validate(item["coreRoute"]),
+                )
+            )
+        atoms.extend(item.get("detailAtoms", []))
+    return result
+
+
 async def run_suite(
     fixtures_path: Path,
+    gold_atoms_path: Path | None,
     results_path: Path,
     report_path: Path,
     selected_ids: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     fixtures = json.loads(fixtures_path.read_text(encoding="utf-8"))
+    gold_atoms_by_id: dict[str, list[dict[str, Any]]] = {}
+    if gold_atoms_path is not None and gold_atoms_path.exists():
+        gold_atoms_by_id = load_gold_atoms(gold_atoms_path)
     if selected_ids:
         fixtures = [item for item in fixtures if item["id"] in selected_ids]
     settings = load_settings()
@@ -153,6 +261,7 @@ async def run_suite(
         base_url=settings.deepseek_base_url,
         model=settings.deepseek_model,
         timeout_seconds=settings.deepseek_timeout_seconds,
+        book_knowledge=UnifiedBookKnowledgeRepository(),
     )
     results: list[dict[str, Any]] = []
     first_generated = None
@@ -188,6 +297,7 @@ async def run_suite(
                 move,
                 diagnostics=diagnostics,
                 threat_package=threat_package,
+                opening_context=move.opening_context,
             )
             elapsed_ms = round((time.perf_counter() - started) * 1000)
             initiative = assess_initiative(fact_package, threat_package)
@@ -200,6 +310,37 @@ async def run_suite(
             final_errors = validate_professional_analysis(generated.analysis, context)
             accepted_attempt = next((item.attempt for item in diagnostics if item.accepted), None)
             output_text = json.dumps(generated.analysis.model_dump(by_alias=True), ensure_ascii=False)
+            gold_atoms = [
+                GoldCommentaryAtom.model_validate(item)
+                for item in gold_atoms_by_id.get(
+                    fixture["id"],
+                    fixture.get("goldAtoms", []),
+                )
+            ]
+            atomic_quality = evaluate_commentary_quality(
+                extract_commentary_claims(generated.analysis),
+                gold_atoms,
+                allowed_evidence_refs=context.allowed_evidence_ids,
+            )
+            claim_payload = build_professional_payload(
+                move,
+                compute_professional_complexity(move),
+                context.allowed_evidence_ids,
+                fact_package=fact_package,
+                threat_package=threat_package,
+            )
+            claim_package = NarrativeClaimPackage.model_validate(
+                claim_payload["narrativeClaims"],
+            )
+            claim_grounding = evaluate_narrative_claim_grounding(
+                generated.analysis,
+                claim_package,
+            )
+            thought_path = thought_path_summary(
+                move,
+                generated.analysis,
+                claim_package,
+            )
             row.update({
                 "firstPass": accepted_attempt == 1,
                 "retried": len(diagnostics) > 1,
@@ -214,9 +355,13 @@ async def run_suite(
                 "validationMs": generated.usage.validation_ms,
                 "postprocessMs": generated.usage.postprocess_ms,
                 "chineseChars": len(re.findall(r"[\u4e00-\u9fff]", output_text)),
+                "analysis": generated.analysis.model_dump(by_alias=True),
                 "dangerHasEvidence": valid_danger(generated.analysis, context.allowed_evidence_ids),
                 "plansHaveEvidence": valid_plans(generated.analysis, context.allowed_evidence_ids),
                 "threeRoutesValid": valid_routes(move, generated.analysis),
+                "atomicQuality": atomic_quality.model_dump(by_alias=True),
+                "narrativeClaimGrounding": claim_grounding.model_dump(by_alias=True),
+                "thoughtPath": thought_path,
                 "issues": [
                     {
                         "attempt": item.attempt,
@@ -284,6 +429,93 @@ def render_report(results: list[dict[str, Any]], cache_ms: int | None, model: st
     first_rate = first_passes / count * 100 if count else 0
     final_rate = final_valid / count * 100 if count else 0
     fallback_rate = fallbacks / count * 100 if count else 0
+    atom_rows = [
+        item["atomicQuality"]
+        for item in results
+        if item.get("atomicQuality", {}).get("requiredGoldCount", 0) > 0
+    ]
+    if atom_rows:
+        total_claims = sum(item["claimCount"] for item in atom_rows)
+        supported_claims = sum(item["supportedClaimCount"] for item in atom_rows)
+        required_atoms = sum(item["requiredGoldCount"] for item in atom_rows)
+        covered_atoms = sum(item["coveredGoldCount"] for item in atom_rows)
+        required_core = sum(item["requiredCoreCount"] for item in atom_rows)
+        covered_core = sum(item["coveredCoreCount"] for item in atom_rows)
+        required_detail = sum(item["requiredDetailCount"] for item in atom_rows)
+        covered_detail = sum(item["coveredDetailCount"] for item in atom_rows)
+        required_plans = sum(
+            item.get("requiredByKind", {}).get("practical_plan", 0)
+            for item in atom_rows
+        )
+        covered_plans = sum(
+            item.get("coveredByKind", {}).get("practical_plan", 0)
+            for item in atom_rows
+        )
+        atomic_summary = (
+            f"- 人工金标覆盖局面：{len(atom_rows)}/{count}\n"
+            f"- 结构化声明引用ID合法率：{supported_claims / max(1, total_claims):.1%}\n"
+            f"- 人工金标关键原子召回：{covered_atoms / max(1, required_atoms):.1%}\n"
+            f"- 核心原子召回：{covered_core}/{required_core}"
+            + (
+                f"（{covered_core / required_core:.1%}）\n"
+                if required_core else "（未标注）\n"
+            )
+            + f"- 细节原子召回：{covered_detail}/{required_detail}"
+            + (
+                f"（{covered_detail / required_detail:.1%}）"
+                if required_detail else "（未标注）"
+            )
+            + f"\n- 已验证计划原子召回：{covered_plans}/{required_plans}"
+            + (
+                f"（{covered_plans / required_plans:.1%}）"
+                if required_plans else "（未标注）"
+            )
+        )
+    else:
+        atomic_summary = (
+            "- 人工金标关键原子召回：未计算（质量集尚未提供经过人工审核的 `goldAtoms`，"
+            "不能把结构校验冒充内容质量）。"
+        )
+    claim_rows = [
+        item["narrativeClaimGrounding"]
+        for item in results
+        if item.get("narrativeClaimGrounding")
+    ]
+    grounded_claims = sum(item["entailedCount"] for item in claim_rows)
+    declared_claims = sum(item["declaredCount"] for item in claim_rows)
+    strict_claim_passes = sum(
+        item["groundingPrecision"] == 1.0
+        and item.get("exactRenderMatch") is True
+        and not item.get("invalidClaimRefs")
+        and not item.get("missingStatements")
+        for item in claim_rows
+    )
+    claim_summary = (
+        f"- 核心命题严格落地：{strict_claim_passes}/{len(claim_rows)}"
+        f"（可评估覆盖{len(claim_rows)}/{count}）；"
+        f"已声明命题逐字落地：{grounded_claims}/{declared_claims}"
+        if claim_rows
+        else "- 核心命题严格落地：未计算。"
+    )
+    thought_rows = [item["thoughtPath"] for item in results if item.get("thoughtPath")]
+    complete_thought_paths = sum(bool(item["complete"]) for item in thought_rows)
+    inferior_rows = [item for item in thought_rows if item["inferiorMove"]]
+    handled_punishments = sum(bool(item["punishmentHandled"]) for item in inferior_rows)
+    immediate_capture_clues = sum(
+        item["punishmentMode"] == "immediate_capture" for item in inferior_rows
+    )
+    bounded_punishments = sum(
+        item["punishmentMode"] == "route_boundary" for item in inferior_rows
+    )
+    thought_summary = (
+        f"- 强制思考路径完整：{complete_thought_paths}/{len(thought_rows)}"
+        f"（可评估覆盖{len(thought_rows)}/{count}）。\n"
+        f"- 次佳着惩罚处理：{handled_punishments}/{len(inferior_rows)}；"
+        f"其中首应立即吃子线索{immediate_capture_clues}局，"
+        f"严格保留路线边界{bounded_punishments}局。"
+        if thought_rows
+        else "- 强制思考路径完整：未计算。"
+    )
     before_weaknesses = sum(item.get("beforeWeaknessCount", 0) for item in results)
     after_weaknesses = sum(item.get("afterWeaknessCount", 0) for item in results)
     filtered_undefended = sum(item.get("filteredUndefendedOnly", 0) for item in results)
@@ -294,7 +526,7 @@ def render_report(results: list[dict[str, Any]], cache_ms: int | None, model: st
     for item in results:
         table_rows.append(
             "| {id} | {complexity} | {first} | {retry} | {fallback} | {input} | {output} | "
-            "{latency} | {danger} | {plans} | {routes} |".format(
+            "{latency} | {danger} | {plans} | {routes} | {claims} | {thought} |".format(
                 id=item["id"],
                 complexity=item["complexity"],
                 first="是" if item["firstPass"] else "否",
@@ -306,6 +538,13 @@ def render_report(results: list[dict[str, Any]], cache_ms: int | None, model: st
                 danger="是" if item["dangerHasEvidence"] else "否",
                 plans="是" if item["plansHaveEvidence"] else "否",
                 routes="是" if item["threeRoutesValid"] else "否",
+                claims=(
+                    "是"
+                    if item.get("narrativeClaimGrounding", {}).get("groundingPrecision") == 1.0
+                    and item.get("narrativeClaimGrounding", {}).get("exactRenderMatch") is True
+                    else "否"
+                ),
+                thought="是" if item.get("thoughtPath", {}).get("complete") else "否",
             )
         )
     issue_rows = []
@@ -316,7 +555,7 @@ def render_report(results: list[dict[str, Any]], cache_ms: int | None, model: st
                 f"{issue['category']}：{issue['message']}"
             )
     if not issue_rows:
-        issue_rows.append("- 15 个局面均无原始输出校验错误。")
+        issue_rows.append(f"- {count} 个局面均无原始输出校验错误。")
     normalization_rows = []
     for item in results:
         for issue in item.get("normalizations", []):
@@ -387,10 +626,10 @@ def render_report(results: list[dict[str, Any]], cache_ms: int | None, model: st
 - 保持严格校验：未知 ID、事实包外格子、路线外 SAN、任何 UCI、黑白颠倒、缺证据结论仍会拒绝。
 - 分别记录 DeepSeek 网络、校验和后处理耗时；保留缓存。
 
-## 15 局面结果
+## {count} 局面结果
 
-| 局面 | 复杂度 | 首次通过 | 重试 | 回退 | 输入Token | 输出Token | 首次耗时ms | 最大危险有证据 | 双方计划有证据 | 三条路线有效 |
-|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 局面 | 复杂度 | 首次通过 | 重试 | 回退 | 输入Token | 输出Token | 首次耗时ms | 最大危险有证据 | 双方计划有证据 | 三条路线有效 | 核心命题落地 | 思考路径完整 |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 {chr(10).join(table_rows)}
 
 ## 汇总
@@ -399,6 +638,11 @@ def render_report(results: list[dict[str, Any]], cache_ms: int | None, model: st
 - 最终严格校验通过：{final_valid}/{count}（{final_rate:.1f}%）
 - 安全回退：{fallbacks}/{count}（{fallback_rate:.1f}%）
 - 缓存响应：{cache_ms if cache_ms is not None else '未测得'}ms
+{atomic_summary}
+{claim_summary}
+{thought_summary}
+
+- 指标边界：引用ID合法率只检查引用是否进入允许目录；核心命题落地只检查 `playedMoveAnalysis.intention` 的完整程序渲染，均不等同于全部用户可见文字的专家事实准确率。
 
 ## 分析重点筛选验收
 
@@ -433,11 +677,18 @@ def render_report(results: list[dict[str, Any]], cache_ms: int | None, model: st
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--fixtures", type=Path, default=DEFAULT_FIXTURES)
+    parser.add_argument("--gold-atoms", type=Path, default=DEFAULT_GOLD_ATOMS)
     parser.add_argument("--results", type=Path, default=DEFAULT_RESULTS)
     parser.add_argument("--report", type=Path, default=DEFAULT_REPORT)
     parser.add_argument("--ids", nargs="*", default=[])
     args = parser.parse_args()
-    asyncio.run(run_suite(args.fixtures, args.results, args.report, set(args.ids) or None))
+    asyncio.run(run_suite(
+        args.fixtures,
+        args.gold_atoms,
+        args.results,
+        args.report,
+        set(args.ids) or None,
+    ))
 
 
 if __name__ == "__main__":
