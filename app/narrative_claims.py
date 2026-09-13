@@ -258,10 +258,7 @@ def build_narrative_claim_package(
         elif move.centipawn_loss is None:
             comparison = ""
         elif move.centipawn_loss < 50:
-            comparison = (
-                f"{move.played_move.san}与首选{move.best_move_san or move.best_move_uci}的评价接近；"
-                f"{side_text}的困难在这步棋之前已经存在，这步棋既没有制造危机，也没有解除危机。"
-            )
+            comparison = _small_gap_statement(move)
         else:
             comparison = (
                 f"分歧从这里出现：与首选{move.best_move_san or move.best_move_uci}相比，"
@@ -604,6 +601,19 @@ def _evaluation_advantage_side(move: MoveReview) -> str | None:
     if move.before.centipawn is None or abs(move.before.centipawn) <= 100:
         return None
     return "white" if move.before.centipawn > 0 else "black"
+
+
+def _small_gap_statement(move: MoveReview) -> str:
+    played = move.played_move.san
+    best = move.best_move_san or move.best_move_uci or "首选着"
+    prefix = f"{played}与首选{best}的评价接近；"
+    centipawn = move.before.centipawn
+    if centipawn is None or abs(centipawn) <= 25:
+        return prefix + "这步棋没有显著打破原有的平衡。"
+    advantage_side = "white" if centipawn > 0 else "black"
+    if advantage_side == move.side:
+        return prefix + f"{_side_text(move.side)}原有的优势在落子前已经形成，这步棋没有显著改变优势格局。"
+    return prefix + f"{_side_text(move.side)}的困难在落子前已经存在，这步棋既没有制造危机，也没有解除危机。"
 
 
 def _evaluation_posture_statement(move: MoveReview) -> str:

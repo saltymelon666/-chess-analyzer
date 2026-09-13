@@ -177,6 +177,27 @@ def test_priority_position_fact_cannot_replace_stockfish_global_posture() -> Non
     assert "更具体地说" not in paragraph
 
 
+def test_small_gap_wording_matches_the_existing_position_posture() -> None:
+    move = professional_review().model_copy(deep=True)
+    move.best_move_uci = "d2d4"
+    move.best_move_san = "d4"
+    move.centipawn_loss = 20
+
+    move.before.centipawn = -424
+    losing_text = compose_verified_core_paragraph(build_narrative_claim_package(move))
+    assert "白方的困难在落子前已经存在" in losing_text
+
+    move.before.centipawn = 180
+    winning_text = compose_verified_core_paragraph(build_narrative_claim_package(move))
+    assert "白方原有的优势在落子前已经形成" in winning_text
+    assert "白方的困难" not in winning_text
+
+    move.before.centipawn = 0
+    balanced_text = compose_verified_core_paragraph(build_narrative_claim_package(move))
+    assert "没有显著打破原有的平衡" in balanced_text
+    assert "困难" not in balanced_text
+
+
 def test_inferior_move_path_names_reply_without_inventing_a_single_cause() -> None:
     move = professional_review()
     move.best_move_uci = "d2d4"
