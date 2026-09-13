@@ -141,16 +141,15 @@ def thought_path_summary(
     reply_claims = [item for item in selected if item.kind == "opponent_resource"]
     punishment_mode = "not_applicable"
     punishment_handled = not inferior
-    if inferior and any(
-        "现有数据不足以证明这次吃子解释了全部分差" in item.statement
-        for item in reply_claims
-    ):
+    cause_claims = [item for item in selected if item.kind == "position_cause"]
+    if inferior and any("立即付出了子力代价" in item.statement for item in reply_claims):
         punishment_mode = "immediate_capture"
         punishment_handled = True
-    elif inferior and any(
-        "不能倒推成第一回应的直接效果" in item.statement for item in reply_claims
-    ):
-        punishment_mode = "route_boundary"
+    elif inferior and cause_claims:
+        punishment_mode = "verified_causal_chain"
+        punishment_handled = True
+    elif inferior and reply_claims:
+        punishment_mode = "concrete_reply"
         punishment_handled = True
     global_posture_claim = next((
         item
@@ -164,12 +163,15 @@ def thought_path_summary(
     comparison_claim = next((
         item for item in selected if item.kind == "evaluation_comparison"
     ), None)
-    teaching_claim = next((item for item in selected if item.kind == "teaching_rule"), None)
+    available_cause = next((
+        item for item in package.claims if item.kind == "position_cause"
+    ), None)
+    selected_cause = next((item for item in selected if item.kind == "position_cause"), None)
     indices = {
         "global": core.find(global_posture_claim.statement) if global_posture_claim else -1,
         "played": core.find(played_claim.statement) if played_claim else -1,
         "comparison": core.find(comparison_claim.statement) if comparison_claim else -1,
-        "teaching": core.find(teaching_claim.statement) if teaching_claim else -1,
+        "cause": core.find(selected_cause.statement) if selected_cause else -1,
     }
     global_posture = global_posture_claim is not None and indices["global"] == 0
     key_choice = (
@@ -177,15 +179,26 @@ def thought_path_summary(
         and min(indices["played"], indices["comparison"]) >= 0
         and indices["played"] < indices["comparison"]
     )
-    teaching_summary = (
-        "teaching_rule" in kinds
-        and indices["teaching"] > indices["comparison"] >= 0
+    causal_explanation = available_cause is None or (
+        selected_cause is not None and indices["cause"] > indices["played"] >= 0
     )
     legacy_template_free = not any(marker in core for marker in LEGACY_NARRATIVE_MARKERS)
+    process_text_free = not any(
+        phrase in core
+        for phrase in (
+            "评价差距不足以支持",
+            "验证路线",
+            "下一次遇到",
+            "检查顺序",
+            "当前能够确认的是",
+            "不能倒推",
+        )
+    )
     return {
         "globalPosture": global_posture,
         "keyChoice": key_choice,
-        "teachingSummary": teaching_summary,
+        "causalExplanation": causal_explanation,
+        "processTextFree": process_text_free,
         "inferiorMove": inferior,
         "punishmentHandled": punishment_handled,
         "punishmentMode": punishment_mode,
@@ -193,9 +206,10 @@ def thought_path_summary(
         "complete": (
             global_posture
             and key_choice
-            and teaching_summary
+            and causal_explanation
             and punishment_handled
             and legacy_template_free
+            and process_text_free
         ),
     }
 
@@ -517,8 +531,8 @@ def render_report(results: list[dict[str, Any]], cache_ms: int | None, model: st
     immediate_capture_clues = sum(
         item["punishmentMode"] == "immediate_capture" for item in inferior_rows
     )
-    bounded_punishments = sum(
-        item["punishmentMode"] == "route_boundary" for item in inferior_rows
+    causal_chain_clues = sum(
+        item["punishmentMode"] == "verified_causal_chain" for item in inferior_rows
     )
     thought_summary = (
         f"- 强制思考路径完整：{complete_thought_paths}/{len(thought_rows)}"
@@ -526,7 +540,7 @@ def render_report(results: list[dict[str, Any]], cache_ms: int | None, model: st
         f"- 固定栏目口号已清除：{template_free_paths}/{len(thought_rows)}。\n"
         f"- 次佳着惩罚处理：{handled_punishments}/{len(inferior_rows)}；"
         f"其中首应立即吃子线索{immediate_capture_clues}局，"
-        f"严格保留路线边界{bounded_punishments}局。"
+        f"完整战术因果链{causal_chain_clues}局。"
         if thought_rows
         else "- 强制思考路径完整：未计算。"
     )

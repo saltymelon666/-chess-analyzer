@@ -1,6 +1,6 @@
 import chess
 
-from app.models import EvidenceFact, MoveFacts
+from app.models import CandidateLine, EvidenceFact, MoveFacts, VariationMove
 from app.narrative_claims import (
     LEGACY_NARRATIVE_MARKERS,
     build_narrative_claim_package,
@@ -59,6 +59,55 @@ def _h4_review():
     return move
 
 
+def _line_from_uci(board: chess.Board, ucis: list[str]) -> CandidateLine:
+    current = board.copy(stack=False)
+    route: list[VariationMove] = []
+    first_fact: MoveFacts | None = None
+    for ply, uci in enumerate(ucis, start=1):
+        chess_move = chess.Move.from_uci(uci)
+        assert chess_move in current.legal_moves
+        piece = current.piece_at(chess_move.from_square)
+        captured = current.piece_at(chess_move.to_square)
+        san = current.san(chess_move)
+        values = dict(
+            san=san,
+            uci=uci,
+            from_square=chess.square_name(chess_move.from_square),
+            to_square=chess.square_name(chess_move.to_square),
+            piece=chess.piece_name(piece.piece_type),
+            capture=current.is_capture(chess_move),
+            captured_piece=(
+                f"{'white' if captured.color else 'black'}_{chess.piece_name(captured.piece_type)}"
+                if captured is not None
+                else None
+            ),
+            check=current.gives_check(chess_move),
+            checkmate=False,
+            castling=current.is_castling(chess_move),
+        )
+        if first_fact is None:
+            first_fact = MoveFacts(id="line:played:first", **values)
+        route.append(VariationMove(
+            id=f"line:played:ply:{ply}",
+            plyIndex=ply,
+            fullMoveNumber=current.fullmove_number,
+            side="white" if current.turn else "black",
+            **values,
+        ))
+        current.push(chess_move)
+    assert first_fact is not None
+    return CandidateLine(
+        id="line:played",
+        rank=1,
+        depth=18,
+        evaluation=-424,
+        firstMove=first_fact,
+        pv=route,
+        resultingFen=current.fen(),
+        verified=True,
+    )
+
+
 def test_verified_claims_do_not_turn_unrelated_route_squares_into_causality() -> None:
     move = _h4_review()
     package = build_narrative_claim_package(move)
@@ -84,7 +133,8 @@ def test_unknown_claim_selection_falls_back_to_verified_recommendations() -> Non
     assert resolved
     assert all(item.claim_id in package.claim_ids for item in resolved)
     assert "not-real" not in paragraph
-    assert any(item.kind == "teaching_rule" for item in resolved)
+    assert all(item.kind != "teaching_rule" for item in resolved)
+    assert "下一次遇到" not in paragraph
 
 
 def test_global_posture_and_engine_comparison_are_always_in_the_core_path() -> None:
@@ -105,13 +155,9 @@ def test_global_posture_and_engine_comparison_are_always_in_the_core_path() -> N
     assert paragraph.startswith(position.statement)
     assert paragraph.index(position.statement) < paragraph.index(move.played_move.san)
     assert paragraph.index(move.played_move.san) < paragraph.index(comparison.statement)
-    teaching = next(item for item in selected if item.kind == "teaching_rule")
-    assert paragraph.index(comparison.statement) < paragraph.index(teaching.statement)
     assert not any(marker in paragraph for marker in LEGACY_NARRATIVE_MARKERS)
-    assert any(
-        phrase in paragraph
-        for phrase in ("需要背诵", "记住检查顺序", "同一个问题入手")
-    )
+    assert "检查顺序" not in paragraph
+    assert "评价差距不足以支持" not in paragraph
 
 
 def test_priority_position_fact_cannot_replace_stockfish_global_posture() -> None:
@@ -126,8 +172,9 @@ def test_priority_position_fact_cannot_replace_stockfish_global_posture() -> Non
 
     assert selected[0].claim_id == "claim:1:position:evaluation"
     assert selected[0].source == "stockfish"
-    assert any(priority.id in item.evidence_refs for item in selected)
+    assert all(priority.id not in item.evidence_refs for item in selected)
     assert paragraph.startswith(selected[0].statement)
+    assert "更具体地说" not in paragraph
 
 
 def test_inferior_move_path_names_reply_without_inventing_a_single_cause() -> None:
@@ -144,11 +191,11 @@ def test_inferior_move_path_names_reply_without_inventing_a_single_cause() -> No
     assert kinds.index("position_fact") < kinds.index("move_event")
     assert kinds.index("move_event") < kinds.index("evaluation_comparison")
     assert kinds.index("evaluation_comparison") < kinds.index("opponent_resource")
-    assert kinds.index("opponent_resource") < kinds.index("teaching_rule")
-    assert "分岔口出现在对手的回答上" in reply.statement
+    assert "首选回应" in reply.statement
     assert move.actual_move_line is not None
     assert move.actual_move_line.moves[0].san in reply.statement
-    assert "不能倒推成第一回应的直接效果" in reply.statement
+    assert "验证路线" not in reply.statement
+    assert "不能倒推" not in reply.statement
     assert paragraph.index(selected[0].statement) < paragraph.index(reply.statement)
 
 
@@ -251,6 +298,9 @@ def test_move_event_precedes_capture_or_check_detail() -> None:
 
 def test_actual_line_first_ply_is_used_as_opponent_reply() -> None:
     move = professional_review()
+    move.best_move_uci = "d2d4"
+    move.best_move_san = "d4"
+    move.centipawn_loss = 80
     package = build_narrative_claim_package(move)
     reply = next(item for item in package.claims if item.kind == "opponent_resource")
 
@@ -260,14 +310,89 @@ def test_actual_line_first_ply_is_used_as_opponent_reply() -> None:
         assert move.actual_move_line.moves[1].san not in reply.statement
 
 
-def test_non_capture_check_teaching_does_not_claim_a_capture() -> None:
+def test_non_capture_check_does_not_add_a_generic_teaching_checklist() -> None:
     move = _h4_review()
     move.played_move.check = True
     package = build_narrative_claim_package(move)
-    teaching = next(item for item in package.claims if item.kind == "teaching_rule")
+    paragraph = compose_verified_core_paragraph(package)
 
-    assert "将军" in teaching.statement
-    assert "吃子" not in teaching.statement
+    assert "形成将军" in paragraph
+    assert "先检查" not in paragraph
+    assert all(item.kind != "teaching_rule" for item in package.claims)
+
+
+def test_pin_then_capture_is_explained_as_the_concrete_advantage() -> None:
+    move = professional_review().model_copy(deep=True)
+    before = chess.Board("r6k/8/8/8/8/8/P3N3/5K2 w - - 0 1")
+    played = chess.Move.from_uci("f1e1")
+    after = before.copy(stack=False)
+    san = before.san(played)
+    after.push(played)
+    move.side = "white"
+    move.before_fen = before.fen()
+    move.after_fen = after.fen()
+    move.before.centipawn = -424
+    move.before.mate_in = None
+    move.played_move = MoveFacts(
+        id="move:played:1",
+        san=san,
+        uci=played.uci(),
+        from_square="f1",
+        to_square="e1",
+        piece="king",
+        capture=False,
+        check=False,
+        checkmate=False,
+        castling=False,
+    )
+    move.best_move = move.played_move.model_copy(deep=True)
+    move.best_move_uci = played.uci()
+    move.best_move_san = san
+    move.centipawn_loss = 0
+    move.actual_move_line = _line_from_uci(after, ["a8e8", "a2a3", "e8e2"])
+
+    package = build_narrative_claim_package(move)
+    cause = next(item for item in package.claims if item.kind == "position_cause")
+    paragraph = compose_verified_core_paragraph(package)
+
+    assert "Re8把白马钉在王前" in cause.statement
+    assert "这匹马因此一步也不能走" in cause.statement
+    assert "白方走出a3后，Rxe2+随即吃掉这枚马" in cause.statement
+    assert "黑方优势的具体落点" in cause.statement
+    assert cause.statement in paragraph
+    assert cause.evidence_refs == [
+        "line:played",
+        "line:played:ply:1",
+        "line:played:ply:2",
+        "line:played:ply:3",
+    ]
+
+
+def test_pin_without_a_later_capture_is_not_promoted_to_a_cause() -> None:
+    move = professional_review().model_copy(deep=True)
+    after = chess.Board("r6k/8/8/8/8/8/P3N3/4K3 b - - 1 1")
+    move.after_fen = after.fen()
+    move.actual_move_line = _line_from_uci(after, ["a8e8", "a2a3"])
+
+    package = build_narrative_claim_package(move)
+
+    assert all(item.kind != "position_cause" for item in package.claims)
+    assert "捉死" not in compose_verified_core_paragraph(package)
+
+
+def test_existing_absolute_pin_can_explain_an_immediate_piece_loss() -> None:
+    move = professional_review().model_copy(deep=True)
+    after = chess.Board("4r2k/8/8/8/8/8/P3N3/4K3 b - - 1 1")
+    move.after_fen = after.fen()
+    move.before.centipawn = -424
+    move.actual_move_line = _line_from_uci(after, ["e8e2"])
+
+    package = build_narrative_claim_package(move)
+    cause = next(item for item in package.claims if item.kind == "position_cause")
+
+    assert "白马已经被钉在王前" in cause.statement
+    assert "Rxe2+随即吃掉这枚马" in cause.statement
+    assert cause.evidence_refs == ["line:played", "line:played:ply:1"]
 
 
 def test_promotion_effects_name_the_promoted_piece() -> None:

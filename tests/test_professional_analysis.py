@@ -1880,14 +1880,14 @@ def test_professional_prompt_exposes_program_owned_fact_and_initiative_policy() 
     assert [
         step.split("：", 1)[0]
         for step in payload["bookEvaluationMethod"]["narrative_path"]
-    ] == ["局面矛盾", "选择与代价", "棋理启示"]
+    ] == ["局面结论", "具体原因", "选择与代价"]
     assert "bookEvaluationMethod.narrative_path" in prompt
     assert "bookEvaluationMethod.prose_rules" in prompt
     assert "一至三个重点" not in professional_system_prompt()
     assert payload["bookEvaluationMethod"]["reader_checks"] == [
         "读者能用一句话复述这个局面的重点",
         "读者能说明该重点成立的具体原因",
-        "读者知道相似局面中下一次应先检查什么",
+        "读者能区分局面原有问题与本步新增代价",
     ]
     assert "Stockfish分数不能直接推出主动权" in professional_system_prompt()
     assert "物质差、王位置、易位、评价方向、走法质量" in prompt

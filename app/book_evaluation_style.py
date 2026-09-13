@@ -8,7 +8,7 @@ from .position_importance_ranker import PositionImportanceRanking
 from .position_interpretation import PositionInterpretationPackage
 
 
-BOOK_EVALUATION_STYLE_VERSION = "1.2"
+BOOK_EVALUATION_STYLE_VERSION = "1.3"
 EvaluationAction = Literal[
     "verdict",
     "mechanism",
@@ -32,7 +32,7 @@ class BookEvaluationStyle(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    version: Literal["1.2"] = BOOK_EVALUATION_STYLE_VERSION
+    version: Literal["1.3"] = BOOK_EVALUATION_STYLE_VERSION
     method: Literal["judgment_reason_consequence_comparison"] = (
         "judgment_reason_consequence_comparison"
     )
@@ -40,9 +40,9 @@ class BookEvaluationStyle(BaseModel):
     tone: Literal["decisive", "measured", "cautious"]
     maximum_main_points: int = Field(default=1, ge=1, le=3)
     narrative_path: list[str] = Field(default_factory=lambda: [
-        "局面矛盾：先用一句话说明眼下最需要解决什么，只交代理解这个问题必需的局面条件。",
-        "选择与代价：解释实战着的客观作用，再用已验证回应说明效果或代价；需要比较时始终围绕同一个问题。",
-        "棋理启示：把已经证明的机制归纳成一个具体检查方法，不重复评价，不增加新计划。",
+        "局面结论：先用一句话说明优势归属和程度，只交代理解这个问题必需的条件。",
+        "具体原因：优先说明已经由合法路线串联起来的战术或战略机制；小分差不能代替全局原因。",
+        "选择与代价：解释实战着改变了什么；若局面早已困难，要明确区分原有问题与本步新增代价。",
     ])
     prose_rules: list[str] = Field(default_factory=lambda: [
         "采用经典棋书共有的判断、因果和变化组织方法，不仿写某位作者的独特文风。",
@@ -57,7 +57,7 @@ class BookEvaluationStyle(BaseModel):
         default_factory=lambda: [
             "读者能用一句话复述这个局面的重点",
             "读者能说明该重点成立的具体原因",
-            "读者知道相似局面中下一次应先检查什么",
+            "读者能区分局面原有问题与本步新增代价",
         ],
         min_length=3,
         max_length=3,
