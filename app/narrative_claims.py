@@ -11,7 +11,7 @@ from .strategic_plans import StrategicPlanPackage
 from .threat_analysis import ThreatPackage
 
 
-NARRATIVE_CLAIM_VERSION = "1.2"
+NARRATIVE_CLAIM_VERSION = "1.3"
 LEGACY_NARRATIVE_MARKERS = (
     "先看全局：",
     "实战把选择摆上棋盘：",
@@ -56,7 +56,7 @@ class VerifiedNarrativeClaim(BaseModel):
 class NarrativeClaimPackage(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
-    version: Literal["1.2"] = NARRATIVE_CLAIM_VERSION
+    version: Literal["1.3"] = NARRATIVE_CLAIM_VERSION
     claims: list[VerifiedNarrativeClaim] = Field(default_factory=list)
     recommended_claim_refs: list[str] = Field(alias="recommendedClaimRefs", default_factory=list)
     boundary: str = (
