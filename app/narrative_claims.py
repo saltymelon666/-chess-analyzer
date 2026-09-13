@@ -11,7 +11,7 @@ from .strategic_plans import StrategicPlanPackage
 from .threat_analysis import ThreatPackage
 
 
-NARRATIVE_CLAIM_VERSION = "1.1"
+NARRATIVE_CLAIM_VERSION = "1.2"
 LEGACY_NARRATIVE_MARKERS = (
     "先看全局：",
     "实战把选择摆上棋盘：",
@@ -21,15 +21,15 @@ LEGACY_NARRATIVE_MARKERS = (
 )
 NarrativeClaimKind = Literal[
     "position_fact",
+    "position_cause",
     "move_event",
     "move_effect",
     "evaluation_comparison",
     "opponent_resource",
     "verified_plan",
-    "teaching_rule",
 ]
 NarrativeClaimScope = Literal[
-    "before_move", "after_played_move", "candidate_route", "teaching",
+    "before_move", "after_played_move", "candidate_route",
 ]
 
 
@@ -56,13 +56,14 @@ class VerifiedNarrativeClaim(BaseModel):
 class NarrativeClaimPackage(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
-    version: Literal["1.1"] = NARRATIVE_CLAIM_VERSION
+    version: Literal["1.2"] = NARRATIVE_CLAIM_VERSION
     claims: list[VerifiedNarrativeClaim] = Field(default_factory=list)
     recommended_claim_refs: list[str] = Field(alias="recommendedClaimRefs", default_factory=list)
     boundary: str = (
-        "核心正文只能重述这些命题。路线中同时出现的事件不能自动写成因果关系；"
+        "核心正文只能重述这些命题。只有程序在同一条合法Stockfish路线中确认牵制持续到"
+        "对应棋子被吃，才允许把两者写成战术链；其他同时出现的事件不能自动写成因果关系。"
         "没有独立命题支持时，禁止使用造成、使得、支撑、限制、削弱、打开、迫使等因果表述。"
-        "正文按棋理自然推进，不显示固定步骤标题或栏目口号。"
+        "正文直接解释局面，不显示分析步骤、校验过程、固定标题或教学检查清单。"
     )
 
     @property
@@ -135,22 +136,6 @@ def build_narrative_claim_package(
         [f"evaluation:before:{move.index}"],
         "stockfish",
     )
-
-    priority_lookup = _position_fact_lookup(move)
-    for fact_id in priority_evidence_ids:
-        fact = priority_lookup.get(fact_id)
-        if fact is None:
-            continue
-        add(
-            f"position:{len([item for item in claims if item.kind == 'position_fact']) + 1}",
-            "position_fact",
-            "before_move",
-            f"更具体地说，{fact.description}",
-            [fact.id],
-            "python-chess",
-            recommend=True,
-        )
-        break
 
     add(
         "played",
@@ -271,38 +256,38 @@ def build_narrative_claim_package(
                 "它就是当前第一选择。"
             )
         elif move.centipawn_loss is None:
-            comparison = (
-                f"引擎首选{move.best_move_san or move.best_move_uci}，而实战走了"
-                f"{move.played_move.san}；现有数据没有提供可靠分差，因此不能"
-                "从分数倒推两种选择的机制差异。"
-            )
+            comparison = ""
         elif move.centipawn_loss < 50:
             comparison = (
-                f"引擎把{move.played_move.san}与{move.best_move_san or move.best_move_uci}"
-                "放得很近，评价差距不足以支持“这步必须受罚”的说法。"
+                f"{move.played_move.san}与首选{move.best_move_san or move.best_move_uci}的评价接近；"
+                f"{side_text}的困难在这步棋之前已经存在，这步棋既没有制造危机，也没有解除危机。"
             )
         else:
             comparison = (
                 f"分歧从这里出现：与首选{move.best_move_san or move.best_move_uci}相比，"
                 f"{move.played_move.san}使评价下降约{move.centipawn_loss / 100:.2f}兵。"
             )
+        if comparison:
+            add(
+                "comparison",
+                "evaluation_comparison",
+                "after_played_move",
+                comparison,
+                [played_ref, f"evaluation:before:{move.index}", f"evaluation:after:{move.index}"],
+                "stockfish",
+                recommend=move.played_move.uci != move.best_move_uci,
+            )
+
+    tactical_cause = _pin_then_capture_claim(move)
+    if tactical_cause is not None:
+        statement, evidence_refs = tactical_cause
         add(
-            "comparison",
-            "evaluation_comparison",
-            "after_played_move",
-            comparison,
-            [played_ref, f"evaluation:before:{move.index}", f"evaluation:after:{move.index}"],
-            "stockfish",
-            recommend=move.played_move.uci != move.best_move_uci,
-        )
-    else:
-        add(
-            "comparison",
-            "evaluation_comparison",
-            "after_played_move",
-            "当前没有可验证的首选路线，实战着与候选着也就不能作可靠比较。",
-            [played_ref, f"evaluation:before:{move.index}", f"evaluation:after:{move.index}"],
-            "stockfish",
+            "position:pin-capture",
+            "position_cause",
+            "candidate_route",
+            statement,
+            evidence_refs,
+            "python-chess+stockfish",
             recommend=True,
         )
 
@@ -317,34 +302,27 @@ def build_narrative_claim_package(
         )
         if inferior and move.complexity_factors.direct_piece_loss and reply_detail:
             reply_statement = (
-                f"惩罚首先以具体着法出现：{move.played_move.san}之后，"
-                f"{_side_text(_opposite(move.side))}最强回应是{reply.san}，这一步"
-                f"{reply_detail}。它和评价下降同时得到验证，但现有数据不足以证明"
-                "这次吃子解释了全部分差。"
+                f"{move.played_move.san}之后，{_side_text(_opposite(move.side))}以"
+                f"{reply.san}{reply_detail}，实战着立即付出了子力代价。"
             )
         elif inferior:
             detail = f"，这一步{reply_detail}" if reply_detail else ""
             reply_statement = (
-                f"分岔口出现在对手的回答上：{move.played_move.san}之后，"
-                f"{_side_text(_opposite(move.side))}最强回应是{reply.san}{detail}。"
-                "当前能够确认的是评价差和整条验证路线；如果关键事件出现在后续，"
-                "就不能倒推成第一回应的直接效果。"
+                f"{move.played_move.san}之后，{_side_text(_opposite(move.side))}的首选回应是"
+                f"{reply.san}{detail}。"
             )
         else:
-            detail = f"，这一步{reply_detail}" if reply_detail else ""
-            reply_statement = (
-                f"这一步并没有结束争论：在{move.played_move.san}后的验证路线中，"
-                f"{_side_text(_opposite(move.side))}首先以{reply.san}回应{detail}。"
+            reply_statement = ""
+        if reply_statement and tactical_cause is None:
+            add(
+                "reply",
+                "opponent_resource",
+                "candidate_route",
+                reply_statement,
+                [move.actual_move_line.id, reply.id],
+                "python-chess+stockfish",
+                recommend=inferior,
             )
-        add(
-            "reply",
-            "opponent_resource",
-            "candidate_route",
-            reply_statement,
-            [move.actual_move_line.id, reply.id],
-            "python-chess+stockfish",
-            recommend=False,
-        )
 
     for plan in (plan_package.plans if plan_package else []):
         if move.played_move.uci not in plan.supporting_moves and move.played_move.san not in plan.supporting_moves:
@@ -362,15 +340,6 @@ def build_narrative_claim_package(
             confidence=plan.confidence,
         )
 
-    teaching = _teaching_statement(move, bool(event_parts), bool(new_targets), bool(new_defended), bool(controlled))
-    add(
-        "teaching",
-        "teaching_rule",
-        "teaching",
-        teaching,
-        [played_ref],
-        "program-rule",
-    )
     return NarrativeClaimPackage(
         claims=claims,
         recommendedClaimRefs=list(dict.fromkeys(recommended))[:4],
@@ -395,8 +364,8 @@ def compose_verified_core_paragraph(
             for item in selected
             if item.kind in {"evaluation_comparison", "opponent_resource"}
         ],
+        "cause": [item.statement for item in selected if item.kind == "position_cause"],
         "plan": [item.statement for item in selected if item.kind == "verified_plan"],
-        "teaching": [item.statement for item in selected if item.kind == "teaching_rule"],
     }
     paragraphs: list[str] = []
     if groups["position"]:
@@ -405,30 +374,10 @@ def compose_verified_core_paragraph(
         paragraphs.append("".join(groups["move"]))
     if groups["verdict"]:
         paragraphs.append("".join(groups["verdict"]))
+    if groups["cause"]:
+        paragraphs.append("".join(groups["cause"]))
     if groups["plan"]:
-        paragraphs.append(
-            "后续计划只有在变化支持时才站得住；这里得到验证的方向是："
-            + "".join(groups["plan"])
-        )
-    if groups["teaching"]:
-        teaching_text = "".join(groups["teaching"])
-        if "所有将军" in teaching_text:
-            lead = "这段变化提醒我们，强制着的检查次序不能颠倒："
-        elif "连续交换" in teaching_text:
-            lead = "这里真正值得记住的不是一次吃子，而是计算次序："
-        elif "完成易位" in teaching_text:
-            lead = "易位只是动作，随后的安全与协调才是检验："
-        elif "升变" in teaching_text:
-            lead = "兵走到终点并不代表计算结束："
-        else:
-            quiet_leads = (
-                "这里值得带走的不是需要背诵的答案，而是一种检查习惯：",
-                "把这一步真正学会，关键不在记住着法，而在记住检查顺序：",
-                "下一次遇到相似局面，可以先从同一个问题入手：",
-            )
-            move_surface = "".join(groups["move"])
-            lead = quiet_leads[sum(ord(character) for character in move_surface) % len(quiet_leads)]
-        paragraphs.append(lead + teaching_text)
+        paragraphs.append("".join(groups["plan"]))
     return "".join(paragraphs)
 
 
@@ -455,8 +404,8 @@ def resolve_narrative_claims(
     reply_claim = next(
         (item for item in package.claims if item.kind == "opponent_resource"), None,
     )
-    teaching_claim = next(
-        (item for item in package.claims if item.kind == "teaching_rule"), None,
+    cause_claim = next(
+        (item for item in package.claims if item.kind == "position_cause"), None,
     )
     has_non_best_comparison = bool(
         comparison_claim
@@ -479,8 +428,8 @@ def resolve_narrative_claims(
             played_claim,
             event_claim,
             comparison_claim,
+            cause_claim,
             reply_claim if needs_concrete_reply else None,
-            teaching_claim,
         )
         if item is not None
     ]
@@ -496,9 +445,9 @@ def resolve_narrative_claims(
         "move_event": 1,
         "move_effect": 2,
         "evaluation_comparison": 3,
-        "opponent_resource": 4,
-        "verified_plan": 5,
-        "teaching_rule": 6,
+        "position_cause": 4,
+        "opponent_resource": 5,
+        "verified_plan": 6,
     }
     items = sorted(
         unique.values(),
@@ -543,13 +492,118 @@ def evaluate_narrative_claim_grounding(
     )
 
 
-def _position_fact_lookup(move: MoveReview) -> dict[str, object]:
-    facts = [
-        *move.position_facts.piece_activity,
-        *move.position_facts.king_safety,
-        *move.position_facts.pawn_structure,
-    ]
-    return {item.id: item for item in facts if item.id}
+def _pin_then_capture_claim(move: MoveReview) -> tuple[str, list[str]] | None:
+    """Describe a pin-to-capture chain only when one legal route proves every step."""
+    line = move.actual_move_line
+    if line is None or not line.verified or not line.moves:
+        return None
+    try:
+        board = chess.Board(move.after_fen)
+    except ValueError:
+        return None
+
+    active_pins: dict[int, tuple[chess.Piece, VariationMove | None, str]] = {
+        square: (piece, None, chess.square_name(square))
+        for square, piece in board.piece_map().items()
+        if piece.piece_type != chess.KING and board.is_pinned(piece.color, square)
+    }
+    for item in line.moves:
+        try:
+            chess_move = chess.Move.from_uci(item.uci)
+        except ValueError:
+            return None
+        if chess_move not in board.legal_moves:
+            return None
+
+        captured = board.piece_at(chess_move.to_square) if board.is_capture(chess_move) else None
+        pin_record = active_pins.get(chess_move.to_square)
+        if (
+            captured is not None
+            and pin_record is not None
+            and captured == pin_record[0]
+            and captured.piece_type in {chess.KNIGHT, chess.BISHOP, chess.ROOK, chess.QUEEN}
+            and board.is_pinned(captured.color, chess_move.to_square)
+            and (pin_record[1] is None or item.side == pin_record[1].side)
+        ):
+            pinned_piece, pin_move, _ = pin_record
+            pinned_side = "white" if pinned_piece.color == chess.WHITE else "black"
+            piece_name = _piece_name(chess.piece_name(pinned_piece.piece_type))
+            piece_label = _piece_text(chess.piece_name(pinned_piece.piece_type), pinned_side)
+            if pinned_piece.piece_type == chess.KNIGHT:
+                restraint = f"这匹{piece_name}因此一步也不能走"
+            else:
+                restraint = f"这枚{piece_name}不能离开护王线路"
+            intervening = [
+                route_move.san
+                for route_move in line.moves
+                if (pin_move.ply if pin_move is not None else 0) < route_move.ply < item.ply
+            ]
+            if len(intervening) == 1:
+                bridge = f"{_side_text(pinned_side)}走出{intervening[0]}后，"
+            elif intervening:
+                bridge = f"经过{'、'.join(intervening)}后，"
+            else:
+                bridge = ""
+            advantage_side = _evaluation_advantage_side(move)
+            conclusion = (
+                f"这正是{_side_text(advantage_side)}优势的具体落点。"
+                if advantage_side == item.side
+                else ""
+            )
+            refs = [
+                line.id,
+                *[
+                    route_move.id
+                    for route_move in line.moves
+                    if (pin_move.ply if pin_move is not None else 1) <= route_move.ply <= item.ply
+                    and route_move.id
+                ],
+            ]
+            pin_text = (
+                f"{pin_move.san}把{piece_label}钉在王前"
+                if pin_move is not None
+                else f"{piece_label}已经被钉在王前"
+            )
+            return (
+                f"{pin_text}，{restraint}；"
+                f"{bridge}{item.san}随即吃掉这枚{piece_name}。{conclusion}",
+                list(dict.fromkeys(refs)),
+            )
+
+        if chess_move.from_square in active_pins:
+            active_pins.pop(chess_move.from_square, None)
+
+        before_pinned = {
+            square
+            for square, piece in board.piece_map().items()
+            if piece.color != board.turn
+            and piece.piece_type != chess.KING
+            and board.is_pinned(piece.color, square)
+        }
+        board.push(chess_move)
+        enemy = board.turn
+        for square, piece in board.piece_map().items():
+            if (
+                piece.color == enemy
+                and piece.piece_type != chess.KING
+                and board.is_pinned(enemy, square)
+                and square not in before_pinned
+            ):
+                active_pins[square] = (piece, item, chess.square_name(square))
+
+        for square, (piece, _, _) in list(active_pins.items()):
+            if board.piece_at(square) != piece:
+                active_pins.pop(square, None)
+
+    return None
+
+
+def _evaluation_advantage_side(move: MoveReview) -> str | None:
+    if move.before.mate_in is not None:
+        return "white" if move.before.mate_in > 0 else "black"
+    if move.before.centipawn is None or abs(move.before.centipawn) <= 100:
+        return None
+    return "white" if move.before.centipawn > 0 else "black"
 
 
 def _evaluation_posture_statement(move: MoveReview) -> str:
@@ -585,30 +639,6 @@ def _move_event_detail(move: VariationMove, *, captured_side: str) -> str:
     if move.promotion:
         parts.append(f"升变为{_piece_text(move.promotion, move.side)}")
     return "、".join(parts)
-
-
-def _teaching_statement(
-    move: MoveReview,
-    has_event: bool,
-    has_target: bool,
-    has_defense: bool,
-    has_control: bool,
-) -> str:
-    if move.played_move.check or move.played_move.checkmate:
-        return "先检查所有将军和直接威胁，再研究较慢的计划。"
-    if move.played_move.capture:
-        return "先把连续交换逐步算清，再判断眼前收益能否保住。"
-    if move.played_move.castling:
-        return "完成易位后先核对王的安全，再看车是否顺利参加战斗。"
-    if move.played_move.promotion:
-        return "升变后先检查新棋子的将军、攻击和对手最强回应。"
-    if has_target:
-        return "先检查落子后新增攻击哪些具体目标，再计算对手最强回应。"
-    if has_defense:
-        return "先比较落子前后的保护关系，再判断防守是否真正改善。"
-    if has_control:
-        return "先比较落子前后新增和失去的控制格，再判断这步是否配合当前计划。"
-    return "先核对这步实际改变的格子和对手最强回应，再评价它的战略意义。"
 
 
 def _side_text(side: str) -> str:

@@ -87,7 +87,7 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .book_case_transfer import BookCaseTransferPackage
-PROFESSIONAL_PROMPT_VERSION = "professional-v42-natural-chess-book-prose"
+PROFESSIONAL_PROMPT_VERSION = "professional-v43-causal-position-explanation"
 PROFESSIONAL_TOKEN_LIMITS = {"simple": 1500, "normal": 2600, "complex": 3400}
 STRATEGY_TAGS = [
     "king_attack",
@@ -661,10 +661,10 @@ def professional_system_prompt() -> str:
         "不得升级为当前局面已经存在的直接威胁。"
         "positionInterpretation.objective是程序选定的首要分析任务，必须先回答该问题；"
         "deemphasizedTopics中的内容不得作为分析主线。"
-        "decisionContext.corePainPoint是程序根据当前事实与最近决策信号选出的教学核心，最终解释必须"
+        "decisionContext.corePainPoint是程序根据当前事实与最近决策信号选出的解释核心，最终解释必须"
         "先回答它；recentSignals不能用来猜测棋手心理，也不能证明不同失误属于同一种棋理错误。"
         "围绕corePainPoint形成一条连续的棋书式讲解主线：第一句直接给出核心判断，并把正文完整写入"
-        "playedMoveAnalysis.intention。按bookEvaluationMethod.narrative_path组织局面矛盾、选择与代价、棋理启示，"
+        "playedMoveAnalysis.intention。按bookEvaluationMethod.narrative_path组织局面结论、具体原因、选择与代价，"
         "按prose_rules控制文风；这些是写作顺序，不输出内部思考过程或三个固定标题。"
         "先核对事实包的走前行棋方与实战落子方，区分走后轮到谁；从实战落子方的选择解释客观作用，不猜主观动机。"
         "正文只保留解释机制必需的短变化，最多出现实战着和一手直接回应；需要更多着法才能成立的后果，"
@@ -688,7 +688,8 @@ def professional_system_prompt() -> str:
         "输入中的战略计划由程序确认。禁止创建计划、修改计划类型或扩展计划；"
         "只能通过planId解释已有计划，plans.white和plans.black必须保持空数组。"
         "不要使用只有几个字的模板短语，例如‘巩固中心，准备’或‘暂时减缓发展’，必须说明具体作用、后续准备和局面影响。"
-        "说话顺序要像教练带读者看棋：先讲眼下必须解决什么，再讲这步改变了什么及已验证效果，最后提炼具体检查方法。"
+        "说话顺序要像教练带读者看棋：先讲局面究竟好在哪里，再讲这步改变了什么及已验证效果。"
+        "不要把‘评价差距不足以’‘验证路线显示’‘下一次先检查’等分析过程或自检步骤写给用户。"
         "不要先报分数、栏目或校验过程，也不要使用‘当前应继续比较路线’‘该项不作额外评价’‘作为路线起点’"
         "‘程序记录’‘评价方向由’等报告腔。允许使用中心张力、支点、弱格、开放线、交换次序、"
         "子力协调、强制变化等专业术语，但术语后必须紧跟具体棋子、格子、路线或直接后果；"
@@ -750,14 +751,14 @@ def professional_user_prompt(payload: dict[str, Any], complexity: str) -> str:
 6. positionAssessment只允许输出summary，不得输出material、kingSafety、pieceActivity或pawnStructure；这些动态栏目全部由后端重点选择器按selectedFacts回填。
 7. positionAssessment.summary必须是围绕corePainPoint的完整段落，只说明理解核心问题必需的局面条件。不得为了显得全面而同时罗列子力、王安全、中心和两翼；不能只写“当前局面某方子”之类残句。
 8. plans.white和plans.black必须返回空数组。战略计划只能通过planExplanations按chessFacts.plans中的plan_id解释；没有程序计划时planExplanations返回空数组。禁止创建planId、修改计划类型或增加棋步。
-9. playedMoveAnalysis.claimRefs必须从narrativeClaims.claims中选择1—6项，至少覆盖走前全局态势、实战选择、引擎比较和teaching_rule；若数据含直接惩罚或对手回应，也要优先选择。intention只说明所选命题的组织意图，后端将按这些claimRefs重建页面核心正文。不得在intention增加命题目录之外的因果、计划、目标或时序。最终正文按“全局态势 → 关键选择或转折 → 棋理启示”自然推进，不显示“先看全局”“再看关键选择”等固定栏目口号；从实战落子方角度解释，不能把走完这步后轮到的一方说反。多步后果只在对应路线区连同中间条件完整证明。positiveEffects和problems只记录必要补充，不重复评价。
+9. playedMoveAnalysis.claimRefs必须从narrativeClaims.claims中选择1—6项，覆盖走前全局态势和实战选择；存在引擎比较时纳入比较，存在position_cause时必须优先选择它。intention只说明所选命题的组织意图，后端将按这些claimRefs重建页面核心正文。不得在intention增加命题目录之外的因果、计划、目标或时序。最终正文按“局面结论 → 实战选择与代价 → 已验证的具体原因”自然推进，不显示分析流程、校验过程或教学检查清单；从实战落子方角度解释，不能把走完这步后轮到的一方说反。多步后果必须保留命题中已经验证的中间着法。positiveEffects和problems只记录必要补充，不重复评价。
 10. 每条candidateLines的directPurpose、continuationExplanation、advantages和risks必须使用完整具体中文；优点和风险要说明对子力、空间、兵形或线路的实际影响，不能只写标签。用棋手复盘时会说的短句直接讲清“为什么”和“接下来怎样”，避免“阶段性、当前交换段、实际结果、符合当前局面需求、继续比较路线、作为路线起点、该项不作评价”等报告腔套话。
 11. 弱点、王安全、子力活动、兵形、全局威胁与路线内部事件由后端重点选择器生成，不要输出这些字段；不要自行拆分PV阶段。strategyTags只能使用：{strategy_tags}。
 12. 草稿解释文字目标为{length}个中文字符；后端会追加结构化事实并回填真实走法。complexity必须是{complexity}。
 13. 物质差、王位置、易位、评价方向、走法质量以及实战着是否与首选一致全部由程序填写。自由文本不得重写。interpretationPolicy.initiative.side为unknown时，禁止声称任何一方拥有主动权；不得把Stockfish分数直接解释成主动权。
 14. 必须先回答positionInterpretation.objective.primaryQuestion，并围绕priorityTopics组织局面概览、实战着解释和路线比较。deemphasizedTopics不得成为主线。winning_conversion应解释优势方如何兑现；attack_conversion应解释攻势配合和防守资源；endgame_plan不得在没有直接危险时泛谈护王；dynamic_balance应比较活动性与静态因素；move_quality_explanation必须按真实评价差控制批评强度。
-15. bookEvaluationMethod.narrative_path规定正文叙述顺序，bookEvaluationMethod.prose_rules规定语言边界，steps规定证据支持时需要解释的内容：比较只围绕同一个局面问题，对手资源与计划只在已有证据时解释。required不能要求补造事实。短变化只证明已经说清的因果关系，不得代替中文解释。用鲜明判断、具体因果和克制修辞形成棋书文风，不复刻特定作者，不猜测棋手心理，不为戏剧性虚构惩罚或陷阱。
-16. decisionContext.corePainPoint和mustAnswer是本次讲解的最高优先级。先回答痛点，只保留理解痛点所需的信息，再用必要的首选路线、对手直接回应和后果证明；不要先罗列物质、王位置、三条路线或全部评价维度。若实战着与首选着评价损失小于半兵，只把它们写成侧重点不同的合理选择，不得说某一步“更精确”“更好”或制造必须比较的假问题。完成草稿前按bookEvaluationMethod.reader_checks自检：读者能否一句话复述重点、能否明白为什么、能否知道相似局面下次先检查什么。最后一点只能归纳当前已验证机制，不能增加新事实。trend只表示程序确认的近期决策现象，禁止推断棋手心理、习惯或水平。
+15. bookEvaluationMethod.narrative_path规定正文叙述顺序，bookEvaluationMethod.prose_rules规定语言边界，steps规定证据支持时需要解释的内容：局面评价与本步分差是两个问题；小分差只说明危机不是由本步造成，不能代替对全局优劣原因的解释。对手资源与计划只在已有证据时解释。required不能要求补造事实。短变化只证明已经说清的因果关系，不得代替中文解释。用鲜明判断、具体因果和克制修辞形成棋书文风，不复刻特定作者，不猜测棋手心理，不为戏剧性虚构惩罚或陷阱。
+16. decisionContext.corePainPoint和mustAnswer是本次讲解的最高优先级。先回答痛点，只保留理解痛点所需的信息，再用必要的首选路线、对手直接回应和后果证明；不要先罗列物质、王位置、三条路线或全部评价维度。若实战着与首选着评价损失小于半兵，只说明局面问题早已存在，不得拿小分差冒充全局原因。完成草稿前按bookEvaluationMethod.reader_checks自检；自检过程不得写入正文。trend只表示程序确认的近期决策现象，禁止推断棋手心理、习惯或水平。
 {analogous_rule}
 {opening_rule}
 {knowledge_rule}

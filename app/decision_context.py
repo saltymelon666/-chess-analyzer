@@ -100,7 +100,7 @@ def build_decision_context(
     if trend == "repeated_large_loss":
         must_answer.append("指出同一方近期多次出现明显评价损失，但不得臆测这些失误具有相同主观原因。")
     elif trend == "repeated_non_best":
-        must_answer.append("近期多次偏离首选只作背景，不据此认定当前选择有错；从本步已验证机制提炼具体检查方法。")
+        must_answer.append("近期多次偏离首选只作背景，不据此认定当前选择有错；只解释本步已有证据支持的具体作用。")
 
     return DecisionContext(
         historyScope="当前着之前最多5个半回合；只保留程序确认的决策信号",
