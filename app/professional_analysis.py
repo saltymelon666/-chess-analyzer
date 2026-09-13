@@ -25,9 +25,28 @@ from .models import (
     ProfessionalEvidenceText,
     ProfessionalThreat,
 )
+from .chess_reasoning_rules import ChessReasoningRuleEngine
+from .book_evaluation_style import build_book_evaluation_style
+from .unified_book_knowledge import (
+    UNIFIED_BOOK_CONTEXT_VERSION,
+    UnifiedBookKnowledgeRepository,
+)
+from .decision_context import (
+    DECISION_CONTEXT_VERSION,
+    build_decision_context,
+    decision_history_signature,
+)
+from .narrative_claims import (
+    NARRATIVE_CLAIM_VERSION,
+    NarrativeClaimPackage,
+    build_narrative_claim_package,
+    compose_verified_core_paragraph,
+    resolve_narrative_claims,
+)
 from .opening_knowledge import OpeningPresentation
 from .professional_validation import (
     LENGTH_RANGES,
+    VERIFIED_NARRATIVE_LENGTH_RANGES,
     VAGUE_PHRASES,
     _narrative_length,
     build_validation_context,
@@ -50,6 +69,8 @@ from .position_interpretation import (
     POSITION_INTERPRETATION_VERSION,
     build_position_interpretation,
 )
+from .position_factor_ranker import PositionFactorRanker
+from .position_importance_ranker import PositionImportanceRanker
 from .analysis_focus import select_analysis_focus
 from .professional_refs import (
     REFERENCE_OUTPUT_CONTRACT,
@@ -66,7 +87,7 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .book_case_transfer import BookCaseTransferPackage
-PROFESSIONAL_PROMPT_VERSION = "professional-v13-confirmed-opening-context"
+PROFESSIONAL_PROMPT_VERSION = "professional-v42-book-consequence"
 PROFESSIONAL_TOKEN_LIMITS = {"simple": 1500, "normal": 2600, "complex": 3400}
 STRATEGY_TAGS = [
     "king_attack",
@@ -118,11 +139,13 @@ class ProfessionalAnalysisService:
         base_url: str,
         model: str,
         timeout_seconds: float,
+        book_knowledge: UnifiedBookKnowledgeRepository | None = None,
     ) -> None:
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.timeout_seconds = max(timeout_seconds, 120.0)
+        self.book_knowledge = book_knowledge
 
     @property
     def configured(self) -> bool:
@@ -136,6 +159,7 @@ class ProfessionalAnalysisService:
         threat_package: ThreatPackage | None = None,
         book_context: "BookCaseTransferPackage | None" = None,
         opening_context: OpeningPresentation | None = None,
+        recent_moves: list[MoveReview] | None = None,
     ) -> GeneratedProfessionalAnalysis:
         complexity = compute_professional_complexity(move)
         fact_package = build_move_fact_package(move)
@@ -152,8 +176,12 @@ class ProfessionalAnalysisService:
             threat_package=threat_package,
         )
         if not self.configured:
+            narrative_claims = build_narrative_claim_package(
+                move,
+                threat_package=threat_package,
+            )
             safe = _fit_resolved_analysis_length(
-                apply_hard_fact_guard(
+                _humanize_user_visible_prose(apply_hard_fact_guard(
                     build_safe_professional_analysis(
                         move,
                         complexity,
@@ -161,10 +189,13 @@ class ProfessionalAnalysisService:
                     ),
                     move,
                     threat_package=threat_package,
-                ),
+                    opening_context=opening_context,
+                    narrative_claims=narrative_claims,
+                )),
                 move,
                 complexity.level,
             )
+            _apply_verified_narrative_surface_guard(safe, move, narrative_claims)
             errors = validate_professional_analysis(safe, context)
             if errors:
                 raise RuntimeError("安全专业分析未通过事实校验")
@@ -180,23 +211,40 @@ class ProfessionalAnalysisService:
             threat_package=threat_package,
         )
         fact_package.plans = strategic_plan_package.plans
-        interpretation = build_position_interpretation(
-            fact_package,
-            position_facts=move.position_facts,
-            threat_package=threat_package,
-            plan_package=strategic_plan_package,
-        )
         payload = build_professional_payload(
             move,
             complexity,
             context.allowed_evidence_ids,
             fact_package=fact_package,
+            threat_package=threat_package,
+            plan_package=strategic_plan_package,
         )
-        payload["positionInterpretation"] = interpretation.prompt_payload()
-        payload["interpretationPolicy"] = {
-            "initiative": initiative.model_dump(),
-            "hardFacts": "program_controlled",
-        }
+        narrative_claims = NarrativeClaimPackage.model_validate(payload["narrativeClaims"])
+        objective = payload["positionInterpretation"]["objective"]
+        decision_context = build_decision_context(
+            move,
+            recent_moves or [],
+            objective_kind=objective["kind"],
+            objective_question=objective["primary_question"],
+        )
+        payload["decisionContext"] = decision_context.prompt_payload()
+        if book_context is None and self.book_knowledge is not None:
+            try:
+                priority = payload.get("decisionPriority", {})
+                theme_hints = [
+                    priority.get("primary_theme"),
+                    *priority.get("supporting_themes", []),
+                ]
+                knowledge_context = self.book_knowledge.analysis_context(
+                    move.before_fen,
+                    theme_hints=[item for item in theme_hints if isinstance(item, str)],
+                    played_move_uci=move.played_move.uci,
+                    best_move_uci=move.best_move_uci,
+                )
+                if knowledge_context.excerpts:
+                    payload["bookKnowledgeContext"] = knowledge_context.prompt_payload()
+            except Exception as exc:
+                logger.warning("Optional unified book context unavailable: %s", exc)
         if opening_context is not None:
             payload["confirmedOpening"] = opening_context.prompt_payload()
         if book_context is not None and book_context.cases:
@@ -242,6 +290,22 @@ class ProfessionalAnalysisService:
                     context,
                     strategic_plan_package=strategic_plan_package,
                 ))
+                invalid_claim_refs = sorted(
+                    set(draft.played_move_analysis.claim_refs) - narrative_claims.claim_ids
+                )
+                if invalid_claim_refs:
+                    last_issues.append(DraftValidationIssue(
+                        path="playedMoveAnalysis.claimRefs",
+                        category="棋理命题引用",
+                        message="引用了不存在的棋理命题：" + "、".join(invalid_claim_refs),
+                    ))
+                if not draft.played_move_analysis.claim_refs:
+                    draft.played_move_analysis.claim_refs = narrative_claims.recommended_claim_refs
+                    normalizations.append(DraftValidationIssue(
+                        path="playedMoveAnalysis.claimRefs",
+                        category="棋理命题引用",
+                        message="模型未选择命题，后端使用程序推荐的已验证命题",
+                    ))
             attempt_validation_ms = round((time.perf_counter() - validation_started) * 1000)
             validation_ms += attempt_validation_ms
 
@@ -258,7 +322,10 @@ class ProfessionalAnalysisService:
                     parsed,
                     move,
                     threat_package=threat_package,
+                    opening_context=opening_context,
+                    narrative_claims=narrative_claims,
                 )
+                parsed = _humanize_user_visible_prose(parsed)
                 parsed, claim_normalizations = normalize_program_owned_claims(
                     parsed,
                     context,
@@ -272,10 +339,15 @@ class ProfessionalAnalysisService:
                     for path in claim_normalizations
                 )
                 parsed = _fit_resolved_analysis_length(parsed, move, complexity.level)
+                _apply_verified_narrative_surface_guard(parsed, move, narrative_claims)
                 attempt_postprocess_ms = round((time.perf_counter() - postprocess_started) * 1000)
                 postprocess_ms += attempt_postprocess_ms
                 resolved_started = time.perf_counter()
-                resolved_errors = validate_professional_analysis(parsed, context)
+                resolved_errors = validate_professional_analysis(
+                    parsed,
+                    context,
+                    enforce_core_explanation=True,
+                )
                 resolved_validation_ms = round((time.perf_counter() - resolved_started) * 1000)
                 validation_ms += resolved_validation_ms
                 attempt_validation_ms += resolved_validation_ms
@@ -313,7 +385,7 @@ class ProfessionalAnalysisService:
 
         postprocess_started = time.perf_counter()
         safe = _fit_resolved_analysis_length(
-            apply_hard_fact_guard(
+            _humanize_user_visible_prose(apply_hard_fact_guard(
                 build_safe_professional_analysis(
                     move,
                     complexity,
@@ -321,10 +393,13 @@ class ProfessionalAnalysisService:
                 ),
                 move,
                 threat_package=threat_package,
-            ),
+                opening_context=opening_context,
+                narrative_claims=narrative_claims,
+            )),
             move,
             complexity.level,
         )
+        _apply_verified_narrative_surface_guard(safe, move, narrative_claims)
         postprocess_ms += round((time.perf_counter() - postprocess_started) * 1000)
         validation_started = time.perf_counter()
         safe_errors = validate_professional_analysis(safe, context)
@@ -484,17 +559,19 @@ def build_professional_payload(
     allowed_evidence_ids: set[str],
     *,
     fact_package: ChessFactPackage | None = None,
+    threat_package: ThreatPackage | None = None,
+    plan_package: StrategicPlanPackage | None = None,
 ) -> dict[str, Any]:
     # The context still owns the complete allow-list for server-side validation.
     # DeepSeek receives each current-position fact once and refers to it by ID.
     del allowed_evidence_ids
     package = fact_package or build_move_fact_package(move)
-    if not package.threats:
-        classified_threats = ThreatAnalyzer().classify(package)
-        package.threats = classified_threats.threats
-    else:
-        classified_threats = ThreatAnalyzer().classify(package)
-    if not package.plans:
+    classified_threats = threat_package or ThreatAnalyzer().classify(package)
+    package.threats = classified_threats.threats
+    if plan_package is not None:
+        strategic_plan_package = plan_package
+        package.plans = strategic_plan_package.plans
+    elif not package.plans:
         strategic_plan_package = StrategicPlanAnalyzer().analyze(
             package,
             position_facts=move.position_facts,
@@ -512,10 +589,33 @@ def build_professional_payload(
         threat_package=classified_threats,
         plan_package=strategic_plan_package,
     )
+    reasoning_rules = ChessReasoningRuleEngine().evaluate(
+        package.position.fen,
+        fact_package=package,
+        threat_package=classified_threats,
+        plan_package=strategic_plan_package,
+    )
+    factor_ranking = PositionFactorRanker().rank(reasoning_rules)
+    importance = PositionImportanceRanker().rank(
+        factor_ranking,
+        fact_package=package,
+        threat_package=classified_threats,
+        plan_package=strategic_plan_package,
+        interpretation=interpretation,
+    )
+    evaluation_style = build_book_evaluation_style(interpretation, importance)
     payload = build_reference_payload(move, complexity.level, complexity.reasons)
     payload.get("pos", {}).pop("fen", None)
     payload["chessFacts"] = package.protocol_manifest()
     payload["positionInterpretation"] = interpretation.prompt_payload()
+    payload["decisionPriority"] = importance.model_dump(exclude={"forbidden_claims"})
+    payload["bookEvaluationMethod"] = evaluation_style.prompt_payload()
+    payload["narrativeClaims"] = build_narrative_claim_package(
+        move,
+        priority_evidence_ids=interpretation.objective.evidence_ids,
+        threat_package=classified_threats,
+        plan_package=strategic_plan_package,
+    ).prompt_payload()
     payload["interpretationPolicy"] = {
         "initiative": assess_initiative(
             package,
@@ -542,12 +642,11 @@ def _compact_prompt_value(value: Any) -> Any:
 def professional_system_prompt() -> str:
     return (
         "你只负责解释后端提供的国际象棋事实引用，不负责重新抄写或计算棋盘。"
-        "你的首要任务不是填满所有栏目，而是抓住当前局面中最影响决策的一至三个重点。"
+        "你的首要任务是围绕当前局面中最影响决策的一个重点，写出初学者能读懂的棋书式讲解。"
         "不要把所有棋盘事实都写进分析，只有focus.selectedFacts允许进入最终结论。"
         "候选路线必须用lineRef，PV必须用plyRefs，事实必须用evidenceRefs。"
-        "自由解释文本只能使用中文、中文标点和常用百分数，禁止任何拉丁字母、棋盘格、SAN或UCI；"
-        "自由解释文本也禁止自行写吃子、将军、将杀或绝杀，这些事件由后端从ply事实填充；"
-        "需要指代具体对象时只能写‘该棋子’‘该路线’‘该阶段’，后端会从引用ID回填真实棋子、格子和走法。"
+        "解释必须以中文为主，并优先直接写事实目录中已有的具体棋子、格子和SAN走法；"
+        "只能使用输入中已经出现的格子和SAN，禁止自行编造UCI、吃子、将军、将杀或绝杀。"
         "不能引用输入目录之外的ID，不能把白方与黑方说反。证据不足时返回空数组、null或isRelevant为false。"
         "没有保护不等于弱点，王前兵较少不等于存在攻王，没有易位权不等于王不安全。"
         "单条Stockfish路线中的普通吃子不等于全局潜在威胁，物质数量不作为固定栏目。"
@@ -559,6 +658,23 @@ def professional_system_prompt() -> str:
         "不得升级为当前局面已经存在的直接威胁。"
         "positionInterpretation.objective是程序选定的首要分析任务，必须先回答该问题；"
         "deemphasizedTopics中的内容不得作为分析主线。"
+        "decisionContext.corePainPoint是程序根据当前事实与最近决策信号选出的教学核心，最终解释必须"
+        "先回答它；recentSignals不能用来猜测棋手心理，也不能证明不同失误属于同一种棋理错误。"
+        "围绕corePainPoint形成一条连续的棋书式讲解主线：第一句直接给出核心判断，并把正文完整写入"
+        "playedMoveAnalysis.intention。按bookEvaluationMethod.narrative_path组织局面矛盾、选择与代价、棋理启示，"
+        "按prose_rules控制文风；这些是写作顺序，不输出内部思考过程或三个固定标题。"
+        "先核对事实包的走前行棋方与实战落子方，区分走后轮到谁；从实战落子方的选择解释客观作用，不猜主观动机。"
+        "正文只保留解释机制必需的短变化，最多出现实战着和一手直接回应；需要更多着法才能成立的后果，"
+        "在对应路线区完整证明，核心正文只解释已验证机制，不能省略中间条件后写成即时结果。"
+        "不得把后续验证路线中的零散事件搬进正文。变化只用于证明文字，不能用着法列表代替解释。"
+        "只保留理解核心问题所需的信息，不罗列全部评价维度。每个结论都必须由事实包或短变化支持。"
+        "bookEvaluationMethod只规定棋书式评价顺序：先判断，再解释机制和后果，随后按需比较路线、"
+        "指出对手资源并落到计划；它不能增加任何当前局面事实。"
+        "bookKnowledgeContext若存在，只用于学习棋书作者选择重点、解释因果和组织语言的方法；"
+        "analogous_position与principle_only摘录都不是当前局面事实，禁止复制其中的棋子、格子、"
+        "着法、评价或结论。"
+        "narrativeClaims是核心正文唯一允许表达的棋理命题目录。模型只能通过claimRefs选择命题，"
+        "不得扩展命题中的因果、目标、计划或时序；后端会按claimRefs重建核心正文。"
         "confirmedOpening若存在，其名称、ECO和变例由程序确认；不得重新判断、改名或补写其他变例。"
         "开局背景只是常见思路，只有当前事实包另有支持时才能把它表述成当前局面的事实或计划。"
         "PV只是参考变化，不是必然发生。"
@@ -568,6 +684,12 @@ def professional_system_prompt() -> str:
         "输入中的战略计划由程序确认。禁止创建计划、修改计划类型或扩展计划；"
         "只能通过planId解释已有计划，plans.white和plans.black必须保持空数组。"
         "不要使用只有几个字的模板短语，例如‘巩固中心，准备’或‘暂时减缓发展’，必须说明具体作用、后续准备和局面影响。"
+        "说话顺序要像教练带读者看棋：先讲眼下必须解决什么，再讲这步改变了什么及已验证效果，最后提炼具体检查方法。"
+        "不要先报分数、栏目或校验过程，也不要使用‘当前应继续比较路线’‘该项不作额外评价’‘作为路线起点’"
+        "‘程序记录’‘评价方向由’等报告腔。允许使用中心张力、支点、弱格、开放线、交换次序、"
+        "子力协调、强制变化等专业术语，但术语后必须紧跟具体棋子、格子、路线或直接后果；"
+        "禁止只用‘逐步施压’‘导致局面恶化’等抽象结论代替分析，也不要使用‘去问它’‘撞中心’"
+        "等过度口语化比喻。PV中的后续收益若不是紧接着发生，必须交代中间着法，不能写成即时结果。"
     )
 
 
@@ -600,6 +722,17 @@ def professional_user_prompt(payload: dict[str, Any], complexity: str) -> str:
             "\n16. confirmedOpening的名称、ECO和变例已经由程序锁定，不得重新识别或输出其他名称。"
             "background只提供该开局的常见思路，不能覆盖当前局面的Stockfish评价、事实、计划或威胁；"
             "只有chessFacts或positionInterpretation同时支持时，才能借鉴其解释角度。"
+            "若当前仍在开局阶段，先交代已确认的开局名称和常见战略方向。开局通常存在多种合理选择；"
+            "除非程序质量和评价损失明确证明是失误，不得把Stockfish首选写成唯一正确的开局原则，"
+            "只说明它在当前局面优先解决了什么问题。"
+        )
+    knowledge_rule = ""
+    if payload.get("bookKnowledgeContext"):
+        knowledge_rule = (
+            "\n17. bookKnowledgeContext中的exact_current_position表示完整合法状态相同，但其中的着法、"
+            "评价和战术事件仍必须由当前引用目录支持；analogous_position与principle_only只用于"
+            "借鉴判断顺序、因果解释和自然棋书语言。禁止把来源摘录中的棋子、格子、着法、胜负、"
+            "主动权或计划写入当前结论。"
         )
     return f"""请根据以下引用目录生成分析草稿：
 {compact_payload}
@@ -608,19 +741,22 @@ def professional_user_prompt(payload: dict[str, Any], complexity: str) -> str:
 1. candidateLines必须恰好返回{len(payload.get('lines', []))}项，lineRef按lines顺序逐条引用；每条路线只返回一个plyRefs数组，必须按顺序完整覆盖该路线plies[].id，不能串线。本次不可改动的引用骨架为：{line_skeleton}
 2. playedMoveAnalysis.moveRef必须等于played.ref；strongestReplyRef及唯一的plyRefs数组只能来自并完整覆盖actual.plies。
 3. evidenceRefs、dangerRef只能引用输入中出现的ID。每组evidenceRefs只选1—4个最相关ID，不要枚举整份事实目录。每个危险、计划和因果结论必须有证据。
-4. 自由文本只能使用中文和中文标点，禁止拉丁字母、数字、棋盘格、SAN和UCI。不得自行写“吃子、将军、将杀、绝杀”等事件词，这些事件由后端根据ply填充。错误示例：“控制d4”“走Qe2”；正确示例：“控制该中心格”“该路线首着完成协调”。
+4. 自由文本以中文为主；为说清棋理，可以直接使用输入目录已经出现的具体棋子、格子和SAN走法，但不得写任何UCI，也不得写目录之外的格子或SAN。只有对应ply明确包含时才能写“吃子、将军、将杀、绝杀”。正确示例是明确写出“白马从f3跳到g5”，不要用“该棋子来到该格”回避具体对象。
 5. mainDanger有具体危险时用dangerRef引用一个已有ply；无可靠直接危险时dangerRef写null且level写none。危险一方由后端从ply推导，不要输出sideInDanger。
 6. positionAssessment只允许输出summary，不得输出material、kingSafety、pieceActivity或pawnStructure；这些动态栏目全部由后端重点选择器按selectedFacts回填。
-7. positionAssessment.summary必须用完整段落具体说明双方子力状态、活跃与受限棋子、中心和两翼局势，不能只写“当前局面某方子”之类残句。
+7. positionAssessment.summary必须是围绕corePainPoint的完整段落，只说明理解核心问题必需的局面条件。不得为了显得全面而同时罗列子力、王安全、中心和两翼；不能只写“当前局面某方子”之类残句。
 8. plans.white和plans.black必须返回空数组。战略计划只能通过planExplanations按chessFacts.plans中的plan_id解释；没有程序计划时planExplanations返回空数组。禁止创建planId、修改计划类型或增加棋步。
-9. playedMoveAnalysis的intention、positiveEffects和problems都必须是完整句子，分别说明直接解决的问题、后续准备、局面影响与具体风险。禁止使用“依据”“可以判断”“根据”开头。
-10. 每条candidateLines的directPurpose、continuationExplanation、advantages和risks必须使用完整具体中文；优点和风险要说明对子力、空间、兵形或线路的实际影响，不能只写标签。
+9. playedMoveAnalysis.claimRefs必须从narrativeClaims.claims中选择1—6项，至少覆盖走前全局态势、实战选择、引擎比较和teaching_rule；若数据含直接惩罚或对手回应，也要优先选择。intention只说明所选命题的组织意图，后端将按这些claimRefs重建页面核心正文。不得在intention增加命题目录之外的因果、计划、目标或时序。最终正文按“全局态势 → 关键选择或转折 → 棋理启示”组织，从实战落子方角度解释，不能把走完这步后轮到的一方说反。多步后果只在对应路线区连同中间条件完整证明。positiveEffects和problems只记录必要补充，不重复评价。
+10. 每条candidateLines的directPurpose、continuationExplanation、advantages和risks必须使用完整具体中文；优点和风险要说明对子力、空间、兵形或线路的实际影响，不能只写标签。用棋手复盘时会说的短句直接讲清“为什么”和“接下来怎样”，避免“阶段性、当前交换段、实际结果、符合当前局面需求、继续比较路线、作为路线起点、该项不作评价”等报告腔套话。
 11. 弱点、王安全、子力活动、兵形、全局威胁与路线内部事件由后端重点选择器生成，不要输出这些字段；不要自行拆分PV阶段。strategyTags只能使用：{strategy_tags}。
 12. 草稿解释文字目标为{length}个中文字符；后端会追加结构化事实并回填真实走法。complexity必须是{complexity}。
 13. 物质差、王位置、易位、评价方向、走法质量以及实战着是否与首选一致全部由程序填写。自由文本不得重写。interpretationPolicy.initiative.side为unknown时，禁止声称任何一方拥有主动权；不得把Stockfish分数直接解释成主动权。
 14. 必须先回答positionInterpretation.objective.primaryQuestion，并围绕priorityTopics组织局面概览、实战着解释和路线比较。deemphasizedTopics不得成为主线。winning_conversion应解释优势方如何兑现；attack_conversion应解释攻势配合和防守资源；endgame_plan不得在没有直接危险时泛谈护王；dynamic_balance应比较活动性与静态因素；move_quality_explanation必须按真实评价差控制批评强度。
+15. bookEvaluationMethod.narrative_path规定正文叙述顺序，bookEvaluationMethod.prose_rules规定语言边界，steps规定证据支持时需要解释的内容：比较只围绕同一个局面问题，对手资源与计划只在已有证据时解释。required不能要求补造事实。短变化只证明已经说清的因果关系，不得代替中文解释。用鲜明判断、具体因果和克制修辞形成棋书文风，不复刻特定作者，不猜测棋手心理，不为戏剧性虚构惩罚或陷阱。
+16. decisionContext.corePainPoint和mustAnswer是本次讲解的最高优先级。先回答痛点，只保留理解痛点所需的信息，再用必要的首选路线、对手直接回应和后果证明；不要先罗列物质、王位置、三条路线或全部评价维度。若实战着与首选着评价损失小于半兵，只把它们写成侧重点不同的合理选择，不得说某一步“更精确”“更好”或制造必须比较的假问题。完成草稿前按bookEvaluationMethod.reader_checks自检：读者能否一句话复述重点、能否明白为什么、能否知道相似局面下次先检查什么。最后一点只能归纳当前已验证机制，不能增加新事实。trend只表示程序确认的近期决策现象，禁止推断棋手心理、习惯或水平。
 {analogous_rule}
 {opening_rule}
+{knowledge_rule}
 
 只返回与以下契约完全一致的JSON，不要Markdown或额外字段。数组对象表示元素结构：
 {compact_contract}"""
@@ -632,6 +768,7 @@ def professional_cache_key(
     stockfish_version: str,
     stockfish_depth: int,
     opening_id: str | None = None,
+    recent_moves: list[MoveReview] | None = None,
 ) -> str:
     route_summary = [
         {
@@ -656,6 +793,10 @@ def professional_cache_key(
             "threatPackageVersion": THREAT_PACKAGE_VERSION,
             "strategicPlanPackageVersion": STRATEGIC_PLAN_PACKAGE_VERSION,
             "positionInterpretationVersion": POSITION_INTERPRETATION_VERSION,
+            "bookKnowledgeContextVersion": UNIFIED_BOOK_CONTEXT_VERSION,
+            "decisionContextVersion": DECISION_CONTEXT_VERSION,
+            "narrativeClaimVersion": NARRATIVE_CLAIM_VERSION,
+            "decisionHistory": decision_history_signature(recent_moves or []),
             "openingId": opening_id,
         },
         ensure_ascii=False,
@@ -708,7 +849,8 @@ def build_safe_professional_analysis(
         danger_side = "black" if top_threat.side == "white" else "white"
         danger_level = "immediate"
         danger_description = (
-            f"{danger_side}的直接危险来自{top_threat.side}_{threat_source.piece.split('_')[-1]}从"
+            f"{_human_side_text(danger_side)}的直接危险来自"
+            f"{_human_piece_text(threat_source.piece, top_threat.side)}从"
             f"{threat_source.from_square}走到{threat_source.to_square}的参考着{threat_source.san}。"
         )
         danger_consequence = top_threat.decision_impact
@@ -780,8 +922,8 @@ def build_safe_professional_analysis(
             "target": threat.target or "程序未指定单一目标",
             "attacker": "、".join(threat.preparation_moves),
             "preparation": (
-                f"程序对{threat.ignore_test.ignored_move or '中性应手'}完成Ignore Test，"
-                f"最小评价损失为{threat.ignore_test.evaluation_loss:.2f}兵。"
+                f"程序验证了对手选择{threat.ignore_test.ignored_move or '中性应手'}后的结果，"
+                f"忽略该构想至少会损失{threat.ignore_test.evaluation_loss:.2f}兵的评价。"
                 if threat.ignore_test.evaluation_loss is not None
                 else "准备步骤已经确认，但评价损失待确认。"
             ),
@@ -810,16 +952,17 @@ def build_safe_professional_analysis(
                 "firstMove": line.first_move.san,
                 "strategyTags": [_safe_strategy_tag(first)] if first else [],
                 "directPurpose": (
-                    f"把{first.piece}从{first.from_square}走到{first.to_square}。更深战略目的证据不足，无法可靠判断。"
-                    if first else "路线为空，证据不足，无法可靠判断。"
+                    f"第一步走{line.first_move.san}，"
+                    f"{_human_piece_text(first.piece, first.side)}从{first.from_square}来到{first.to_square}。"
+                    if first else "这条变化没有给出第一步。"
                 ),
                 "opponentResponse": line.moves[1].san if len(line.moves) > 1 else "路线未提供对手回应",
                 "continuationPhases": _safe_phases(line.moves, 3),
                 "resultingPosition": _result_position_text(line),
-                "advantages": ["这是Stockfish给出的合法候选路线。"],
-                "risks": ["路线以外的发展证据不足，不能视为必然发生。"],
+                "advantages": [],
+                "risks": [],
                 "events": events,
-                "whyThisRank": f"排名和评价直接来自Stockfish：rank={line.rank}。",
+                "whyThisRank": "",
                 "evidenceRefs": [line.id, *([first.id] if first else [])],
             }
         )
@@ -871,7 +1014,11 @@ def build_safe_professional_analysis(
         "threats": threats,
         "playedMoveAnalysis": {
             "move": move.played_move.san,
-            "intention": f"实战着把{move.played_move.piece}从{move.played_move.from_square}走到{move.played_move.to_square}；主观意图证据不足，无法可靠判断。",
+            "intention": (
+                f"实战着把{_human_piece_text(move.played_move.piece, move.side)}从"
+                f"{move.played_move.from_square}走到{move.played_move.to_square}；"
+                "主观意图证据不足，无法可靠判断。"
+            ),
             "positiveEffects": [_played_event_text(move)],
             "problems": [f"评价从{move.before.evaluation}变为{move.after.evaluation}；根本战略原因证据不足时不补写。"],
             "strongestResponse": strongest,
@@ -963,7 +1110,8 @@ def _apply_safe_length_profile(
         for plan in plans:
             plan.description = plan.description.replace("参考路线只确认", "PV确认").replace("走到", "到")
     result.played_move_analysis.intention = (
-        f"{move.played_move.piece}从{move.played_move.from_square}到{move.played_move.to_square}；主观意图证据不足。"
+        f"{_human_piece_text(move.played_move.piece, move.side)}从"
+        f"{move.played_move.from_square}到{move.played_move.to_square}；主观意图证据不足。"
     )
     result.played_move_analysis.problems = [f"评价{move.before.evaluation}变为{move.after.evaluation}。"]
     result.played_move_analysis.evaluation_reason = "只确认评价变化与参考线。"
@@ -978,7 +1126,10 @@ def _apply_safe_length_profile(
     for line, source in zip(result.candidate_lines, move.candidate_lines):
         first = source.moves[0] if source.moves else None
         if first:
-            line.direct_purpose = f"{first.piece}从{first.from_square}到{first.to_square}。"
+            line.direct_purpose = (
+                f"{_human_piece_text(first.piece, first.side)}从"
+                f"{first.from_square}到{first.to_square}。"
+            )
         line.continuation_phases = _model_phases(source.moves, 1)
         for phase in line.continuation_phases:
             phase.phase = "PV"
@@ -994,17 +1145,37 @@ def apply_hard_fact_guard(
     move: MoveReview,
     *,
     threat_package: ThreatPackage | None = None,
+    opening_context: OpeningPresentation | None = None,
+    narrative_claims: NarrativeClaimPackage | None = None,
 ) -> ProfessionalAnalysis:
     """Replace protected conclusions with deterministic program-owned text."""
     result = analysis.model_copy(deep=True)
     result.position_assessment.summary = _controlled_position_summary(move)
+    if opening_context is not None:
+        result.position_assessment.summary = (
+            f"这是{opening_context.display_name}。{opening_context.description}"
+            f"{result.position_assessment.summary}"
+        )
     result.played_move_analysis.evaluation_reason = _controlled_move_summary(move)
+    if (
+        move.best_move_uci
+        and move.best_move_uci == move.played_move.uci
+        and move.candidate_lines
+    ):
+        result.comparison.main_difference = (
+            f"{move.played_move.san}本来就是这里的首选，关键是看懂它的作用。"
+        )
+        result.comparison.evidence_refs = list(dict.fromkeys([
+            move.played_move.id,
+            move.candidate_lines[0].id,
+            *result.comparison.evidence_refs,
+        ]))
     # These fields are displayed next to program-owned evaluation facts. Keep
     # them deterministic so model prose cannot reclassify a static score or
     # invent a danger when the program found none.
     if result.main_danger.side_in_danger == "none":
-        result.main_danger.description = "当前没有程序确认的单一直接危险，证据不足以指定更具体的威胁。"
-        result.main_danger.consequence = "继续比较已验证的合法路线，不把普通PV事件升级为当前威胁。"
+        result.main_danger.description = "眼前没有必须马上处理的单一威胁。"
+        result.main_danger.consequence = "可以按自己的计划走，不必先做防守。"
     direct_threats = (
         [
             item for item in threat_package.threats
@@ -1066,8 +1237,8 @@ def apply_hard_fact_guard(
             "形成准备型威胁。"
         )
         result.main_danger.consequence = (
-            f"有界Ignore Test的最小评价损失为"
-            f"{prepared.ignore_test.evaluation_loss:.2f}兵，对手不能安全忽略这一构想。"
+            "程序验证表明，忽略该构想至少会损失"
+            f"{prepared.ignore_test.evaluation_loss:.2f}兵的评价，对手必须认真应对。"
             if prepared.ignore_test.evaluation_loss is not None
             else "程序已确认准备关系，但尚无足够评价损失证据。"
         )
@@ -1086,8 +1257,8 @@ def apply_hard_fact_guard(
             target=prepared.target or "程序未指定单一目标",
             attacker="、".join(prepared.preparation_moves),
             preparation=(
-                f"Ignore Test检查了{prepared.ignore_test.ignored_move or '中性应手'}；"
-                f"最小评价损失为{prepared.ignore_test.evaluation_loss:.2f}兵。"
+                f"程序检查了对手选择{prepared.ignore_test.ignored_move or '中性应手'}后的结果；"
+                f"忽略该构想至少会损失{prepared.ignore_test.evaluation_loss:.2f}兵的评价。"
                 if prepared.ignore_test.evaluation_loss is not None
                 else "程序已确认准备步骤。"
             ),
@@ -1101,33 +1272,116 @@ def apply_hard_fact_guard(
                 if "准备型威胁" not in item.description
             ],
         ]
-    result.played_move_analysis.problems = [
-        f"程序记录实战前后评价为{move.before.evaluation}和{move.after.evaluation}；具体棋理原因只从已验证路线解释。"
-    ]
+    elif threat_package is not None:
+        result.main_danger.side_in_danger = "none"
+        result.main_danger.level = "long_term"
+        result.main_danger.description = "眼前没有必须马上处理的单一威胁。"
+        result.main_danger.consequence = "可以按自己的计划走，不必先做防守。"
+        result.main_danger.evidence_refs = [
+            move.played_move.id or f"move:played:{move.index}"
+        ]
+    same_as_best = bool(
+        move.best_move_uci
+        and move.best_move_uci == move.played_move.uci
+    )
+    if same_as_best:
+        result.played_move_analysis.problems = []
+    elif move.best_move_san and move.centipawn_loss is not None and move.centipawn_loss < 50:
+        result.played_move_analysis.problems = []
+    elif move.best_move_san and move.centipawn_loss is not None and move.centipawn_loss <= 100:
+        result.played_move_analysis.problems = [
+            f"{move.played_move.san}不是大错，但{move.best_move_san}更精确。"
+        ]
+    elif move.best_move_san:
+        result.played_move_analysis.problems = [
+            f"{move.played_move.san}之后局面明显变差，先比较{move.best_move_san}这条变化。"
+        ]
+    else:
+        result.played_move_analysis.problems = []
+    result.played_move_analysis.intention = _sanitize_core_explanation(
+        result.played_move_analysis.intention,
+        move,
+    )
+    if narrative_claims is not None:
+        selected_claims = resolve_narrative_claims(
+            narrative_claims,
+            result.played_move_analysis.claim_refs,
+        )
+        result.played_move_analysis.intention = compose_verified_core_paragraph(
+            narrative_claims,
+            [item.claim_id for item in selected_claims],
+        )
+        result.played_move_analysis.claim_refs = [item.claim_id for item in selected_claims]
     current_tactics = [
         tactic for tactic in move.verified_tactics
         if tactic.move_uci == move.played_move.uci
     ]
     if current_tactics:
         tactic_text = _guarded_tactic_text(current_tactics[0].description)
-        result.played_move_analysis.intention = tactic_text
+        result.played_move_analysis.intention = (
+            f"{tactic_text}这一手的重点是让同一枚棋子同时盯住多个目标。"
+            "类似局面先检查有没有能一次攻击两个以上目标的落点，再计算对手最强回应。"
+        )
         result.played_move_analysis.positive_effects = list(dict.fromkeys([
             tactic_text,
             *result.played_move_analysis.positive_effects,
         ]))
-    actual_route_moves = {
-        item.uci
-        for item in (move.actual_move_line.moves if move.actual_move_line else [])
-    }
-    route_tactics = [
-        tactic for tactic in move.verified_tactics
-        if tactic.move_uci in actual_route_moves
-        and tactic.move_uci != move.played_move.uci
-    ]
-    if route_tactics:
-        result.played_move_analysis.problems.append(
-            f"实战后验证路线包含：{_guarded_tactic_text(route_tactics[0].description)}"
+        tactic_fact_ids = [
+            fact.id
+            for fact in move.position_facts.threats
+            if fact.category == current_tactics[0].name
+            and fact.side == current_tactics[0].side
+            and set(fact.squares) == set(current_tactics[0].squares)
+        ]
+        result.played_move_analysis.evidence_refs = list(dict.fromkeys([
+            *result.played_move_analysis.evidence_refs,
+            *tactic_fact_ids,
+        ]))
+    if move.played_move.check:
+        result.played_move_analysis.intention = (
+            f"{move.played_move.san}让{_human_piece_text(move.played_move.piece, move.side)}"
+            f"从{move.played_move.from_square}到{move.played_move.to_square}并直接将军，"
+            "这一手的先手来自迫使对方先处理王的安全。"
+            "类似局面先检查所有强制手段，再确认对手回应后攻势能否继续。"
         )
+    if (
+        move.played_move.capture
+        and (move.played_move.captured_piece or "").endswith("queen")
+        and move.actual_move_line
+        and move.actual_move_line.moves
+        and move.actual_move_line.moves[0].capture
+        and (move.actual_move_line.moves[0].captured_piece or "").endswith("queen")
+    ):
+        side_text = "白方" if move.side == "white" else "黑方"
+        result.played_move_analysis.intention = (
+            f"{move.played_move.san}只是正常兑后：{side_text}后在"
+            f"{move.played_move.to_square}吃掉对方后，把局面直接简化，没有额外战术需要展开。"
+        )
+        result.played_move_analysis.evidence_refs = list(dict.fromkeys([
+            *result.played_move_analysis.evidence_refs,
+            move.played_move.id or f"move:played:{move.index}",
+            move.actual_move_line.moves[0].id,
+        ]))
+    elif not re.search(
+        r"类似局面|先检查|先看|首先确认|第一眼|优先检查",
+        result.played_move_analysis.intention,
+    ):
+        piece = (move.played_move.piece or "").split("_")[-1]
+        if piece in {"knight", "bishop"}:
+            transfer = "类似局面先检查这步出子是否同时争夺中心、制造具体威胁或改善最差棋子。"
+        elif piece == "pawn" and move.played_move.to_square[:1] in {"d", "e"}:
+            transfer = "类似局面先检查中心兵推进会打开哪些线路，以及对手能否立即反击中心。"
+        elif piece == "pawn":
+            transfer = "类似局面先检查兵推进后留下的格子，以及它是否真的形成有效突破。"
+        elif piece == "rook":
+            transfer = "类似局面先检查车能否占据开放线，并确认进入后有没有具体目标。"
+        elif piece == "queen":
+            transfer = "类似局面先检查后的落点是否会被对手赶走，以及这步是否取得了具体收益。"
+        elif piece == "king":
+            transfer = "类似局面先检查王的安全，以及这步是否会妨碍其他棋子协调。"
+        else:
+            transfer = "类似局面先检查这步棋解决了什么具体问题，以及对手最强回应是什么。"
+        result.played_move_analysis.intention += transfer
     for side, target_rank in (("white", "7"), ("black", "2")):
         rooks = [
             piece
@@ -1151,7 +1405,222 @@ def apply_hard_fact_guard(
                 *result.position_assessment.piece_activity.evidence_refs,
                 *refs,
             ]))
+    for rendered_line, source_line in zip(result.candidate_lines, move.candidate_lines):
+        exchange_summary, exchange_refs = _initial_exchange_material_summary(source_line)
+        advanced_pawn_summary, advanced_pawn_refs = _advanced_pawn_capture_summary(
+            source_line
+        )
+        verified_summaries = [
+            summary for summary in (exchange_summary, advanced_pawn_summary) if summary
+        ]
+        verified_refs = [*exchange_refs, *advanced_pawn_refs]
+        if verified_summaries:
+            rendered_line.direct_purpose = "".join(verified_summaries) + rendered_line.direct_purpose
+            rendered_line.advantages = list(dict.fromkeys([
+                *verified_summaries,
+                *rendered_line.advantages,
+            ]))
+            rendered_line.evidence_refs = list(dict.fromkeys([
+                *rendered_line.evidence_refs,
+                source_line.id,
+                *verified_refs,
+            ]))
+            if source_line.rank == 1:
+                result.comparison.why_first_line_is_best = (
+                    "".join(verified_summaries)
+                    + result.comparison.why_first_line_is_best
+                )
+                result.comparison.evidence_refs = list(dict.fromkeys([
+                    *result.comparison.evidence_refs,
+                    source_line.id,
+                    *verified_refs,
+                ]))
+    if narrative_claims is not None:
+        _apply_verified_narrative_surface_guard(result, move, narrative_claims)
     return result
+
+
+def _apply_verified_narrative_surface_guard(
+    result: ProfessionalAnalysis,
+    move: MoveReview,
+    package: NarrativeClaimPackage,
+) -> None:
+    """Rebuild every move-route explanation that is visible beside engine facts.
+
+    This runs last because older tactic and exchange guards may also touch the
+    core paragraph.  The model may choose emphasis through claimRefs, but it
+    cannot add a causal bridge that the program did not verify.
+    """
+    selected = _restore_verified_core(result, package)
+    result.played_move_analysis.evidence_refs = list(dict.fromkeys([
+        move.played_move.id or f"move:played:{move.index}",
+        f"evaluation:before:{move.index}",
+        f"evaluation:after:{move.index}",
+        *(ref for item in selected for ref in item.evidence_refs),
+    ]))
+    result.played_move_analysis.positive_effects = [
+        item.statement
+        for item in selected
+        if item.kind in {"move_event", "move_effect"}
+    ][:3]
+    result.played_move_analysis.error_type = (
+        "tactical"
+        if not (
+            move.best_move_uci == move.played_move.uci
+            or (move.centipawn_loss is not None and move.centipawn_loss < 50)
+        )
+        and (move.complexity_factors.direct_piece_loss or move.mate_involved)
+        else "none"
+    )
+    for phase in result.played_move_analysis.continuation_phases:
+        phase.explanation = "按Stockfish验证顺序列出，只说明实战着后的应对。"
+
+    for rendered_line, source_line in zip(result.candidate_lines, move.candidate_lines):
+        rendered_line.strategy_tags = []
+        rendered_line.direct_purpose = _verified_candidate_first_move_text(
+            source_line,
+            move.side,
+        )
+        if len(source_line.moves) > 1:
+            reply = source_line.moves[1]
+            rendered_line.opponent_response = (
+                f"在这条Stockfish验证路线中，对手首先走{reply.san}。"
+            )
+        else:
+            rendered_line.opponent_response = "这条验证路线没有提供对手的下一手。"
+        for phase in rendered_line.continuation_phases:
+            phase.explanation = "按Stockfish验证顺序列出，不推断额外因果。"
+        rendered_line.advantages = []
+        rendered_line.risks = []
+        rendered_line.why_this_rank = (
+            "它是本次Stockfish MultiPV分析的第一路线。"
+            if source_line.rank == 1
+            else f"它是本次Stockfish MultiPV分析的第{source_line.rank}路线。"
+        )
+        rendered_line.evidence_refs = [source_line.id]
+
+    if move.best_move_uci and move.best_move_uci == move.played_move.uci:
+        result.comparison.main_difference = (
+            f"实战着{move.played_move.san}与Stockfish第一路线首着相同。"
+        )
+    elif move.best_move_san and move.centipawn_loss is not None:
+        result.comparison.main_difference = (
+            f"实战走{move.played_move.san}；Stockfish第一路线从{move.best_move_san}开始，"
+            f"两者相差约{move.centipawn_loss / 100:.2f}兵的评价。"
+        )
+    elif move.best_move_san:
+        result.comparison.main_difference = (
+            f"实战走{move.played_move.san}；Stockfish第一路线从{move.best_move_san}开始。"
+        )
+    else:
+        result.comparison.main_difference = "当前没有足够的首选路线数据可供比较。"
+    if move.candidate_lines:
+        first = move.candidate_lines[0]
+        result.comparison.why_first_line_is_best = (
+            f"Stockfish在本次MultiPV分析中把{first.first_move.san}排在第一位。"
+        )
+        result.comparison.evidence_refs = list(dict.fromkeys([
+            first.id,
+            move.played_move.id or f"move:played:{move.index}",
+            f"evaluation:before:{move.index}",
+            f"evaluation:after:{move.index}",
+        ]))
+    else:
+        result.comparison.why_first_line_is_best = "当前没有可用的Stockfish候选路线。"
+
+
+def _restore_verified_core(
+    result: ProfessionalAnalysis,
+    package: NarrativeClaimPackage,
+) -> list[Any]:
+    """Restore the exact claim rendering after generic prose normalization."""
+    selected = resolve_narrative_claims(
+        package,
+        result.played_move_analysis.claim_refs,
+    )
+    selected_ids = [item.claim_id for item in selected]
+    result.played_move_analysis.intention = compose_verified_core_paragraph(
+        package,
+        selected_ids,
+    )
+    result.played_move_analysis.claim_refs = selected_ids
+    return selected
+
+
+def _verified_candidate_first_move_text(line: Any, side: str) -> str:
+    """Describe candidate purpose as verified move mechanics, without motive inference."""
+    first = line.first_move
+    text = (
+        f"先走{first.san}，让{_human_piece_text(first.piece, side)}从"
+        f"{first.from_square}到{first.to_square}"
+    )
+    events: list[str] = []
+    if first.capture:
+        events.append(
+            f"吃掉{_human_piece_text(first.captured_piece or 'piece', _opposite_side(side))}"
+        )
+    if first.promotion:
+        events.append(f"升变为{_human_piece_text(first.promotion, side)}")
+    if first.checkmate:
+        events.append("形成将杀")
+    elif first.check:
+        events.append("形成将军")
+    if events:
+        text += "，并" + "、".join(events)
+    return text + "。"
+
+
+def _sanitize_core_explanation(text: str, move: MoveReview) -> str:
+    """Drop whole off-task sentences while keeping a coherent mover-focused core."""
+    sentences = [
+        item.strip()
+        for item in re.split(r"(?<=[。！？])", str(text or ""))
+        if item.strip()
+    ]
+    small_gap = bool(
+        move.best_move_uci
+        and move.best_move_uci != move.played_move.uci
+        and move.centipawn_loss is not None
+        and move.centipawn_loss < 50
+    )
+    comparative = re.compile(
+        r"更精确|更好|不如|优于|更关键|才是|错失|逊色|没有|并未|未能|"
+        r"并非最|不够|较为被动|失去|错过"
+    )
+    route_phrase = re.compile(r"实战后验证路线|验证路线包含|后续验证路线")
+    san_candidates = {
+        item.san
+        for line in [
+            *move.candidate_lines,
+            *([move.actual_move_line] if move.actual_move_line else []),
+        ]
+        for item in line.moves
+    } | {move.played_move.san}
+    seen_moves: set[str] = set()
+    kept: list[str] = []
+    for sentence in sentences:
+        if route_phrase.search(sentence):
+            continue
+        if small_gap and comparative.search(sentence):
+            continue
+        sentence_moves = {
+            san for san in san_candidates
+            if re.search(
+                rf"(?<![A-Za-z0-9]){re.escape(san)}(?![A-Za-z0-9])",
+                sentence,
+            )
+        }
+        if len(seen_moves | sentence_moves) > 2:
+            continue
+        seen_moves.update(sentence_moves)
+        kept.append(sentence)
+    if kept:
+        return "".join(kept)
+    return (
+        f"{move.played_move.san}让{_human_piece_text(move.played_move.piece, move.side)}"
+        f"从{move.played_move.from_square}走到{move.played_move.to_square}，"
+        "这是当前局面中的一个合理选择。"
+    )
 
 
 def _guarded_tactic_text(description: str) -> str:
@@ -1217,6 +1686,25 @@ def _prepared_piece_text(
                 chess.KING: "王",
             }[piece.piece_type]
     return f"{'白' if side == 'white' else '黑'}{piece_name}"
+
+
+def _human_side_text(side: str) -> str:
+    return "白方" if side == "white" else "黑方" if side == "black" else "一方"
+
+
+def _human_piece_text(piece: str, side: str | None = None) -> str:
+    parts = piece.split("_")
+    inferred_side = parts[0] if parts and parts[0] in {"white", "black"} else side
+    piece_name = {
+        "pawn": "兵",
+        "knight": "马",
+        "bishop": "象",
+        "rook": "车",
+        "queen": "后",
+        "king": "王",
+    }.get(parts[-1], "棋子")
+    prefix = "白" if inferred_side == "white" else "黑" if inferred_side == "black" else ""
+    return f"{prefix}{piece_name}"
 
 
 def _threat_move_details(
@@ -1302,15 +1790,8 @@ def _controlled_position_summary(move: MoveReview) -> str:
             rights.append("王翼")
         if board.has_queenside_castling_rights(color):
             rights.append("后翼")
-        rights_text = (
-            f"当前保留{'和'.join(rights)}易位权"
-            if rights
-            else "当前没有易位权"
-        )
-        parts.append(
-            f"{side_name}王位于{chess.square_name(square)}，{rights_text}；"
-            "仅凭当前局面不能判断此前是否已经易位。"
-        )
+        rights_text = f"还可以向{'或'.join(rights)}易位" if rights else "已经没有易位权"
+        parts.append(f"{side_name}王在{chess.square_name(square)}，{rights_text}。")
     return "".join(parts)
 
 
@@ -1320,14 +1801,14 @@ def _controlled_evaluation_text(
 ) -> str:
     if mate_in is not None:
         side = "白方" if mate_in > 0 else "黑方"
-        return f"程序确认{side}存在强制将杀。"
+        return f"{side}有强制将杀。"
     if centipawn is None:
-        return "程序暂未取得可靠的评价方向。"
+        return "这盘暂时没有可靠分数。"
     if abs(centipawn) <= 25:
-        return "程序评价显示局面接近均势。"
+        return "局面大致均衡。"
     side = "白方" if centipawn > 0 else "黑方"
     level = "轻微" if abs(centipawn) <= 100 else "明显" if abs(centipawn) <= 300 else "决定性"
-    return f"程序评价显示{side}拥有{level}优势。"
+    return f"{side}{level}占优。"
 
 
 def _controlled_material_text(move: MoveReview) -> str:
@@ -1336,13 +1817,13 @@ def _controlled_material_text(move: MoveReview) -> str:
     black = material.get("black")
     difference = material.get("valueDifferenceWhiteMinusBlack")
     if not isinstance(white, dict) or not isinstance(black, dict) or not isinstance(difference, int):
-        return "程序未取得完整的物质统计。"
+        return "子力账目暂时算不完整。"
     white_value = white.get("value")
     black_value = black.get("value")
     white_pieces = white.get("pieces")
     black_pieces = black.get("pieces")
     if difference == 0:
-        return f"程序统计双方物质相等，白方与黑方均为{white_value}分。"
+        return f"双方子力相等，都是{white_value}分。"
     side = "白方" if difference > 0 else "黑方"
     value = abs(difference)
     if isinstance(white_pieces, dict) and isinstance(black_pieces, dict) and value == 1:
@@ -1361,9 +1842,9 @@ def _controlled_material_text(move: MoveReview) -> str:
         ):
             pawn_difference = len(white_pawns) - len(black_pawns)
             if pawn_difference == (1 if difference > 0 else -1):
-                return f"程序统计{side}多一兵。"
+                return f"{side}多一兵。"
     return (
-        f"程序统计白方物质为{white_value}分、黑方为{black_value}分，"
+        f"白方子力为{white_value}分，黑方为{black_value}分，"
         f"{side}多{value}分子力价值。"
     )
 
@@ -1373,18 +1854,21 @@ def _controlled_move_summary(move: MoveReview) -> str:
         move.best_move_uci
         and move.best_move_uci == move.played_move.uci
     )
-    text = f"程序将实战着{move.played_move.san}评为{move.quality_label}。"
+    played = move.played_move.san
     if same_as_best:
-        text += "该着与Stockfish首选一致。"
+        return f"{played}就是引擎首选，这一步没有问题。"
     elif move.best_move_san:
-        text += f"该着与Stockfish首选不一致，程序首选为{move.best_move_san}。"
+        best = move.best_move_san
+        if move.centipawn_loss is not None and move.centipawn_loss < 50:
+            return f"{played}和{best}都可以，评价差距很小，只是选择的侧重点不同。"
+        elif move.centipawn_loss is not None and move.centipawn_loss <= 100:
+            return (
+                f"{played}不算大错，但比{best}差约"
+                f"{move.centipawn_loss / 100:.2f}兵。"
+            )
+        return f"{played}让局面明显变差，{best}才是这里更关键的选择。"
     else:
-        text += "当前没有可用于一致性比较的Stockfish首选。"
-    text += (
-        f"评价方向由{_controlled_score_direction(move.before.centipawn)}"
-        f"变为{_controlled_score_direction(move.after.centipawn)}。"
-    )
-    return text
+        return f"{played}的好坏暂时没有可靠首选可作比较。"
 
 
 def _controlled_score_direction(centipawn: int | None) -> str:
@@ -1397,6 +1881,106 @@ def _controlled_score_direction(centipawn: int | None) -> str:
     return "接近均势"
 
 
+_USER_VISIBLE_PROSE_KEYS = {
+    "summary", "description", "explanation", "consequence", "requiredPreparation",
+    "exploitation", "intention", "positiveEffects", "problems", "resultingPosition",
+    "evaluationReason", "directPurpose", "advantages", "risks", "whyThisRank",
+    "mainDifference", "whyFirstLineIsBest", "preparation", "significance",
+}
+
+
+def _humanize_user_visible_prose(analysis: ProfessionalAnalysis) -> ProfessionalAnalysis:
+    payload = analysis.model_dump(by_alias=True)
+    played = analysis.played_move_analysis.move
+    best = analysis.candidate_lines[0].first_move if analysis.candidate_lines else "首选着"
+
+    def convert(value: Any, *, prose: bool = False) -> Any:
+        if isinstance(value, dict):
+            return {
+                key: convert(child, prose=prose or key in _USER_VISIBLE_PROSE_KEYS)
+                for key, child in value.items()
+            }
+        if isinstance(value, list):
+            converted = [convert(child, prose=prose) for child in value]
+            return [
+                child for child in converted
+                if not (isinstance(child, str) and not child.strip())
+            ]
+        if not prose or not isinstance(value, str):
+            return value
+
+        def piece_replacement(match: re.Match[str]) -> str:
+            side = match.group(1)
+            piece = match.group(2)
+            return _human_piece_text(piece, side)
+
+        text = re.sub(
+            r"(?<![A-Za-z0-9_])(white|black)_(?:(?:white|black)_)?"
+            r"(pawn|knight|bishop|rook|queen|king)(?![A-Za-z0-9_])",
+            piece_replacement,
+            value,
+            flags=re.IGNORECASE,
+        )
+        text = (
+            text.replace("white方", "白方")
+            .replace("black方", "黑方")
+            .replace("Ignore Test", "应对验证")
+            .replace("这条变化还要看对手接下来怎么应对。", "")
+        )
+        replacements = (
+            (r"实战着法旨在|实战着意在|实战着选择", f"{played}是要"),
+            (r"实战着与首选路线的主要差异在于[，,]?", ""),
+            (r"首选路线首着", best),
+            (r"首选路线通过", f"{best}先"),
+            (r"首选路线", best),
+            (r"当前的首要问题", "眼前最要紧的事"),
+            (r"更符合当前首要问题", "次序更合适"),
+            (r"该着旨在", f"{best}是要"),
+            (r"符合开局发展原则", "出子也更顺"),
+            (r"存在本质差异", "次序完全不同"),
+            (r"为残局奠定(?:了)?(?:更)?坚实的基础", "让残局更好下"),
+            (r"为残局奠定", "为后续残局创造"),
+            (r"解决根本问题", "照顾到真正的麻烦"),
+        )
+        for pattern, replacement in replacements:
+            text = re.sub(pattern, replacement, text)
+        # Expand labels before deduplicating: "实战着e4" must not become "e4e4".
+        text = text.replace("实战着", played)
+        for san in {played, best}:
+            if san:
+                text = re.sub(
+                    rf"(?<![A-Za-z0-9])(?:{re.escape(san)}){{2}}(?![A-Za-z0-9])",
+                    san,
+                    text,
+                )
+        text = re.sub(
+            r"(?<![A-Za-z0-9])([a-h][1-8])\1(?![A-Za-z0-9])",
+            r"\1",
+            text,
+            flags=re.IGNORECASE,
+        )
+        text = re.sub(
+            r"(?<![A-Za-z0-9])((?:O-O(?:-O)?|[KQRBN][a-h1-8]?x?[a-h][1-8])[+#]?)法",
+            r"\1",
+            text,
+        )
+        text = re.sub(
+            rf"{re.escape(best)}先(兵|马|象|车|后|王)的调动",
+            rf"{best}先调动\1",
+            text,
+        )
+        return (
+            text.replace("先先", "先")
+            .replace("，意图", "，想")
+            .replace("为后续发展子力做好准备", "接着再出子")
+            .replace("为后续子力调动创造条件", "给其他棋子留出后续空间")
+            .replace("同时保持兵形的灵活性", "兵形也不会定死")
+            .replace("导致局面恶化", "局面会更难下")
+        )
+
+    return ProfessionalAnalysis.model_validate(convert(payload))
+
+
 def _fit_resolved_analysis_length(
     analysis: ProfessionalAnalysis,
     move: MoveReview,
@@ -1404,18 +1988,30 @@ def _fit_resolved_analysis_length(
 ) -> ProfessionalAnalysis:
     """Fit generated prose to the existing band without changing any referenced chess fact."""
     result = _trim_profile_max(analysis, level)
-    minimum = LENGTH_RANGES[level][0]
+    verified_core = bool(result.played_move_analysis.claim_refs)
+    minimum = (
+        VERIFIED_NARRATIVE_LENGTH_RANGES[level][0]
+        if verified_core
+        else LENGTH_RANGES[level][0]
+    )
     first_line = move.candidate_lines[0] if move.candidate_lines else None
     first = first_line.first_move if first_line else None
     verified = (
-        f"事实补充：实战{move.played_move.piece}从{move.played_move.from_square}到"
+        f"再看实战，{_human_piece_text(move.played_move.piece, move.side)}从"
+        f"{move.played_move.from_square}到"
         f"{move.played_move.to_square}（{move.played_move.san}）"
     )
     if first:
         verified += (
-            f"；Stockfish第一路线首着为{first.san}，从{first.from_square}到{first.to_square}"
+            f"；引擎先看{first.san}，从{first.from_square}到{first.to_square}"
         )
     verified += "。"
+    if verified_core and _narrative_length(result.model_dump(by_alias=True)) < minimum:
+        if len(result.position_assessment.summary) + len(verified) <= 500:
+            result.position_assessment.summary += verified
+        else:
+            result.comparison.main_difference += verified
+        return _trim_profile_max(result, level)
     while _narrative_length(result.model_dump(by_alias=True)) < minimum:
         if len(result.position_assessment.summary) + len(verified) <= 500:
             result.position_assessment.summary += verified
@@ -1427,7 +2023,12 @@ def _fit_resolved_analysis_length(
 def _trim_profile_max(analysis: ProfessionalAnalysis, level: str) -> ProfessionalAnalysis:
     """Trim only redundant prose when a deterministic profile is slightly over its band."""
     result = analysis.model_copy(deep=True)
-    maximum = LENGTH_RANGES[level][1]
+    ranges = (
+        VERIFIED_NARRATIVE_LENGTH_RANGES
+        if result.played_move_analysis.claim_refs
+        else LENGTH_RANGES
+    )
+    maximum = ranges[level][1]
 
     def length() -> int:
         return _narrative_length(result.model_dump(by_alias=True))
@@ -1436,10 +2037,10 @@ def _trim_profile_max(analysis: ProfessionalAnalysis, level: str) -> Professiona
         (result.comparison, "main_difference"),
         (result.comparison, "why_first_line_is_best"),
         (result.position_assessment, "summary"),
-        (result.played_move_analysis, "evaluation_reason"),
-        (result.played_move_analysis, "intention"),
         (result.played_move_analysis, "resulting_position"),
     ]
+    if not result.played_move_analysis.claim_refs:
+        fields.append((result.played_move_analysis, "intention"))
     for optional in (
         result.position_assessment.king_safety.white,
         result.position_assessment.king_safety.black,
@@ -1519,7 +2120,6 @@ def _trim_profile_max(analysis: ProfessionalAnalysis, level: str) -> Professiona
         atomic_replacements = [
             (result.comparison, "main_difference", ""),
             (result.comparison, "why_first_line_is_best", ""),
-            (result.played_move_analysis, "evaluation_reason", ""),
             (result.played_move_analysis, "resulting_position", ""),
         ] + [
             item
@@ -1737,14 +2337,8 @@ def _safe_strategic_plan_tag(plan_type: str) -> str:
 
 def _result_position_text(line: Any) -> str:
     if line is None:
-        return "没有结果局面。"
-    facts = line.resulting_position_facts
-    consequence = _important_material_consequence(line)
-    if facts and consequence:
-        return f"参考路线结束时轮到{facts.side_to_move}方行棋；{consequence}"
-    if facts:
-        return f"参考路线结束时轮到{facts.side_to_move}方行棋；没有需要单独强调的重大子力变化。"
-    return "参考路线已结束；没有额外的结果局面事实可供引用。"
+        return ""
+    return _important_material_consequence(line)
 
 
 def _important_material_consequence(line: Any) -> str:
@@ -1753,6 +2347,89 @@ def _important_material_consequence(line: Any) -> str:
         if captured in {"knight", "bishop", "rook", "queen"}:
             return f"路线中的{item.san}会直接造成重要棋子得失。"
     return ""
+
+
+def _initial_exchange_material_summary(line: Any) -> tuple[str, list[str]]:
+    """Describe a verified gain inside the opening capture sequence of a PV.
+
+    This is deliberately a stage result rather than a claim about the final
+    position: later moves in the same engine line can change the material
+    balance again.
+    """
+    piece_values = {
+        "pawn": 1,
+        "knight": 3,
+        "bishop": 3,
+        "rook": 5,
+        "queen": 9,
+    }
+    moves = list(getattr(line, "moves", []) or [])
+    if not moves or not moves[0].capture:
+        return "", []
+    first_side = moves[0].side
+    net_value = 0
+    refs: list[str] = []
+    capture_count = 0
+    for item in moves:
+        if not item.capture:
+            break
+        captured = (item.captured_piece or "").split("_", 1)[-1]
+        value = piece_values.get(captured)
+        if value is None:
+            return "", []
+        net_value += value if item.side == first_side else -value
+        refs.append(item.id)
+        capture_count += 1
+    if capture_count < 2 or net_value <= 0:
+        return "", []
+    side_text = "白方" if first_side == "white" else "黑方"
+    step_text = {1: "一", 2: "两", 3: "三"}.get(net_value, str(net_value))
+    return (
+        f"这串交换算下来，{side_text}赚回约{step_text}分子力。",
+        refs,
+    )
+
+
+def _advanced_pawn_capture_summary(line: Any) -> tuple[str, list[str]]:
+    """Report when a pushed pawn is verifiably captured later in the same PV."""
+    moves = list(getattr(line, "moves", []) or [])
+    if not moves:
+        return "", []
+    first_side = moves[0].side
+    advanced_pawns: dict[str, tuple[Any, int]] = {}
+    for move_index, item in enumerate(moves[1:], start=1):
+        piece = (item.piece or "").split("_", 1)[-1]
+        captured = (item.captured_piece or "").split("_", 1)[-1]
+        tracked_entry = advanced_pawns.get(item.to_square)
+        if (
+            item.capture
+            and captured == "pawn"
+            and item.side == first_side
+            and tracked_entry is not None
+            and tracked_entry[0].side != first_side
+        ):
+            tracked, push_index = tracked_entry
+            mover_text = "白方" if tracked.side == "white" else "黑方"
+            capturer_text = "白方" if first_side == "white" else "黑方"
+            intermediate = [move.san for move in moves[push_index + 1:move_index]]
+            if intermediate:
+                summary = (
+                    f"{mover_text}走{tracked.san}推兵后，吃兵并非紧接着发生；"
+                    f"路线先经过{'、'.join(intermediate)}，"
+                    f"{capturer_text}才用{item.san}吃掉这枚兵。"
+                )
+            else:
+                summary = (
+                    f"{mover_text}走{tracked.san}推兵后，"
+                    f"{capturer_text}随即用{item.san}吃掉这枚兵。"
+                )
+            return summary, [tracked.id, item.id]
+        if piece != "pawn":
+            continue
+        advanced_pawns.pop(item.from_square, None)
+        if not item.capture:
+            advanced_pawns[item.to_square] = (item, move_index)
+    return "", []
 
 
 def _joined_fact_text(facts: list[Any], side: str) -> str:

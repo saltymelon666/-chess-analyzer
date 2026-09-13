@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from .threat_analysis import ThreatPackage
 
 
-IMPORTANCE_RANKING_VERSION = "1.0"
+IMPORTANCE_RANKING_VERSION = "1.1"
 FAMILIES: tuple[FactorFamily, ...] = (
     "forcing_tactics",
     "king_attack_and_safety",
@@ -35,7 +35,7 @@ class ImportanceEvidence(BaseModel):
 
     evidence_type: Literal[
         "ranked_factor", "current_threat", "prepared_threat", "verified_plan",
-        "analysis_objective", "position_phase",
+        "analysis_objective", "position_phase", "route_consensus",
     ]
     evidence_ref: str
     contribution: float
@@ -48,13 +48,14 @@ class ImportanceTheme(BaseModel):
     score: float = Field(ge=0, le=100)
     rank: int = Field(ge=1, le=5)
     confidence: Literal["high", "medium", "low"]
+    decision_priority: Literal["now", "next", "later"] = "later"
     evidence: list[ImportanceEvidence] = Field(default_factory=list)
 
 
 class PositionImportanceRanking(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    version: Literal["1.0"] = IMPORTANCE_RANKING_VERSION
+    version: Literal["1.1"] = IMPORTANCE_RANKING_VERSION
     position_id: str
     primary_theme: FactorFamily | None = None
     supporting_themes: list[FactorFamily] = Field(default_factory=list, max_length=2)
@@ -160,6 +161,11 @@ class PositionImportanceRanker:
                 score=score,
                 rank=rank,
                 confidence=confidence,
+                decision_priority=(
+                    "now" if any(item.evidence_type == "current_threat" for item in evidence[family])
+                    else "next" if any(item.evidence_type in {"prepared_threat", "verified_plan"} for item in evidence[family])
+                    else "later"
+                ),
                 evidence=evidence[family][:8],
             ))
 

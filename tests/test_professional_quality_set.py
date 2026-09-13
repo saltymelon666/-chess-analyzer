@@ -92,13 +92,15 @@ async def test_all_validation_positions_build_compact_strict_fact_packages() -> 
         move = review.moves[0]
         complexity = compute_professional_complexity(move)
         context = build_validation_context(move, complexity.level)
-        prompt = professional_user_prompt(
-            build_professional_payload(move, complexity, context.allowed_evidence_ids),
-            complexity.level,
-        )
+        payload = build_professional_payload(move, complexity, context.allowed_evidence_ids)
+        prompt = professional_user_prompt(payload, complexity.level)
         safe = build_safe_professional_analysis(move, complexity)
 
         assert len(move.candidate_lines) == 3
         assert all(len(line.moves) <= 10 for line in move.candidate_lines)
         assert len(prompt) < 60_000
+        assert '"bookEvaluationMethod"' in prompt
+        assert '"decisionPriority"' in prompt
+        if position["id"] in {"tactic-2", "king-attack-2", "simplify-1"}:
+            assert payload["positionInterpretation"]["objective"]["kind"] == "forcing_tactics"
         assert validate_professional_analysis(safe, context) == []

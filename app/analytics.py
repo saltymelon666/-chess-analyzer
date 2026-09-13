@@ -24,6 +24,7 @@ EventName = Literal[
     "analysis_start",
     "analysis_complete",
     "report_export",
+    "feedback",
 ]
 
 
@@ -40,6 +41,9 @@ class AnalyticsEventRequest(BaseModel):
     analysis_id: str | None = Field(default=None, min_length=8, max_length=80)
     duration_ms: int | None = Field(default=None, ge=0, le=86_400_000)
     report_id: str | None = Field(default=None, min_length=1, max_length=120)
+    rating: int | None = Field(default=None, ge=1, le=5)
+    suggestion: str | None = Field(default=None, max_length=2000)
+    analysis_result: str | None = Field(default=None, max_length=20_000)
 
     @field_validator("visitor_id", "analysis_id", "report_id")
     @classmethod
@@ -66,6 +70,14 @@ class AnalyticsEventRequest(BaseModel):
             raise ValueError("analysis_complete requires duration_ms and success")
         if self.event == "report_export" and self.report_id is None:
             raise ValueError("report_export requires report_id")
+        if self.event == "feedback" and self.rating is None and not (self.suggestion or "").strip():
+            raise ValueError("feedback requires rating or suggestion")
+        if self.event != "feedback" and (
+            self.rating is not None
+            or self.suggestion is not None
+            or self.analysis_result is not None
+        ):
+            raise ValueError("feedback fields are only allowed for feedback")
         return self
 
 
@@ -73,8 +85,7 @@ class AnalyticsEventResponse(BaseModel):
     accepted: bool = True
 
 
-class DailyStatistics(BaseModel):
-    date: str
+class StatisticsSummary(BaseModel):
     visitors: int
     page_views: int
     uploads: int
@@ -94,6 +105,11 @@ class DailyStatistics(BaseModel):
     upload_to_analysis_rate: float | None = None
 
 
+class DailyStatistics(StatisticsSummary):
+    date: str
+    all_time: StatisticsSummary | None = None
+
+
 class RecentAnalysis(BaseModel):
     analysis_id: str
     visitor_id: str
@@ -108,6 +124,15 @@ class RecentAnalysis(BaseModel):
     completion_tokens: int
     total_tokens: int
     status: Literal["success", "failed"]
+
+
+class RecentFeedback(BaseModel):
+    created_at: str
+    visitor_id: str
+    analysis_id: str | None
+    rating: int | None
+    suggestion: str | None
+    analysis_result: str | None
 
 
 class AnalyticsStore:
@@ -172,6 +197,9 @@ class AnalyticsStore:
                     analysis_id TEXT,
                     duration_ms INTEGER,
                     report_id TEXT,
+                    rating INTEGER,
+                    suggestion TEXT,
+                    analysis_result TEXT,
                     FOREIGN KEY(visitor_id) REFERENCES visitors(visitor_id)
                 );
                 CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at);
@@ -192,7 +220,7 @@ class AnalyticsStore:
                     total_tokens INTEGER NOT NULL DEFAULT 0,
                     status TEXT NOT NULL CHECK(status IN ('success', 'failed')),
                     FOREIGN KEY(visitor_id) REFERENCES visitors(visitor_id)
-                );
+            );
                 CREATE INDEX IF NOT EXISTS idx_analysis_created_at ON analysis_logs(created_at);
                 CREATE INDEX IF NOT EXISTS idx_analysis_visitor ON analysis_logs(visitor_id);
                 """
@@ -206,6 +234,29 @@ class AnalyticsStore:
                         connection.execute(statement)
             else:
                 connection.executescript(schema)
+            feedback_columns = (
+                ("rating", "INTEGER"),
+                ("suggestion", "TEXT"),
+                ("analysis_result", "TEXT"),
+            )
+            if self._postgres:
+                for column_name, column_type in feedback_columns:
+                    connection.execute(
+                        f"ALTER TABLE events ADD COLUMN IF NOT EXISTS {column_name} {column_type}"
+                    )
+            else:
+                for column_name, column_type in feedback_columns:
+                    try:
+                        self._execute(
+                            connection,
+                            f"ALTER TABLE events ADD COLUMN {column_name} {column_type}",
+                        )
+                    except Exception as error:
+                        if not any(
+                            marker in str(error).lower()
+                            for marker in ("duplicate column", "already exists")
+                        ):
+                            raise
 
     @staticmethod
     def _now() -> str:
@@ -254,8 +305,9 @@ class AnalyticsStore:
                 """
                 INSERT INTO events(
                     visitor_id, event_name, created_at, page, pgn_length,
-                    success, analysis_id, duration_ms, report_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    success, analysis_id, duration_ms, report_id, rating, suggestion,
+                    analysis_result
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     event.visitor_id,
@@ -267,6 +319,9 @@ class AnalyticsStore:
                     event.analysis_id,
                     event.duration_ms,
                     event.report_id,
+                    event.rating,
+                    event.suggestion.strip() if event.suggestion else None,
+                    event.analysis_result.strip() if event.analysis_result else None,
                 ),
             )
 
@@ -358,46 +413,56 @@ class AnalyticsStore:
                 (self._now(), analysis_id),
             )
 
-    def daily_statistics(self, day: datetime | None = None) -> DailyStatistics:
-        local_now = day.astimezone(self.timezone) if day else datetime.now(self.timezone)
-        local_start = datetime.combine(local_now.date(), time.min, tzinfo=self.timezone)
-        start = local_start.astimezone(timezone.utc).isoformat(timespec="milliseconds")
-        end = (local_start + timedelta(days=1)).astimezone(timezone.utc).isoformat(timespec="milliseconds")
-        with self._lock, self._connect() as connection:
-            visitors_row = self._execute(
-                connection,
-                "SELECT COUNT(DISTINCT visitor_id) AS visitors FROM events WHERE created_at >= ? AND created_at < ?",
-                (start, end),
-            ).fetchone()
-            visitors = visitors_row["visitors"]
-            events = self._execute(
-                connection,
-                """
-                SELECT
-                    SUM(CASE WHEN event_name = 'page_view' THEN 1 ELSE 0 END) AS page_views,
-                    SUM(CASE WHEN event_name = 'upload_pgn' THEN 1 ELSE 0 END) AS uploads,
-                    SUM(CASE WHEN event_name = 'upload_pgn' AND success = 1 THEN 1 ELSE 0 END) AS upload_successes,
-                    SUM(CASE WHEN event_name = 'upload_pgn' AND success = 0 THEN 1 ELSE 0 END) AS upload_failures
-                FROM events WHERE created_at >= ? AND created_at < ?
-                """,
-                (start, end),
-            ).fetchone()
-            row = self._execute(
-                connection,
-                """
-                SELECT COUNT(*) AS analyses,
-                       SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS successes,
-                       SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failures,
-                       AVG(CASE WHEN status = 'success' THEN total_ms END) AS average_ms,
-                       COALESCE(SUM(stockfish_ms), 0) AS stockfish_ms,
-                       COALESCE(SUM(deepseek_ms), 0) AS deepseek_ms,
-                       COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
-                       COALESCE(SUM(completion_tokens), 0) AS completion_tokens,
-                       COALESCE(SUM(total_tokens), 0) AS total_tokens
-                FROM analysis_logs WHERE created_at >= ? AND created_at < ?
-                """,
-                (start, end),
-            ).fetchone()
+    def _statistics_for_window(
+        self,
+        connection,
+        *,
+        start: str | None = None,
+        end: str | None = None,
+    ) -> StatisticsSummary:
+        event_window = ""
+        analysis_window = ""
+        parameters: tuple = ()
+        if start is not None and end is not None:
+            event_window = " WHERE created_at >= ? AND created_at < ?"
+            analysis_window = " WHERE created_at >= ? AND created_at < ?"
+            parameters = (start, end)
+        event_parameters = parameters
+        analysis_parameters = parameters
+        visitors_row = self._execute(
+            connection,
+            f"SELECT COUNT(DISTINCT visitor_id) AS visitors FROM events{event_window}",
+            event_parameters,
+        ).fetchone()
+        visitors = visitors_row["visitors"]
+        events = self._execute(
+            connection,
+            f"""
+            SELECT
+                SUM(CASE WHEN event_name = 'page_view' THEN 1 ELSE 0 END) AS page_views,
+                SUM(CASE WHEN event_name = 'upload_pgn' THEN 1 ELSE 0 END) AS uploads,
+                SUM(CASE WHEN event_name = 'upload_pgn' AND success = 1 THEN 1 ELSE 0 END) AS upload_successes,
+                SUM(CASE WHEN event_name = 'upload_pgn' AND success = 0 THEN 1 ELSE 0 END) AS upload_failures
+            FROM events{event_window}
+            """,
+            event_parameters,
+        ).fetchone()
+        row = self._execute(
+            connection,
+            f"""
+            SELECT COUNT(*) AS analyses,
+                   SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS successes,
+                   SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failures,
+                   AVG(CASE WHEN status = 'success' THEN total_ms END) AS average_ms,
+                   COALESCE(SUM(stockfish_ms), 0) AS stockfish_ms,
+                   COALESCE(SUM(deepseek_ms), 0) AS deepseek_ms,
+                   COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
+                   COALESCE(SUM(completion_tokens), 0) AS completion_tokens,
+                   COALESCE(SUM(total_tokens), 0) AS total_tokens
+            FROM analysis_logs{analysis_window}
+            """,
+            analysis_parameters,
+        ).fetchone()
         analyses = int(row["analyses"] or 0)
         uploads = int(events["uploads"] or 0)
         successes = int(row["successes"] or 0)
@@ -412,8 +477,7 @@ class AnalyticsStore:
                 + completion_tokens * self.output_price_per_million / 1_000_000,
                 6,
             )
-        return DailyStatistics(
-            date=local_now.date().isoformat(),
+        return StatisticsSummary(
             visitors=int(visitors or 0),
             page_views=int(events["page_views"] or 0),
             uploads=uploads,
@@ -431,6 +495,20 @@ class AnalyticsStore:
             deepseek_total_tokens=int(row["total_tokens"] or 0),
             estimated_ai_cost=estimated_cost,
             upload_to_analysis_rate=round(analyses / uploads, 4) if uploads else None,
+        )
+
+    def daily_statistics(self, day: datetime | None = None) -> DailyStatistics:
+        local_now = day.astimezone(self.timezone) if day else datetime.now(self.timezone)
+        local_start = datetime.combine(local_now.date(), time.min, tzinfo=self.timezone)
+        start = local_start.astimezone(timezone.utc).isoformat(timespec="milliseconds")
+        end = (local_start + timedelta(days=1)).astimezone(timezone.utc).isoformat(timespec="milliseconds")
+        with self._lock, self._connect() as connection:
+            daily = self._statistics_for_window(connection, start=start, end=end)
+            all_time = self._statistics_for_window(connection)
+        return DailyStatistics(
+            date=local_now.date().isoformat(),
+            all_time=all_time,
+            **daily.model_dump(),
         )
 
     def recent_analyses(
@@ -458,3 +536,27 @@ class AnalyticsStore:
                 (start, end, min(100, max(1, limit))),
             ).fetchall()
         return [RecentAnalysis.model_validate(dict(row)) for row in rows]
+
+    def recent_feedback(
+        self,
+        day: datetime | None = None,
+        *,
+        limit: int = 50,
+    ) -> list[RecentFeedback]:
+        local_now = day.astimezone(self.timezone) if day else datetime.now(self.timezone)
+        local_start = datetime.combine(local_now.date(), time.min, tzinfo=self.timezone)
+        start = local_start.astimezone(timezone.utc).isoformat(timespec="milliseconds")
+        end = (local_start + timedelta(days=1)).astimezone(timezone.utc).isoformat(timespec="milliseconds")
+        with self._lock, self._connect() as connection:
+            rows = self._execute(
+                connection,
+                """
+                SELECT created_at, visitor_id, analysis_id, rating, suggestion, analysis_result
+                FROM events
+                WHERE event_name = 'feedback' AND created_at >= ? AND created_at < ?
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (start, end, min(100, max(1, limit))),
+            ).fetchall()
+        return [RecentFeedback.model_validate(dict(row)) for row in rows]

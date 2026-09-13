@@ -369,6 +369,46 @@ def _analysis_objective(
             evidence_ids=[item.threat_id for item in current_threats],
         )
 
+    # A root move that creates a python-chess-verified tactical motif is more
+    # decision-relevant than a generic material/activity balance.  Keep this
+    # ahead of dynamic_balance, while route-only motifs remain excluded by the
+    # current_position scope check.
+    best_root_moves = {
+        route.moves_uci[0]
+        for route in package.candidate_routes[:1]
+        if route.verified and route.moves_uci
+    }
+    best_tactic_fact_ids: set[str] = set()
+    if position_facts is not None and best_root_moves:
+        for fact in position_facts.threats:
+            if fact.category not in {"double_attack", "pin", "skewer", "tactical_sacrifice"}:
+                continue
+            verified_move = next(
+                (
+                    evidence.removeprefix("python-chess验证走法")
+                    for evidence in fact.evidence
+                    if evidence.startswith("python-chess验证走法")
+                ),
+                None,
+            )
+            if verified_move in best_root_moves:
+                best_tactic_fact_ids.add(fact.id)
+    current_tactics = [
+        theme for theme in themes
+        if theme.scope == "current_position"
+        and theme.theme in {"double_attack", "pin", "skewer", "tactical_sacrifice"}
+        and best_tactic_fact_ids.intersection(theme.evidence_ids)
+    ]
+    if current_tactics:
+        return AnalysisObjective(
+            kind="forcing_tactics",
+            focus_side=current_tactics[0].side,
+            primary_question="先解释当前战术构想成立的原因、对手回应和路线后果。",
+            priority_topics=["战术目标", "强制回应", "交换或牺牲的回报"],
+            deemphasized_topics=["与战术无关的普通发展"],
+            evidence_ids=[item for theme in current_tactics for item in theme.evidence_ids],
+        )
+
     material_id = ""
     material_advantage = "equal"
     if position_facts is not None:
@@ -436,21 +476,6 @@ def _analysis_objective(
             priority_topics=["通路兵", "王的活动", "最差棋子", "攻击固定弱点"],
             deemphasized_topics=["常规护王", "易位历史", "没有强制证据的攻击语言"],
             evidence_ids=endgame_evidence,
-        )
-
-    current_tactics = [
-        theme for theme in themes
-        if theme.scope == "current_position"
-        and theme.theme in {"double_attack", "pin", "skewer", "tactical_sacrifice"}
-    ]
-    if current_tactics:
-        return AnalysisObjective(
-            kind="forcing_tactics",
-            focus_side=current_tactics[0].side,
-            primary_question="先解释当前战术构想成立的原因、对手回应和路线后果。",
-            priority_topics=["战术目标", "强制回应", "交换或牺牲的回报"],
-            deemphasized_topics=["与战术无关的普通发展"],
-            evidence_ids=[item for theme in current_tactics for item in theme.evidence_ids],
         )
 
     if package.actual_move is not None and package.actual_move.loss is not None:

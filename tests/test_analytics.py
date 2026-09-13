@@ -1,4 +1,5 @@
 from pathlib import Path
+from datetime import datetime, timedelta, timezone
 
 import app.analytics as analytics_module
 from app.analytics import AnalyticsEventRequest, AnalyticsStore
@@ -92,6 +93,61 @@ def test_deepseek_failure_updates_the_existing_analysis_status(tmp_path: Path) -
     assert statistics.failures == 1
 
 
+def test_daily_statistics_keeps_all_time_totals(tmp_path: Path) -> None:
+    store = AnalyticsStore(tmp_path / "historical-analytics.sqlite3")
+    store.record_event(
+        AnalyticsEventRequest(
+            visitor_id="visitor_history_1234",
+            event="page_view",
+            page="/",
+        )
+    )
+    yesterday = datetime.now(store.timezone) - timedelta(days=1)
+    yesterday_start = datetime.combine(
+        yesterday.date(), datetime.min.time(), tzinfo=store.timezone
+    ).astimezone(timezone.utc)
+    with store._connect() as connection:
+        connection.execute(
+            "UPDATE events SET created_at = ?",
+            (yesterday_start.isoformat(timespec="milliseconds"),),
+        )
+    store.record_event(
+        AnalyticsEventRequest(
+            visitor_id="visitor_today_1234",
+            event="page_view",
+            page="/",
+        )
+    )
+
+    today = store.daily_statistics()
+    assert today.page_views == 1
+    assert today.visitors == 1
+    assert today.all_time is not None
+    assert today.all_time.page_views == 2
+    assert today.all_time.visitors == 2
+
+
+def test_feedback_keeps_rating_suggestion_and_analysis_result_separate(tmp_path: Path) -> None:
+    store = AnalyticsStore(tmp_path / "feedback.sqlite3")
+    store.record_event(
+        AnalyticsEventRequest(
+            visitor_id="visitor_feedback_1234",
+            event="feedback",
+            analysis_id="analysis_feedback_1234",
+            rating=4,
+            suggestion="希望路线说明更简洁。",
+            analysis_result="第 12 回合 · 白方 · Nf3\n\n双方子力接近。",
+        )
+    )
+
+    feedback = store.recent_feedback()
+    assert len(feedback) == 1
+    assert feedback[0].rating == 4
+    assert feedback[0].suggestion == "希望路线说明更简洁。"
+    assert feedback[0].analysis_id == "analysis_feedback_1234"
+    assert feedback[0].analysis_result.startswith("第 12 回合")
+
+
 def test_event_payload_rejects_unexpected_personal_fields() -> None:
     try:
         AnalyticsEventRequest.model_validate(
@@ -149,4 +205,9 @@ def test_postgres_backend_uses_portable_schema_and_placeholders(monkeypatch) -> 
     statements = "\n".join(statement for statement, _ in executed)
     assert "BIGSERIAL PRIMARY KEY" in statements
     assert "AUTOINCREMENT" not in statements
+    assert "ALTER TABLE events ADD COLUMN IF NOT EXISTS rating INTEGER" in statements
+    assert "ALTER TABLE events ADD COLUMN IF NOT EXISTS suggestion TEXT" in statements
+    assert (
+        "ALTER TABLE events ADD COLUMN IF NOT EXISTS analysis_result TEXT" in statements
+    )
     assert executed[-1] == ("SELECT %s", (1,))

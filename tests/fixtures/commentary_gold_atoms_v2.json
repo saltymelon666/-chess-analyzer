@@ -1,0 +1,134 @@
+{
+  "version": "commentary-gold-v2",
+  "annotationMethod": "核心层逐局复核实战着、Stockfish首选首着和首要回应；细节层仅标注python-chess已验证的战术机制。不使用待评价的DeepSeek正文生成金标。",
+  "coverage": {
+    "corePositions": 15,
+    "coreAtomsPerPosition": 3,
+    "detailPositions": 4,
+    "detailAtoms": 6
+  },
+  "positions": [
+    {
+      "id": "opening-1",
+      "coreRoute": {"playedMove": "e3", "bestMove": "c4", "opponentResponse": "Nf6", "playedIsBest": false}
+    },
+    {
+      "id": "opening-2",
+      "coreRoute": {"playedMove": "g3", "bestMove": "d4", "opponentResponse": "d5", "playedIsBest": false}
+    },
+    {
+      "id": "opening-3",
+      "coreRoute": {"playedMove": "Bb5", "bestMove": "d4", "opponentResponse": "exd4", "playedIsBest": false}
+    },
+    {
+      "id": "tactic-1",
+      "coreRoute": {"playedMove": "Nxc6", "bestMove": "Nxc6", "opponentResponse": "Bxc6", "playedIsBest": true}
+    },
+    {
+      "id": "tactic-2",
+      "coreRoute": {"playedMove": "Rxf7+", "bestMove": "Rxf7+", "opponentResponse": "Qxf7", "playedIsBest": true},
+      "detailAtoms": [
+        {
+          "atomId": "tactic-2-detail-double-attack",
+          "kind": "mechanism",
+          "tier": "detail",
+          "summary": "说明Rxf7+形成对兵与王的双攻",
+          "acceptableEvidenceSets": [["fact:move-1-before:threat:double_attack:white:f7-a7-g7"]],
+          "acceptableClaimPaths": ["playedMoveAnalysis.intention", "playedMoveAnalysis.positiveEffects[*]"],
+          "requiredTextGroups": [["Rxf7+"], ["同时攻击", "双攻"], ["黑兵"], ["黑王"]]
+        },
+        {
+          "atomId": "tactic-2-detail-forcing-check",
+          "kind": "mechanism",
+          "tier": "detail",
+          "summary": "说明Rxf7+通过吃兵形成将军",
+          "acceptableEvidenceSets": [["line:1"]],
+          "acceptableClaimPaths": ["candidateLines[0].directPurpose"],
+          "requiredTextGroups": [["Rxf7+"], ["吃掉兵", "吃兵"], ["将军"]]
+        }
+      ]
+    },
+    {
+      "id": "tactic-3",
+      "coreRoute": {"playedMove": "exf6+", "bestMove": "Rah1", "opponentResponse": "Ra6", "playedIsBest": false}
+    },
+    {
+      "id": "king-attack-1",
+      "coreRoute": {"playedMove": "f6+", "bestMove": "f6+", "opponentResponse": "Kf8", "playedIsBest": true},
+      "detailAtoms": [
+        {
+          "atomId": "king-attack-1-detail-check",
+          "kind": "mechanism",
+          "tier": "detail",
+          "summary": "说明f6+形成将军",
+          "acceptableEvidenceSets": [["line:1"]],
+          "acceptableClaimPaths": ["candidateLines[0].directPurpose"],
+          "requiredTextGroups": [["f6+"], ["将军"]]
+        }
+      ]
+    },
+    {
+      "id": "king-attack-2",
+      "coreRoute": {"playedMove": "Ng5", "bestMove": "Ng5", "opponentResponse": "Qc4", "playedIsBest": true},
+      "detailAtoms": [
+        {
+          "atomId": "king-attack-2-detail-double-attack",
+          "kind": "mechanism",
+          "tier": "detail",
+          "summary": "说明Ng5同时攻击黑后、黑象和f7兵",
+          "acceptableEvidenceSets": [["fact:move-1-before:threat:double_attack:white:g5-e4-e6-f7"]],
+          "acceptableClaimPaths": ["playedMoveAnalysis.intention", "playedMoveAnalysis.positiveEffects[*]"],
+          "requiredTextGroups": [["Ng5"], ["同时攻击", "双攻"], ["黑后"], ["黑象"], ["f7"]]
+        }
+      ]
+    },
+    {
+      "id": "king-attack-3",
+      "coreRoute": {"playedMove": "h4", "bestMove": "h4", "opponentResponse": "Rd7", "playedIsBest": true}
+    },
+    {
+      "id": "center-1",
+      "coreRoute": {"playedMove": "e4", "bestMove": "e4", "opponentResponse": "cxd4", "playedIsBest": true}
+    },
+    {
+      "id": "center-2",
+      "coreRoute": {"playedMove": "d5", "bestMove": "dxc5", "opponentResponse": "bxc5", "playedIsBest": false}
+    },
+    {
+      "id": "closed-1",
+      "coreRoute": {"playedMove": "f4", "bestMove": "Bd3", "opponentResponse": "cxd4", "playedIsBest": false}
+    },
+    {
+      "id": "closed-2",
+      "coreRoute": {"playedMove": "Nd2", "bestMove": "Nb3", "opponentResponse": "g5", "playedIsBest": false}
+    },
+    {
+      "id": "simplify-1",
+      "coreRoute": {"playedMove": "Qxb8", "bestMove": "Qxb8", "opponentResponse": "Rxb8", "playedIsBest": true},
+      "detailAtoms": [
+        {
+          "atomId": "simplify-1-detail-double-attack",
+          "kind": "mechanism",
+          "tier": "detail",
+          "summary": "说明Qxb8同时攻击b6兵与f8车",
+          "acceptableEvidenceSets": [["fact:move-1-before:threat:double_attack:white:b8-b6-f8"]],
+          "acceptableClaimPaths": ["playedMoveAnalysis.intention", "playedMoveAnalysis.positiveEffects[*]"],
+          "requiredTextGroups": [["Qxb8"], ["同时攻击", "双攻"], ["b6"], ["f8"]]
+        },
+        {
+          "atomId": "simplify-1-detail-queen-exchange",
+          "kind": "mechanism",
+          "tier": "detail",
+          "summary": "说明Qxb8直接换后",
+          "acceptableEvidenceSets": [["line:1"]],
+          "acceptableClaimPaths": ["candidateLines[0].directPurpose"],
+          "requiredTextGroups": [["Qxb8"], ["吃掉后", "换后", "交换后"]]
+        }
+      ]
+    },
+    {
+      "id": "simplify-2",
+      "coreRoute": {"playedMove": "Qe4", "bestMove": "Ne4", "opponentResponse": "b5", "playedIsBest": false}
+    }
+  ]
+}

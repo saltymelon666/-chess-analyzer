@@ -21,6 +21,7 @@ from .analytics import (
     AnalyticsStore,
     DailyStatistics,
     RecentAnalysis,
+    RecentFeedback,
 )
 from .analysis_report import (
     AnalysisReportResponse,
@@ -48,6 +49,7 @@ from .opening_knowledge import (
 )
 from .position_facts import extract_position_facts
 from .professional_analysis import ProfessionalAnalysisService, professional_cache_key
+from .unified_book_knowledge import UnifiedBookKnowledgeRepository
 from .request_protection import PUBLIC_BETA_POLICIES, RequestProtector
 from .strategic_plans import StrategicPlanAnalyzer
 from .threat_analysis import ThreatAnalyzer
@@ -97,11 +99,13 @@ explainer = DeepSeekExplainer(
     model=settings.deepseek_model,
     timeout_seconds=settings.deepseek_timeout_seconds,
 )
+unified_book_knowledge = UnifiedBookKnowledgeRepository()
 professional_service = ProfessionalAnalysisService(
     api_key=settings.deepseek_api_key,
     base_url=settings.deepseek_base_url,
     model=settings.deepseek_model,
     timeout_seconds=settings.deepseek_timeout_seconds,
+    book_knowledge=unified_book_knowledge,
 )
 narrative_generator = NarrativeGenerator(
     api_key=settings.deepseek_api_key,
@@ -159,6 +163,7 @@ class AdminConfiguration(BaseModel):
 class AdminDashboard(BaseModel):
     statistics: DailyStatistics
     recent_analyses: list[RecentAnalysis]
+    recent_feedback: list[RecentFeedback]
     protection_policies: list[AdminProtectionPolicy]
     configuration: AdminConfiguration
 
@@ -270,9 +275,10 @@ async def admin_dashboard(
 ) -> AdminDashboard:
     store = _authorized_analytics_store(x_admin_key)
     requested_day = _admin_day(day)
-    statistics, recent = await asyncio.gather(
+    statistics, recent, feedback = await asyncio.gather(
         asyncio.to_thread(store.daily_statistics, requested_day),
         asyncio.to_thread(store.recent_analyses, requested_day, limit=limit),
+        asyncio.to_thread(store.recent_feedback, requested_day, limit=limit),
     )
     policies = [
         AdminProtectionPolicy(
@@ -286,6 +292,7 @@ async def admin_dashboard(
     return AdminDashboard(
         statistics=statistics,
         recent_analyses=recent,
+        recent_feedback=feedback,
         protection_policies=policies,
         configuration=AdminConfiguration(
             environment=settings.environment,
@@ -615,6 +622,7 @@ async def professional_analysis(request: MoveExplanationRequest) -> Professional
     # The game review owns opening identity. Reuse that exact result everywhere
     # instead of allowing the professional-analysis path to classify it again.
     opening_context = move.opening_context
+    recent_moves = moves[max(0, request.move_index - 6):request.move_index - 1]
     book_references = _professional_book_references(move.before_fen)
     depth = max((line.depth for line in move.candidate_lines), default=settings.game_analysis_depth)
     cache_key = professional_cache_key(
@@ -622,6 +630,7 @@ async def professional_analysis(request: MoveExplanationRequest) -> Professional
         stockfish_version="Stockfish 18",
         stockfish_depth=depth,
         opening_id=opening_context.opening_id if opening_context else None,
+        recent_moves=recent_moves,
     )
     cached = professional_cache.get(cache_key)
     if cached is not None:
@@ -641,7 +650,11 @@ async def professional_analysis(request: MoveExplanationRequest) -> Professional
         task = professional_tasks.get(cache_key)
         if task is None:
             task = asyncio.create_task(
-                _generate_professional_analysis(move, opening_context=opening_context)
+                _generate_professional_analysis(
+                    move,
+                    opening_context=opening_context,
+                    recent_moves=recent_moves,
+                )
             )
             professional_tasks[cache_key] = task
             created_task = True
@@ -780,6 +793,7 @@ async def _generate_professional_analysis(
     move: MoveReview,
     *,
     opening_context: OpeningPresentation | None = None,
+    recent_moves: list[MoveReview] | None = None,
 ) -> GeneratedProfessionalAnalysis:
     fact_package = build_move_fact_package(move)
     threat_package = await threat_analyzer.analyze(
@@ -789,6 +803,8 @@ async def _generate_professional_analysis(
     kwargs = {"threat_package": threat_package}
     if opening_context is not None:
         kwargs["opening_context"] = opening_context
+    if recent_moves:
+        kwargs["recent_moves"] = recent_moves
     return await professional_service.analyze(move, **kwargs)
 
 

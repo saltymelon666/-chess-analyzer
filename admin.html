@@ -36,6 +36,7 @@
     .metric strong { display:block; margin-top:8px; font-size:clamp(22px,3vw,32px); }
     .metric small { display:block; color:var(--muted); margin-top:4px; }
     .section-title { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:14px; }
+    .dashboard-heading { margin:24px 0 12px; }
     h2 { margin:0; font-size:19px; }
     .two-col { display:grid; grid-template-columns:1.1fr .9fr; gap:18px; }
     .funnel { display:grid; gap:10px; }
@@ -56,6 +57,16 @@
     .pill.success { color:var(--green); background:var(--green-soft); }
     .pill.failed { color:var(--red); background:#f8e7e4; }
     .empty { color:var(--muted); padding:28px; text-align:center; }
+    .feedback-list { display:grid; gap:12px; }
+    .feedback-item { padding:16px; border:1px solid var(--line); border-radius:14px; background:#fff; }
+    .feedback-meta { display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px 16px; color:var(--muted); font-size:13px; }
+    .feedback-fields { display:grid; grid-template-columns:minmax(140px,.45fr) minmax(0,1.55fr); gap:14px; margin-top:14px; }
+    .feedback-field { min-width:0; }
+    .feedback-field strong { display:block; margin-bottom:5px; color:var(--muted); font-size:12px; }
+    .feedback-field p { margin:0; white-space:pre-wrap; overflow-wrap:anywhere; }
+    .analysis-result { margin-top:14px; border-top:1px solid #e7e9e4; padding-top:12px; }
+    .analysis-result summary { cursor:pointer; color:var(--green); font-weight:700; }
+    .analysis-result pre { margin:10px 0 0; max-height:360px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; font:14px/1.65 inherit; color:var(--ink); }
     .footnote { color:var(--muted); font-size:13px; margin:14px 0 0; }
     [hidden] { display:none !important; }
     @media (max-width:900px) {
@@ -68,6 +79,7 @@
       header { display:block; }
       .private-badge { display:inline-block; margin-top:12px; }
       .controls,.grid { grid-template-columns:1fr; }
+      .feedback-fields { grid-template-columns:1fr; }
       .funnel-row { grid-template-columns:78px 1fr 54px; }
     }
   </style>
@@ -97,7 +109,11 @@
     </section>
 
     <section id="dashboard" hidden>
+      <div class="section-title dashboard-heading"><h2>所选日期统计</h2><span id="selectedDateLabel"></span></div>
       <div class="grid" id="metrics"></div>
+
+      <div class="section-title dashboard-heading"><h2>历史累计统计</h2><span>数据库保留的全部数据</span></div>
+      <div class="grid" id="allTimeMetrics"></div>
 
       <div class="two-col">
         <section class="panel">
@@ -123,6 +139,12 @@
           <p class="footnote">规则仅在后台展示，普通用户页面不会出现限制信息。</p>
         </section>
       </div>
+
+      <section class="panel">
+        <div class="section-title"><h2>用户反馈</h2><span id="feedbackCount"></span></div>
+        <div class="feedback-list" id="feedbackList"></div>
+        <div class="empty" id="emptyFeedback" hidden>当天还没有用户反馈。</div>
+      </section>
 
       <section class="panel">
         <div class="section-title"><h2>最近分析日志</h2><span id="logCount"></span></div>
@@ -180,30 +202,38 @@
       parent.appendChild(row);
     }
     function renderMetrics(stats) {
-      const values = [
-        ["访问人数", stats.visitors, stats.page_views + " 次页面访问"],
-        ["上传次数", stats.uploads, stats.upload_successes + " 成功 / " + stats.upload_failures + " 失败"],
-        ["分析次数", stats.analyses, "当天创建的分析"],
-        ["成功率", formatPercent(stats.success_rate), stats.successes + " 成功 / " + stats.failures + " 失败"],
-        ["平均总耗时", formatMs(stats.average_analysis_ms), "成功分析平均值"],
-        ["Stockfish 耗时", formatMs(stats.stockfish_ms), "当天累计"],
-        ["DeepSeek 耗时", formatMs(stats.deepseek_ms), "当天累计"],
-        ["总 Token", formatNumber(stats.deepseek_total_tokens), "Prompt + Completion"],
-        ["上传→分析", formatPercent(stats.upload_to_analysis_rate), "核心体验转化"],
-        ["估算 AI 成本", stats.estimated_ai_cost === null ? "待配置" : "$" + Number(stats.estimated_ai_cost).toFixed(6), "USD"]
-      ];
-      const root = document.getElementById("metrics");
-      root.replaceChildren();
-      values.forEach(function(item) {
-        const card = document.createElement("article");
-        card.className = "metric";
-        const label = document.createElement("span");
-        const value = document.createElement("strong");
-        const note = document.createElement("small");
-        label.textContent = item[0]; value.textContent = item[1]; note.textContent = item[2];
-        card.append(label, value, note);
-        root.appendChild(card);
-      });
+      function renderSet(rootId, values) {
+        const root = document.getElementById(rootId);
+        root.replaceChildren();
+        values.forEach(function(item) {
+          const card = document.createElement("article");
+          card.className = "metric";
+          const label = document.createElement("span");
+          const value = document.createElement("strong");
+          const note = document.createElement("small");
+          label.textContent = item[0]; value.textContent = item[1]; note.textContent = item[2];
+          card.append(label, value, note);
+          root.appendChild(card);
+        });
+      }
+      function valuesFor(stats, scopeLabel) {
+        return [
+          ["访问人数", stats.visitors, stats.page_views + " 次页面访问"],
+          ["上传次数", stats.uploads, stats.upload_successes + " 成功 / " + stats.upload_failures + " 失败"],
+          ["分析次数", stats.analyses, scopeLabel + "创建的分析"],
+          ["成功率", formatPercent(stats.success_rate), stats.successes + " 成功 / " + stats.failures + " 失败"],
+          ["平均总耗时", formatMs(stats.average_analysis_ms), "成功分析平均值"],
+          ["Stockfish 耗时", formatMs(stats.stockfish_ms), scopeLabel + "累计"],
+          ["DeepSeek 耗时", formatMs(stats.deepseek_ms), scopeLabel + "累计"],
+          ["总 Token", formatNumber(stats.deepseek_total_tokens), "Prompt + Completion"],
+          ["上传→分析", formatPercent(stats.upload_to_analysis_rate), "核心体验转化"],
+          ["估算 AI 成本", stats.estimated_ai_cost === null ? "待配置" : "$" + Number(stats.estimated_ai_cost).toFixed(6), "USD"]
+        ];
+      }
+      renderSet("metrics", valuesFor(stats, "当天"));
+      const allTime = stats.all_time || stats;
+      renderSet("allTimeMetrics", valuesFor(allTime, "历史"));
+      document.getElementById("selectedDateLabel").textContent = stats.date || "";
     }
     function renderFunnel(stats) {
       const items = [
@@ -299,6 +329,50 @@
       });
       document.getElementById("logCount").textContent = logs.length + " 条";
     }
+    function renderFeedback(items) {
+      const list = document.getElementById("feedbackList");
+      const empty = document.getElementById("emptyFeedback");
+      list.replaceChildren();
+      empty.hidden = items.length !== 0;
+      items.forEach(function(item) {
+        const card = document.createElement("article");
+        card.className = "feedback-item";
+        const meta = document.createElement("div");
+        meta.className = "feedback-meta";
+        const time = document.createElement("span");
+        const analysis = document.createElement("span");
+        time.textContent = new Date(item.created_at).toLocaleString("zh-CN");
+        analysis.textContent = item.analysis_id ? "分析 " + shortId(item.analysis_id) : "未关联分析";
+        meta.append(time, analysis);
+
+        const fields = document.createElement("div");
+        fields.className = "feedback-fields";
+        [["用户评价", item.rating ? item.rating + " / 5" : "未评分"], ["用户建议", item.suggestion || "未填写建议"]].forEach(function(entry) {
+          const field = document.createElement("div");
+          const label = document.createElement("strong");
+          const value = document.createElement("p");
+          field.className = "feedback-field";
+          label.textContent = entry[0];
+          value.textContent = entry[1];
+          field.append(label, value);
+          fields.appendChild(field);
+        });
+        card.append(meta, fields);
+
+        if (item.analysis_result) {
+          const details = document.createElement("details");
+          const summary = document.createElement("summary");
+          const result = document.createElement("pre");
+          details.className = "analysis-result";
+          summary.textContent = "查看对应分析结果";
+          result.textContent = item.analysis_result;
+          details.append(summary, result);
+          card.appendChild(details);
+        }
+        list.appendChild(card);
+      });
+      document.getElementById("feedbackCount").textContent = items.length + " 条";
+    }
     async function loadDashboard() {
       const key = keyInput.value.trim();
       const date = dateInput.value;
@@ -316,6 +390,7 @@
         renderConfiguration(payload.configuration);
         renderCosts(payload.statistics);
         renderPolicies(payload.protection_policies);
+        renderFeedback(payload.recent_feedback || []);
         renderLogs(payload.recent_analyses);
         dashboard.hidden = false;
         statusNode.textContent = "数据已更新 · " + new Date().toLocaleTimeString("zh-CN");

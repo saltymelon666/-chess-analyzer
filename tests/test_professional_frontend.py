@@ -99,12 +99,15 @@ def test_professional_report_only_renders_conclusion_sections() -> None:
         assert "line.directPurpose" in page
         assert "line.events" not in page
         assert "professional-route-event" not in page
-        assert "const needsMoveExplanation = Boolean(activeReview" in page
-        assert 'String(activeReview.quality_symbol || "").includes("?")' in page
+        assert "const showMoveAnalysis = Boolean(activeReview);" in page
+        assert "quality_symbol || \"\").includes(\"?\")" not in page
         assert "问题在哪里</p>" not in page
         assert "导致的结果" not in page
         assert "验证路线" in page
-        assert "最终战术结果" in page
+        assert "分析结论" in page
+        assert "路线验证到的结果" in page
+        assert "最终战术结果" not in page
+        assert "replace(/^算到这里" in page
         assert "played.continuationPhases" in page
 
 
@@ -127,6 +130,31 @@ def test_current_position_analysis_card_is_absent_from_both_pages() -> None:
         assert "当前局面分析" not in page
         assert "professional-position-analysis" not in page
         assert "currentParagraphs" not in page
+
+
+def test_legacy_position_analysis_frontend_is_removed_and_move_review_remains() -> None:
+    for page in _pages():
+        assert 'id="analyzeBtn"' not in page
+        assert 'onclick="analyze()"' not in page
+        assert "只分析当前局面" not in page
+        assert 'id="resultSection"' not in page
+        assert "async function evaluateCurrentPosition()" not in page
+        assert 'fetch(apiUrl("/api/review")' not in page
+        assert 'id="moveReviewCard"' in page
+        assert 'fetch(apiUrl("/api/game-review")' in page
+        assert "小兵研究员说" in page
+
+
+def test_core_coaching_explanation_is_rendered_as_one_ordered_paragraph() -> None:
+    for page in _pages():
+        verdict = page.index("coachVerdict,")
+        intention = page.index("played.intention", verdict)
+
+        assert verdict < intention
+        assert '<p class="professional-label">分析结论</p><p>${coachPoints.map(escapeHtml).join("")}</p>' in page
+        assert 'professional-coach-section"><h4>先说结论' not in page
+        assert "...coachProblems" not in page
+        assert "comparison.whyFirstLineIsBest || comparison.mainDifference" not in page
 
 
 def test_book_reference_stays_in_backend_payload_but_is_not_rendered() -> None:

@@ -18,17 +18,54 @@ LENGTH_RANGES = {
     "normal": (800, 1300),
     "complex": (1400, 2200),
 }
+VERIFIED_NARRATIVE_LENGTH_RANGES = {
+    "simple": (320, 700),
+    "normal": (650, 1650),
+    "complex": (1000, 2200),
+}
 VAGUE_PHRASES = ("加强中心", "注意防守", "改善子力", "形成压力", "准备进攻", "局面复杂")
+AI_REPORT_PHRASES = (
+    "当前应继续比较各条路线的实际结果",
+    "该项不作额外评价",
+    "具体结论以程序事实",
+    "作为这条Stockfish路线的起点",
+    "程序记录实战前后评价",
+    "程序将实战着",
+    "评价方向由",
+    "路线结束时轮到",
+    "该路线由Stockfish列为",
+    "依据Stockfish",
+    "实战着意在",
+    "实战着选择",
+    "首选路线通过",
+    "不需要虚构",
+    "重点应放在",
+    "事实依据",
+    "事实补充",
+    "这条变化还要看对手接下来怎么应对",
+    "这点先不下结论",
+    "导致局面恶化",
+    "符合开局发展原则",
+    "存在本质差异",
+    "为残局奠定",
+    "解决根本问题",
+)
 PROGRAM_OWNED_CLAIM_PATTERNS = (
     r"(?:白方|黑方).{0,8}(?:多|少)(?:一|两|二)(?:枚|个)?(?:兵|子|子力)",
     r"物质.{0,8}(?:领先|落后|相等|均衡|平衡|多|少)",
     r"(?:白王|黑王|白方的王|黑方的王).{0,6}[a-h][1-8]",
-    r"准备易位|已经易位|尚未易位|完成易位|保留易位权|没有易位权",
+    r"准备易位|为.{0,8}易位.{0,4}(?:做|作)?准备|已经易位|尚未易位|完成易位|保留易位权|没有易位权",
     r"与.{0,8}(?:引擎|程序|Stockfish).{0,8}(?:首选|第一选择).{0,5}(?:一致|相同)",
     r"(?:白方|黑方).{0,5}(?:占优|优势|领先|更好)|均势|势均力敌|完全平衡",
     r"(?:实战|本步|走法).{0,8}(?:最佳|优秀|好棋|不精确|失误|严重失误)",
 )
 INITIATIVE_CLAIM_PATTERN = r"主动权|掌握主动|保持主动|占据主动|取得主动|攻势.{0,6}(?:手中|掌控)"
+MATERIAL_GAIN_CLAIM_PATTERN = (
+    r"(?:以(?:兵|马|象|车|后|王).{0,8})?(?:赢得|获得|夺取).{0,6}"
+    r"(?:中心兵|对方(?:的)?(?:兵|卒|子力|棋子|马|象|车|后)|一(?:枚|个)?兵)|"
+    r"(?:白赚|净赚|赢兵|得兵|获兵|赢子).{0,4}(?:一|两|二|对方|中心|兵|子|棋子)?|"
+    r"(?:获得|取得|形成|建立|扩大).{0,6}物质优势"
+)
 
 
 @dataclass(frozen=True)
@@ -56,6 +93,8 @@ class ProfessionalValidationContext:
     allows_check: bool
     allows_checkmate: bool
     same_as_best: bool
+    small_evaluation_gap: bool
+    routine_queen_exchange: bool
     initiative_side: str
     occupied_squares: set[str]
 
@@ -282,6 +321,20 @@ def build_validation_context(
             move.best_move_uci
             and move.best_move_uci == move.played_move.uci
         ),
+        small_evaluation_gap=bool(
+            move.best_move_uci
+            and move.best_move_uci != move.played_move.uci
+            and move.centipawn_loss is not None
+            and move.centipawn_loss < 50
+        ),
+        routine_queen_exchange=bool(
+            move.played_move.capture
+            and (move.played_move.captured_piece or "").endswith("queen")
+            and move.actual_move_line
+            and move.actual_move_line.moves
+            and move.actual_move_line.moves[0].capture
+            and (move.actual_move_line.moves[0].captured_piece or "").endswith("queen")
+        ),
         initiative_side=initiative_side,
         occupied_squares=set(pieces),
     )
@@ -303,6 +356,7 @@ def validate_professional_analysis(
     context: ProfessionalValidationContext,
     *,
     enforce_length: bool = True,
+    enforce_core_explanation: bool = False,
 ) -> list[str]:
     errors: list[str] = []
     if analysis.complexity != context.complexity:
@@ -322,8 +376,21 @@ def validate_professional_analysis(
 
     all_text = "\n".join(_all_prose_strings(payload))
     free_text = _model_controlled_prose(analysis)
+    if re.search(
+        r"(?:(?<![A-Za-z0-9_])(?:white|black)_(?:(?:white|black)_)?"
+        r"(?:pawn|knight|bishop|rook|queen|king)(?![A-Za-z0-9_])|"
+        r"(?<![A-Za-z0-9_])(?:white|black)方|Ignore Test)",
+        all_text,
+        re.IGNORECASE,
+    ):
+        errors.append("用户可见正文包含内部变量名或内部测试术语")
     if any(re.search(pattern, free_text, re.IGNORECASE) for pattern in PROGRAM_OWNED_CLAIM_PATTERNS):
         errors.append("DeepSeek自由文本重写了程序控制的硬事实")
+    if re.search(MATERIAL_GAIN_CLAIM_PATTERN, all_text, re.IGNORECASE):
+        errors.append("自由文本声称了未经对应ply事实生成的子力收益")
+    found_report_phrases = [phrase for phrase in AI_REPORT_PHRASES if phrase in all_text]
+    if found_report_phrases:
+        errors.append("用户可见正文包含AI报告腔：" + "、".join(found_report_phrases))
 
     for square in re.findall(
         r"(?:让出|腾出|空出)([a-h][1-8])格?",
@@ -358,7 +425,11 @@ def validate_professional_analysis(
     mentioned_uci = set(
         re.findall(r"(?<![A-Za-z0-9])([a-h][1-8][a-h][1-8][qrbn]?)(?![A-Za-z0-9])", all_text, re.IGNORECASE)
     )
-    invalid_uci = sorted(item for item in mentioned_uci if item.lower() not in {move.lower() for move in context.allowed_moves})
+    invalid_uci = sorted(
+        item for item in mentioned_uci
+        if item[:2].lower() != item[2:4].lower()
+        and item.lower() not in {move.lower() for move in context.allowed_moves}
+    )
     if invalid_uci:
         errors.append("出现Stockfish事实包之外的UCI走法：" + "、".join(invalid_uci))
     san_pattern = r"(?<![A-Za-z0-9])(?:O-O(?:-O)?|[KQRBN][a-h1-8]?x?[a-h][1-8](?:=[QRBN])?|[a-h]x[a-h][1-8](?:=[QRBN])?)[+#]?(?![A-Za-z0-9])"
@@ -392,9 +463,47 @@ def validate_professional_analysis(
             analysis.played_move_analysis.evaluation_reason,
         ]
     )
+    if enforce_core_explanation and not analysis.played_move_analysis.claim_refs:
+        core_text = analysis.played_move_analysis.intention
+        if re.search(r"实战后验证路线|验证路线包含|后续验证路线", core_text):
+            errors.append("playedMoveAnalysis.intention: 核心讲解不得摘录后续验证路线")
+        if context.small_evaluation_gap and re.search(
+            r"更精确|更好|不如|优于|更关键|才是|错失|逊色|没有|并未|未能|并非最|不够|较为被动|失去|错过",
+            core_text,
+        ):
+            errors.append("playedMoveAnalysis.intention: 两着评价差距很小时不得强行分高下")
+        core_sentences = [
+            item for item in re.split(r"(?<=[。！？])", core_text) if item.strip()
+        ]
+        if not context.routine_queen_exchange:
+            san_candidates = {
+                move
+                for move in context.allowed_moves
+                if not re.fullmatch(r"[a-h][1-8][a-h][1-8][qrbn]?", move, re.I)
+            }
+            core_moves = [
+                move for move in san_candidates
+                if re.search(
+                    rf"(?<![A-Za-z0-9]){re.escape(move)}(?![A-Za-z0-9])",
+                    core_text,
+                )
+            ]
+            if len(core_moves) > 2:
+                errors.append("playedMoveAnalysis.intention: 核心讲解复述了超过一手回应的后续路线")
+            if len(core_sentences) < 2:
+                errors.append("playedMoveAnalysis.intention: 核心讲解没有说完整机制和后果")
+            if not re.search(r"类似局面|先检查|先看|首先确认|第一眼|优先检查", core_text):
+                errors.append("playedMoveAnalysis.intention: 没有告诉读者类似局面先检查什么")
+    played_event_text = played_text
+    if analysis.played_move_analysis.claim_refs:
+        played_event_text = " ".join([
+            *analysis.played_move_analysis.positive_effects,
+            *analysis.played_move_analysis.problems,
+            analysis.played_move_analysis.evaluation_reason,
+        ])
     errors.extend(
         _validate_event_scope(
-            played_text,
+            played_event_text,
             capture=context.played_capture,
             check=context.played_check,
             checkmate=context.played_checkmate,
@@ -444,18 +553,32 @@ def validate_professional_analysis(
         if line.first_move not in context.candidate_first_moves[line.rank]:
             errors.append(f"候选路线{line.rank}的firstMove与Stockfish不符")
         route_evidence = context.candidate_evidence_ids[line.rank]
-        if not set(line.evidence_refs).intersection(route_evidence):
-            errors.append(f"候选路线{line.rank}没有引用自身路线证据")
+        foreign_route_evidence = set().union(*(
+            evidence
+            for rank, evidence in context.candidate_evidence_ids.items()
+            if rank != line.rank
+        ))
+        line_refs = set(line.evidence_refs)
+        if not line_refs.intersection(route_evidence) or line_refs.intersection(foreign_route_evidence):
+            errors.append(f"候选路线{line.rank}没有引用自身路线证据，或混入了其他路线证据")
         for phase in line.continuation_phases:
             errors.extend(_validate_phase_moves(phase.moves, context.candidate_moves[line.rank], f"候选路线{line.rank}"))
-            if phase.moves and not set(phase.evidence_refs).intersection(route_evidence):
-                errors.append(f"候选路线{line.rank}的阶段没有引用自身PV证据")
+            phase_refs = set(phase.evidence_refs)
+            if phase.moves and (
+                not phase_refs.intersection(route_evidence)
+                or phase_refs.intersection(foreign_route_evidence)
+            ):
+                errors.append(f"候选路线{line.rank}的阶段没有引用自身PV证据，或混入了其他路线证据")
         expected_scope = f"candidate_line_{line.rank}"
         for event in line.events:
             if event.scope != expected_scope:
                 errors.append(f"候选路线{line.rank}的事件scope串入了其他路线")
-            if not set(event.evidence_refs).intersection(route_evidence):
-                errors.append(f"候选路线{line.rank}的内部事件没有引用自身PV证据")
+            event_refs = set(event.evidence_refs)
+            if (
+                not event_refs.intersection(route_evidence)
+                or event_refs.intersection(foreign_route_evidence)
+            ):
+                errors.append(f"候选路线{line.rank}的内部事件引用了其他路线证据或没有引用自身PV证据")
         errors.extend(
             _validate_phase_sequence(
                 [move for phase in line.continuation_phases for move in phase.moves],
@@ -512,8 +635,18 @@ def validate_professional_analysis(
             errors.append("mainDanger.description: 没有同时指出具体棋子和格子")
         if len(danger_squares) < 2:
             errors.append("mainDanger.description: 没有同时指出来源格和目标格")
-        if danger_squares and not _refs_support_any_square(danger.evidence_refs, danger_squares, context):
-            errors.append("mainDanger.evidenceRefs: 提到的格子没有对应证据")
+        if danger_squares and not _refs_support_all_squares(danger.evidence_refs, danger_squares, context):
+            errors.append("mainDanger.evidenceRefs: 每个来源格和目标格都必须有对应证据")
+        evidence_sides = {
+            context.evidence_sides.get(ref)
+            for ref in danger.evidence_refs
+            if context.evidence_sides.get(ref) in {"white", "black"}
+        }
+        if len(evidence_sides) == 1:
+            attacker_side = next(iter(evidence_sides))
+            expected_side = "black" if attacker_side == "white" else "white"
+            if danger.side_in_danger != expected_side:
+                errors.append("mainDanger.sideInDanger与威胁证据的行棋方不一致")
         if len(danger.consequence.strip()) < 6:
             errors.append("mainDanger.consequence: 没有说明不处理的后果")
     if not danger.evidence_refs:
@@ -541,7 +674,12 @@ def validate_professional_analysis(
 
     if enforce_length:
         length = _narrative_length(payload)
-        minimum, maximum = LENGTH_RANGES[context.complexity]
+        ranges = (
+            VERIFIED_NARRATIVE_LENGTH_RANGES
+            if analysis.played_move_analysis.claim_refs
+            else LENGTH_RANGES
+        )
+        minimum, maximum = ranges[context.complexity]
         if not minimum <= length <= maximum:
             errors.append(f"专业分析正文长度应为{minimum}—{maximum}字，实际{length}字")
     return errors
@@ -643,6 +781,19 @@ def _refs_support_any_square(
     return bool({square.lower() for square in squares}.intersection(supported))
 
 
+def _refs_support_all_squares(
+    refs: list[str],
+    squares: set[str],
+    context: ProfessionalValidationContext,
+) -> bool:
+    supported = {
+        square.lower()
+        for ref in refs
+        for square in context.evidence_squares.get(ref, set())
+    }
+    return {square.lower() for square in squares} <= supported
+
+
 def _mentioned_squares(text: str) -> set[str]:
     return {
         item.lower()
@@ -659,35 +810,41 @@ def _is_concrete(sentence: str, context: ProfessionalValidationContext) -> bool:
 
 def _model_controlled_prose(analysis: ProfessionalAnalysis) -> str:
     """Collect only prose that may originate from DeepSeek after resolution."""
-    values = [
+    # Danger, played-move prose, route mechanics and comparison prose are
+    # rebuilt by apply_hard_fact_guard.  Treating them as model-authored here
+    # would reject the exact hard facts the guard just inserted.
+    values: list[str] = [
         analysis.main_danger.description,
         analysis.main_danger.consequence,
-        analysis.played_move_analysis.intention,
-        *analysis.played_move_analysis.positive_effects,
-        *analysis.played_move_analysis.problems,
-        analysis.played_move_analysis.resulting_position,
-        *[
-            phase.explanation
-            for phase in analysis.played_move_analysis.continuation_phases
-        ],
-        analysis.comparison.main_difference,
-        analysis.comparison.why_first_line_is_best,
     ]
+    if not analysis.played_move_analysis.claim_refs:
+        values.extend([
+            analysis.played_move_analysis.intention,
+            *analysis.played_move_analysis.positive_effects,
+            *analysis.played_move_analysis.problems,
+            analysis.played_move_analysis.resulting_position,
+            *(
+                phase.explanation
+                for phase in analysis.played_move_analysis.continuation_phases
+            ),
+            analysis.comparison.main_difference,
+            analysis.comparison.why_first_line_is_best,
+        ])
+        for line in analysis.candidate_lines:
+            values.extend((
+                line.direct_purpose,
+                line.resulting_position,
+                *line.advantages,
+                *line.risks,
+                line.why_this_rank,
+            ))
+            values.extend(phase.explanation for phase in line.continuation_phases)
     for side_plans in (analysis.plans.white, analysis.plans.black):
         for plan in side_plans:
             values.extend((plan.description, plan.required_preparation))
     for side_weaknesses in (analysis.weaknesses.white, analysis.weaknesses.black):
         for weakness in side_weaknesses:
             values.extend((weakness.description, weakness.exploitation))
-    for line in analysis.candidate_lines:
-        values.extend((
-            line.direct_purpose,
-            line.resulting_position,
-            *line.advantages,
-            *line.risks,
-            line.why_this_rank,
-        ))
-        values.extend(phase.explanation for phase in line.continuation_phases)
     return "\n".join(value for value in values if value)
 
 
@@ -729,11 +886,15 @@ def normalize_program_owned_claims(
         normalized_paths.append(path)
         if kept:
             return "".join(kept)
-        return "该项不作额外评价，具体结论以程序事实与已验证路线为准。"
+        return ""
 
     danger = result.main_danger
     danger.description = clean(danger.description, "mainDanger.description")
     danger.consequence = clean(danger.consequence, "mainDanger.consequence")
+    if danger.side_in_danger != "none" and len(danger.consequence.strip()) < 6:
+        danger.consequence = "不先处理，对手下一回合就能兑现这个威胁。"
+        if "mainDanger.consequence" not in normalized_paths:
+            normalized_paths.append("mainDanger.consequence")
 
     played = result.played_move_analysis
     played.intention = clean(played.intention, "playedMoveAnalysis.intention")
