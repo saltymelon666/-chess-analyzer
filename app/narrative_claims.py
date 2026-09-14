@@ -11,7 +11,7 @@ from .strategic_plans import StrategicPlanPackage
 from .threat_analysis import ThreatPackage
 
 
-NARRATIVE_CLAIM_VERSION = "1.6"
+NARRATIVE_CLAIM_VERSION = "1.7"
 LEGACY_NARRATIVE_MARKERS = (
     "先看全局：",
     "实战把选择摆上棋盘：",
@@ -58,7 +58,7 @@ class VerifiedNarrativeClaim(BaseModel):
 class NarrativeClaimPackage(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
-    version: Literal["1.6"] = NARRATIVE_CLAIM_VERSION
+    version: Literal["1.7"] = NARRATIVE_CLAIM_VERSION
     claims: list[VerifiedNarrativeClaim] = Field(default_factory=list)
     recommended_claim_refs: list[str] = Field(alias="recommendedClaimRefs", default_factory=list)
     boundary: str = (
@@ -1058,12 +1058,13 @@ def _pin_then_capture_claim(move: MoveReview) -> tuple[str, list[str]] | None:
 def _non_capture_reply_pressure_claim(
     move: MoveReview,
 ) -> tuple[str, list[str]] | None:
-    """Explain a quiet reply only when the PV immediately verifies its pressure.
+    """Explain a quiet reply only when the PV verifies its concrete pressure.
 
     A non-capture such as a knight jump can be the real punishment even though
     no material changes hands on that ply.  We only promote it to a causal
-    claim when python-chess proves a new attack on a non-pawn piece and the
-    very next move in the verified Stockfish line moves that attacked piece.
+    claim when python-chess proves either an immediate answering tempo against
+    an important piece or a later capture by that same replying piece of a
+    target that the reply newly attacked.
     """
     line = move.actual_move_line
     inferior = bool(
@@ -1105,7 +1106,7 @@ def _non_capture_reply_pressure_claim(
         if (
             target is None
             or target.color == replying_piece.color
-            or target.piece_type in {chess.KING, chess.PAWN}
+            or target.piece_type == chess.KING
         ):
             continue
         newly_attacked.append((_PIECE_VALUES[target.piece_type], square, target))
@@ -1117,11 +1118,68 @@ def _non_capture_reply_pressure_claim(
         (
             (value, square, target)
             for value, square, target in newly_attacked
-            if response.from_square == square
+            if response.from_square == square and target.piece_type != chess.PAWN
         ),
         None,
     )
     if answered is None:
+        tracked_square = reply.to_square
+        tracked_piece = replying_piece
+        target_by_square = {
+            square: (value, target) for value, square, target in newly_attacked
+        }
+        replayed_items = [reply_item]
+        for item in line.moves[1:]:
+            try:
+                route_move = chess.Move.from_uci(item.uci)
+            except ValueError:
+                return None
+            if route_move not in board.legal_moves:
+                return None
+
+            moving_piece = board.piece_at(route_move.from_square)
+            captured_piece = board.piece_at(route_move.to_square)
+            replayed_items.append(item)
+            if route_move.from_square == tracked_square:
+                if moving_piece != tracked_piece:
+                    return None
+                target = target_by_square.get(route_move.to_square)
+                if (
+                    target is None
+                    or not board.is_capture(route_move)
+                    or captured_piece != target[1]
+                ):
+                    return None
+
+                reply_side = "white" if replying_piece.color == chess.WHITE else "black"
+                target_side = "white" if captured_piece.color == chess.WHITE else "black"
+                reply_piece_text = _piece_text(
+                    chess.piece_name(replying_piece.piece_type), reply_side
+                )
+                target_piece_text = _piece_text(
+                    chess.piece_name(captured_piece.piece_type), target_side
+                )
+                bridge = "、".join(route.san for route in replayed_items[1:-1])
+                bridge_text = f"经过{bridge}后，" if bridge else "随后"
+                statement = (
+                    f"{move.played_move.san}之后，{_side_text(reply_side)}可以先用"
+                    f"{reply_item.san}把{reply_piece_text}从{reply_item.from_square}转到"
+                    f"{reply_item.to_square}，瞄住{chess.square_name(route_move.to_square)}的"
+                    f"{target_piece_text}。{bridge_text}还是这枚"
+                    f"{_piece_name(chess.piece_name(replying_piece.piece_type))}以"
+                    f"{item.san}吃掉该子；这说明{reply_item.san}不是单纯调子，而是在为"
+                    f"{item.san}改善落点。这个具体收获是分支中已经兑现的代价，"
+                    f"但不能把全部{move.centipawn_loss} cp评价变化只归因于这一处。"
+                )
+                return statement, [line.id, *[route.id for route in replayed_items]]
+
+            if route_move.to_square == tracked_square and board.is_capture(route_move):
+                return None
+            if route_move.from_square in target_by_square:
+                target_by_square.pop(route_move.from_square, None)
+            if route_move.to_square in target_by_square and board.is_capture(route_move):
+                target_by_square.pop(route_move.to_square, None)
+            board.push(route_move)
         return None
 
     _, target_square, target_piece = answered
