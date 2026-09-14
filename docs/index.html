@@ -1543,6 +1543,8 @@ function renderProfessionalAnalysis(payload) {
   const plans = analysis.plans || {};
   const lines = analysis.candidateLines || [];
   const played = analysis.playedMoveAnalysis || {};
+  const activeReview = currentStep > 0 ? gameReview?.moves?.[currentStep - 1] : null;
+  const showMoveAnalysis = Boolean(activeReview);
   const complexityNames = { simple: "简单局面", normal: "普通局面", complex: "复杂局面" };
   const tagNames = {
     king_attack: "进攻王", improve_king_safety: "改善王安全", center_break: "中心突破",
@@ -1552,6 +1554,11 @@ function renderProfessionalAnalysis(payload) {
     pawn_break: "兵突破", transition_to_endgame: "转入残局"
   };
   const parts = [];
+  const coachVerdict = completeProfessionalSentence(played.evaluationReason);
+  const coachPoints = [coachVerdict, played.intention]
+    .map(completeProfessionalSentence)
+    .filter(usefulProfessionalText)
+    .filter((item, index, items) => items.indexOf(item) === index);
   const positionParagraphs = [
     position.summary,
     position.pieceActivity?.description,
@@ -1584,17 +1591,21 @@ function renderProfessionalAnalysis(payload) {
 
   if (planCards) parts.push(`<section class="professional-section professional-plan-section"><h4>🗺 双方计划</h4><div class="professional-grid${planGridClass}">${planCards}</div></section>`);
 
-  const activeReview = currentStep > 0 ? gameReview?.moves?.[currentStep - 1] : null;
-  const needsMoveExplanation = Boolean(activeReview && (String(activeReview.quality_symbol || "").includes("?") || ["inaccuracy", "mistake", "blunder"].includes(activeReview.quality_key)));
-  if (needsMoveExplanation) {
+  if (showMoveAnalysis) {
     const verifiedPhases = (played.continuationPhases || []).map(phase => {
       const moves = (phase.moves || []).join(" → ");
       const explanation = completeProfessionalSentence(phase.explanation);
       return moves ? `<div class="professional-phase"><div class="professional-moves">${escapeHtml(moves)}</div>${explanation ? `<p>${escapeHtml(explanation)}</p>` : ""}</div>` : "";
     }).filter(Boolean).join("");
     const finalResult = completeProfessionalSentence(played.resultingPosition);
+    const verifiedOutcome = finalResult
+      .replace(/^算到这里[，,]?\s*轮到[白黑]方走[。；;]?\s*/, "")
+      .replace(/^(这条变化算到这里为止|参考线终点已验证；没有需要单独强调的重大子力后果|终点没有重大子力后果)[。]?$/, "");
     const moveText = completeProfessionalSentence(played.move) || activeReview.san;
-    parts.push(`<section class="professional-section move-quality-section"><h4>实战着分析 · ${escapeHtml(moveText)} ${escapeHtml(activeReview.quality_symbol || "")}</h4>${verifiedPhases ? `<p class="professional-label">验证路线</p>${verifiedPhases}` : ""}${finalResult ? `<p class="professional-label">最终战术结果</p><p>${escapeHtml(finalResult)}</p>` : ""}</section>`);
+    const moveConclusion = coachPoints.length
+      ? `<p class="professional-label">分析结论</p><p>${coachPoints.map(escapeHtml).join("")}</p>`
+      : "";
+    parts.push(`<section class="professional-section move-quality-section"><h4>实战着分析 · ${escapeHtml(moveText)} ${escapeHtml(activeReview.quality_symbol || "")}</h4>${moveConclusion}${verifiedPhases ? `<p class="professional-label">验证路线</p>${verifiedPhases}` : ""}${verifiedOutcome ? `<p class="professional-label">路线验证到的结果</p><p>${escapeHtml(verifiedOutcome)}</p>` : ""}</section>`);
   }
 
   if (lines.length) {

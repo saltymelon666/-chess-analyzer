@@ -103,12 +103,14 @@ def test_professional_report_only_renders_conclusion_sections() -> None:
         assert '<div class="professional-moves">${escapeHtml(moves)}</div></div>' in page
         assert "line.events" not in page
         assert "professional-route-event" not in page
-        assert "const needsMoveExplanation = Boolean(activeReview" in page
-        assert 'String(activeReview.quality_symbol || "").includes("?")' in page
+        assert "const showMoveAnalysis = Boolean(activeReview);" in page
+        assert "if (showMoveAnalysis)" in page
+        assert "分析结论" in page
         assert "问题在哪里</p>" not in page
         assert "导致的结果" not in page
         assert "验证路线" in page
-        assert "最终战术结果" in page
+        assert "最终战术结果" not in page
+        assert "路线验证到的结果" in page
         assert "played.continuationPhases" in page
 
 

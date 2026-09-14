@@ -142,11 +142,17 @@ def thought_path_summary(
     punishment_mode = "not_applicable"
     punishment_handled = not inferior
     cause_claims = [item for item in selected if item.kind == "position_cause"]
+    consequence_claims = [
+        item for item in selected if item.kind == "verified_consequence"
+    ]
     if inferior and any("立即付出了子力代价" in item.statement for item in reply_claims):
         punishment_mode = "immediate_capture"
         punishment_handled = True
     elif inferior and cause_claims:
         punishment_mode = "verified_causal_chain"
+        punishment_handled = True
+    elif inferior and consequence_claims:
+        punishment_mode = "verified_consequence"
         punishment_handled = True
     elif inferior and reply_claims:
         punishment_mode = "concrete_reply"
@@ -159,7 +165,6 @@ def thought_path_summary(
         and item.source == "stockfish"
         and item.scope == "before_move"
     ), None)
-    played_claim = next((item for item in selected if item.claim_id.endswith(":played")), None)
     comparison_claim = next((
         item for item in selected if item.kind == "evaluation_comparison"
     ), None)
@@ -167,27 +172,28 @@ def thought_path_summary(
         item for item in package.claims if item.kind == "position_cause"
     ), None)
     selected_cause = next((item for item in selected if item.kind == "position_cause"), None)
+    selected_consequence = next((
+        item for item in selected if item.kind == "verified_consequence"
+    ), None)
     indices = {
         "global": core.find(global_posture_claim.statement) if global_posture_claim else -1,
-        "played": core.find(played_claim.statement) if played_claim else -1,
         "comparison": core.find(comparison_claim.statement) if comparison_claim else -1,
         "cause": core.find(selected_cause.statement) if selected_cause else -1,
+        "consequence": core.find(selected_consequence.statement) if selected_consequence else -1,
     }
     global_posture = global_posture_claim is not None and indices["global"] == 0
     key_choice = (
         "evaluation_comparison" in kinds
-        and min(indices["played"], indices["comparison"]) >= 0
-        and indices["played"] < indices["comparison"]
+        and indices["comparison"] > indices["global"] >= 0
     )
     causal_explanation = available_cause is None or (
-        selected_cause is not None and indices["cause"] > indices["played"] >= 0
+        selected_cause is not None and indices["cause"] > indices["comparison"] >= 0
     )
     legacy_template_free = not any(marker in core for marker in LEGACY_NARRATIVE_MARKERS)
     process_text_free = not any(
         phrase in core
         for phrase in (
             "评价差距不足以支持",
-            "验证路线",
             "下一次遇到",
             "检查顺序",
             "当前能够确认的是",

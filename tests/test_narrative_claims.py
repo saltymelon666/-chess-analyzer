@@ -108,6 +108,48 @@ def _line_from_uci(board: chess.Board, ucis: list[str]) -> CandidateLine:
     )
 
 
+def _rhg1_exchange_review():
+    move = professional_review().model_copy(deep=True)
+    before = chess.Board("4k2r/8/8/7p/6P1/4K3/7P/R6R w - - 0 1")
+    played_move = chess.Move.from_uci("h1g1")
+    san = before.san(played_move)
+    after = before.copy(stack=False)
+    after.push(played_move)
+    move.side = "white"
+    move.san = san
+    move.uci = played_move.uci()
+    move.from_square = "h1"
+    move.to_square = "g1"
+    move.before_fen = before.fen()
+    move.after_fen = after.fen()
+    move.played_move = MoveFacts(
+        id="move:played:1",
+        san=san,
+        uci=played_move.uci(),
+        from_square="h1",
+        to_square="g1",
+        piece="rook",
+        capture=False,
+        check=False,
+        checkmate=False,
+        castling=False,
+    )
+    move.best_move_uci = "e3f3"
+    move.best_move_san = "Kf3"
+    move.centipawn_loss = 160
+    move.actual_move_line = _line_from_uci(after, ["h5g4", "g1g4", "h8h2"])
+    move.allowed_squares = [chess.square_name(square) for square in chess.SQUARES]
+    move.allowed_moves = [
+        san,
+        played_move.uci(),
+        "Kf3",
+        "e3f3",
+        *[item.san for item in move.actual_move_line.moves],
+        *[item.uci for item in move.actual_move_line.moves],
+    ]
+    return move
+
+
 def test_verified_claims_do_not_turn_unrelated_route_squares_into_causality() -> None:
     move = _h4_review()
     package = build_narrative_claim_package(move)
@@ -153,8 +195,9 @@ def test_global_posture_and_engine_comparison_are_always_in_the_core_path() -> N
     assert selected[0].kind == "position_fact"
     assert comparison in selected
     assert paragraph.startswith(position.statement)
-    assert paragraph.index(position.statement) < paragraph.index(move.played_move.san)
-    assert paragraph.index(move.played_move.san) < paragraph.index(comparison.statement)
+    assert paragraph.index(position.statement) < paragraph.index(comparison.statement)
+    assert "从e2来到e4" not in paragraph
+    assert "直接控制的格子" not in paragraph
     assert not any(marker in paragraph for marker in LEGACY_NARRATIVE_MARKERS)
     assert "检查顺序" not in paragraph
     assert "评价差距不足以支持" not in paragraph
@@ -209,8 +252,9 @@ def test_inferior_move_path_names_reply_without_inventing_a_single_cause() -> No
     reply = next(item for item in selected if item.kind == "opponent_resource")
     paragraph = compose_verified_core_paragraph(package)
 
-    assert kinds.index("position_fact") < kinds.index("move_event")
-    assert kinds.index("move_event") < kinds.index("evaluation_comparison")
+    assert "move_event" not in kinds
+    assert "move_effect" not in kinds
+    assert kinds.index("position_fact") < kinds.index("evaluation_comparison")
     assert kinds.index("evaluation_comparison") < kinds.index("opponent_resource")
     assert "首选回应" in reply.statement
     assert move.actual_move_line is not None
@@ -218,6 +262,33 @@ def test_inferior_move_path_names_reply_without_inventing_a_single_cause() -> No
     assert "验证路线" not in reply.statement
     assert "不能倒推" not in reply.statement
     assert paragraph.index(selected[0].statement) < paragraph.index(reply.statement)
+
+
+def test_inferior_move_explains_verified_multi_ply_material_consequence() -> None:
+    move = _rhg1_exchange_review()
+    package = build_narrative_claim_package(move)
+    consequence = next(
+        item for item in package.claims if item.kind == "verified_consequence"
+    )
+    paragraph = compose_verified_core_paragraph(package)
+
+    assert "Rhg1的问题" in consequence.statement
+    assert "黑兵先以hxg4吃掉白兵" in consequence.statement
+    assert "白车随即以Rxg4回吃这枚黑兵" in consequence.statement
+    assert "黑车再以Rxh2吃掉白兵" in consequence.statement
+    assert "hxg4让黑兵离开h线" in consequence.statement
+    assert "清出了黑车从h8通往h2的线路" in consequence.statement
+    assert "黑方净得一兵" in consequence.statement
+    assert "直到验证路线结束，这项收益也没有被追回" in consequence.statement
+    assert consequence.statement in paragraph
+    assert "首选回应" not in paragraph
+
+    analysis = build_safe_professional_analysis(
+        move,
+        compute_professional_complexity(move),
+    )
+    guarded = apply_hard_fact_guard(analysis, move, narrative_claims=package)
+    assert consequence.statement in guarded.played_move_analysis.intention
 
 
 def test_claim_grounding_metric_requires_the_verified_statement_in_core_text() -> None:
@@ -307,14 +378,15 @@ def test_after_move_tactic_is_not_labeled_as_before_move_position_fact() -> None
     assert all(item.claim_id != "claim:71:position:1" for item in package.claims)
 
 
-def test_move_event_precedes_capture_or_check_detail() -> None:
+def test_move_event_detail_is_not_used_as_core_evaluation() -> None:
     move = _h4_review()
     move.played_move.capture = True
     move.played_move.captured_piece = "black_pawn"
     package = build_narrative_claim_package(move)
     paragraph = compose_verified_core_paragraph(package)
 
-    assert paragraph.index("白方选择h4") < paragraph.index("这一步吃掉黑兵")
+    assert "白方选择h4" not in paragraph
+    assert "这一步吃掉黑兵" not in paragraph
 
 
 def test_actual_line_first_ply_is_used_as_opponent_reply() -> None:
@@ -337,7 +409,7 @@ def test_non_capture_check_does_not_add_a_generic_teaching_checklist() -> None:
     package = build_narrative_claim_package(move)
     paragraph = compose_verified_core_paragraph(package)
 
-    assert "形成将军" in paragraph
+    assert "形成将军" not in paragraph
     assert "先检查" not in paragraph
     assert all(item.kind != "teaching_rule" for item in package.claims)
 
