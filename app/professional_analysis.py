@@ -87,7 +87,7 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .book_case_transfer import BookCaseTransferPackage
-PROFESSIONAL_PROMPT_VERSION = "professional-v44-book-consequence"
+PROFESSIONAL_PROMPT_VERSION = "professional-v45-strategic-choice"
 PROFESSIONAL_TOKEN_LIMITS = {"simple": 1500, "normal": 2600, "complex": 3400}
 STRATEGY_TAGS = [
     "king_attack",
@@ -1865,7 +1865,7 @@ def _controlled_move_summary(move: MoveReview) -> str:
     elif move.best_move_san:
         best = move.best_move_san
         if move.centipawn_loss is not None and move.centipawn_loss < 50:
-            return f"{played}和{best}都可以，评价差距很小，只是选择的侧重点不同。"
+            return f"{played}与{best}的引擎评价接近；真正需要比较的是两步造成的计划和行棋次序。"
         elif move.centipawn_loss is not None and move.centipawn_loss <= 100:
             return (
                 f"{played}不算大错，但比{best}差约"

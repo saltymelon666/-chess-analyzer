@@ -1555,7 +1555,7 @@ function renderProfessionalAnalysis(payload) {
   };
   const parts = [];
   const coachVerdict = completeProfessionalSentence(played.evaluationReason);
-  const coachPoints = [coachVerdict, played.intention]
+  const coachPoints = [played.intention || coachVerdict]
     .map(completeProfessionalSentence)
     .filter(usefulProfessionalText)
     .filter((item, index, items) => items.indexOf(item) === index);

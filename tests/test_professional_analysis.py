@@ -1484,7 +1484,7 @@ def test_hard_fact_guard_replaces_material_castling_and_best_move_claims() -> No
     assert "已经没有易位权" in guarded.position_assessment.summary
     assert "准备易位" not in guarded.position_assessment.summary
     assert guarded.played_move_analysis.evaluation_reason == (
-        "e4和d4都可以，评价差距很小，只是选择的侧重点不同。"
+        "e4与d4的引擎评价接近；真正需要比较的是两步造成的计划和行棋次序。"
     )
 
 

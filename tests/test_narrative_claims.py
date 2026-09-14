@@ -150,6 +150,70 @@ def _rhg1_exchange_review():
     return move
 
 
+def _closed_center_flank_choice_review():
+    move = professional_review().model_copy(deep=True)
+    before = chess.Board("r2qk3/7n/4pp2/1N1pP3/3P4/8/Q4P2/3R2K1 w - - 0 1")
+    played_move = chess.Move.from_uci("f2f4")
+    san = before.san(played_move)
+    after = before.copy(stack=False)
+    after.push(played_move)
+    best_line = _line_from_uci(
+        before,
+        ["a2b3", "f6e5", "d4e5", "d8c7", "f2f4"],
+    )
+    best_line.id = "line:best"
+    actual_line = _line_from_uci(
+        after,
+        [
+            "f6e5", "d4e5", "d8e7", "a2a5", "h7f8",
+            "d1d3", "a8b8", "d3c3", "e8f7", "b5d4",
+        ],
+    )
+    actual_line.id = "line:actual"
+    move.side = "white"
+    move.san = san
+    move.uci = played_move.uci()
+    move.from_square = "f2"
+    move.to_square = "f4"
+    move.before_fen = before.fen()
+    move.after_fen = after.fen()
+    move.before.centipawn = 124
+    move.before.evaluation = "+1.24"
+    move.after.centipawn = 105
+    move.after.evaluation = "+1.05"
+    move.played_move = MoveFacts(
+        id="move:played:1",
+        san=san,
+        uci=played_move.uci(),
+        from_square="f2",
+        to_square="f4",
+        piece="pawn",
+        capture=False,
+        check=False,
+        checkmate=False,
+        castling=False,
+    )
+    move.best_move = best_line.first_move.model_copy(deep=True)
+    move.best_move_uci = "a2b3"
+    move.best_move_san = "Qb3"
+    move.centipawn_loss = 19
+    move.quality_label = "好棋"
+    move.candidate_lines = [best_line]
+    move.actual_move_line = actual_line
+    move.allowed_squares = [chess.square_name(square) for square in chess.SQUARES]
+    move.allowed_moves = [
+        san,
+        played_move.uci(),
+        "Qb3",
+        "a2b3",
+        *[item.san for item in best_line.moves],
+        *[item.uci for item in best_line.moves],
+        *[item.san for item in actual_line.moves],
+        *[item.uci for item in actual_line.moves],
+    ]
+    return move
+
+
 def test_verified_claims_do_not_turn_unrelated_route_squares_into_causality() -> None:
     move = _h4_review()
     package = build_narrative_claim_package(move)
@@ -289,6 +353,31 @@ def test_inferior_move_explains_verified_multi_ply_material_consequence() -> Non
     )
     guarded = apply_hard_fact_guard(analysis, move, narrative_claims=package)
     assert consequence.statement in guarded.played_move_analysis.intention
+
+
+def test_small_gap_flank_push_explains_plan_timing_and_central_reply() -> None:
+    move = _closed_center_flank_choice_review()
+    package = build_narrative_claim_package(move)
+    choice = next(item for item in package.claims if item.kind == "verified_choice")
+    comparison = next(
+        item for item in package.claims if item.kind == "evaluation_comparison"
+    )
+    paragraph = compose_verified_core_paragraph(package)
+
+    assert "f4的棋理价值，是利用封闭中心先在王翼争取空间" in choice.statement
+    assert "黑方立即以fxe5换掉e5兵" in choice.statement
+    assert "d4兵被带到e5，中心兵型先发生了转换" in choice.statement
+    assert "白方还要用Qa5、Rd3、Rc3重新组织子力" in choice.statement
+    assert "f4没有立即形成翼侧突破" in choice.statement
+    assert "首选路线并没有放弃f4" in choice.statement
+    assert "先走Qb3" in choice.statement
+    assert "与实战的真正区别是次序，不是进攻方向" in choice.statement
+    assert "它不是失误，真正的差别在计划执行次序" in comparison.statement
+    assert "Stockfish评价从+1.24变为+1.05" in comparison.statement
+    assert "评价损失19 cp" in comparison.statement
+    assert "走法等级为“好棋”" in comparison.statement
+    assert paragraph.index(comparison.statement) < paragraph.index(choice.statement)
+    assert "只是选择的侧重点不同" not in paragraph
 
 
 def test_claim_grounding_metric_requires_the_verified_statement_in_core_text() -> None:
