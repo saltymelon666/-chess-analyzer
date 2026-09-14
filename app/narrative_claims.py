@@ -6,12 +6,12 @@ from typing import Literal
 import chess
 from pydantic import BaseModel, ConfigDict, Field
 
-from .models import MoveReview, ProfessionalAnalysis, VariationMove
+from .models import MoveFacts, MoveReview, ProfessionalAnalysis, VariationMove
 from .strategic_plans import StrategicPlanPackage
 from .threat_analysis import ThreatPackage
 
 
-NARRATIVE_CLAIM_VERSION = "1.3"
+NARRATIVE_CLAIM_VERSION = "1.4"
 LEGACY_NARRATIVE_MARKERS = (
     "先看全局：",
     "实战把选择摆上棋盘：",
@@ -26,6 +26,7 @@ NarrativeClaimKind = Literal[
     "move_effect",
     "evaluation_comparison",
     "opponent_resource",
+    "verified_consequence",
     "verified_plan",
 ]
 NarrativeClaimScope = Literal[
@@ -56,7 +57,7 @@ class VerifiedNarrativeClaim(BaseModel):
 class NarrativeClaimPackage(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
-    version: Literal["1.3"] = NARRATIVE_CLAIM_VERSION
+    version: Literal["1.4"] = NARRATIVE_CLAIM_VERSION
     claims: list[VerifiedNarrativeClaim] = Field(default_factory=list)
     recommended_claim_refs: list[str] = Field(alias="recommendedClaimRefs", default_factory=list)
     boundary: str = (
@@ -321,6 +322,18 @@ def build_narrative_claim_package(
                 recommend=inferior,
             )
 
+        consequence_statement, consequence_refs = _verified_forcing_consequence(move)
+        if consequence_statement and tactical_cause is None:
+            add(
+                "forcing-consequence",
+                "verified_consequence",
+                "candidate_route",
+                consequence_statement,
+                consequence_refs,
+                "python-chess+stockfish",
+                recommend=True,
+            )
+
     for plan in (plan_package.plans if plan_package else []):
         if move.played_move.uci not in plan.supporting_moves and move.played_move.san not in plan.supporting_moves:
             continue
@@ -351,15 +364,14 @@ def compose_verified_core_paragraph(
     selected = resolve_narrative_claims(package, selected_claim_refs)
     groups = {
         "position": [item.statement for item in selected if item.kind == "position_fact"],
-        "move": [
-            item.statement
-            for item in selected
-            if item.kind in {"move_event", "move_effect"}
-        ],
         "verdict": [
             item.statement
             for item in selected
-            if item.kind in {"evaluation_comparison", "opponent_resource"}
+            if item.kind in {
+                "evaluation_comparison",
+                "opponent_resource",
+                "verified_consequence",
+            }
         ],
         "cause": [item.statement for item in selected if item.kind == "position_cause"],
         "plan": [item.statement for item in selected if item.kind == "verified_plan"],
@@ -367,8 +379,6 @@ def compose_verified_core_paragraph(
     paragraphs: list[str] = []
     if groups["position"]:
         paragraphs.append("".join(groups["position"]))
-    if groups["move"]:
-        paragraphs.append("".join(groups["move"]))
     if groups["verdict"]:
         paragraphs.append("".join(groups["verdict"]))
     if groups["cause"]:
@@ -386,14 +396,12 @@ def resolve_narrative_claims(
     selected = [lookup[item] for item in selected_claim_refs if item in lookup]
     if not selected:
         selected = [lookup[item] for item in package.recommended_claim_refs if item in lookup]
+    selected = [
+        item for item in selected
+        if item.kind not in {"move_event", "move_effect"}
+    ]
     position_claim = next(
         (item for item in package.claims if item.kind == "position_fact"), None,
-    )
-    played_claim = next(
-        (item for item in package.claims if item.claim_id.endswith(":played")), None,
-    )
-    event_claim = next(
-        (item for item in package.claims if item.claim_id.endswith(":event")), None,
     )
     comparison_claim = next(
         (item for item in package.claims if item.kind == "evaluation_comparison"), None,
@@ -404,29 +412,26 @@ def resolve_narrative_claims(
     cause_claim = next(
         (item for item in package.claims if item.kind == "position_cause"), None,
     )
+    consequence_claim = next(
+        (item for item in package.claims if item.kind == "verified_consequence"), None,
+    )
     has_non_best_comparison = bool(
         comparison_claim
         and "首选与实战一致" not in comparison_claim.statement
     )
-    event_text = event_claim.statement if event_claim else ""
+    if cause_claim is not None or consequence_claim is not None:
+        selected = [item for item in selected if item.kind != "opponent_resource"]
     needs_concrete_reply = bool(
-        reply_claim
-        and (
-            has_non_best_comparison
-            or "形成将军" in event_text
-            or "形成将杀" in event_text
-            or "吃掉" in event_text
-        )
+        reply_claim and has_non_best_comparison
     )
     required = [
         item
         for item in (
             position_claim,
-            played_claim,
-            event_claim,
             comparison_claim,
             cause_claim,
-            reply_claim if needs_concrete_reply else None,
+            reply_claim if needs_concrete_reply and cause_claim is None and consequence_claim is None else None,
+            consequence_claim,
         )
         if item is not None
     ]
@@ -439,12 +444,13 @@ def resolve_narrative_claims(
     source_order = {item.claim_id: index for index, item in enumerate(package.claims)}
     order = {
         "position_fact": 0,
-        "move_event": 1,
-        "move_effect": 2,
-        "evaluation_comparison": 3,
-        "position_cause": 4,
-        "opponent_resource": 5,
-        "verified_plan": 6,
+        "evaluation_comparison": 1,
+        "position_cause": 2,
+        "opponent_resource": 3,
+        "verified_consequence": 4,
+        "verified_plan": 5,
+        "move_event": 6,
+        "move_effect": 7,
     }
     items = sorted(
         unique.values(),
@@ -487,6 +493,258 @@ def evaluate_narrative_claim_grounding(
         missingStatements=missing,
         unexpectedText=unexpected,
     )
+
+
+_PIECE_VALUES = {
+    chess.PAWN: 1,
+    chess.KNIGHT: 3,
+    chess.BISHOP: 3,
+    chess.ROOK: 5,
+    chess.QUEEN: 9,
+}
+
+
+def _verified_forcing_consequence(move: MoveReview) -> tuple[str, list[str]]:
+    """Explain only material consequences proved by one legal Stockfish route."""
+    line = move.actual_move_line
+    inferior = bool(
+        line
+        and line.moves
+        and move.best_move_uci
+        and move.played_move.uci != move.best_move_uci
+        and move.centipawn_loss is not None
+        and move.centipawn_loss >= 50
+    )
+    if line is None:
+        return "", []
+    if not inferior:
+        return _verified_favorable_route_consequence(move)
+
+    board = chess.Board(move.after_fen)
+    mover_color = chess.WHITE if move.side == "white" else chess.BLACK
+    balance_for_mover = 0
+    descriptions: list[str] = []
+    capture_events: list[tuple[VariationMove, chess.Move, chess.Piece, chess.Piece]] = []
+    refs = [move.played_move.id or f"move:played:{move.index}", line.id]
+    previous_target: chess.Square | None = None
+
+    for index, item in enumerate(line.moves):
+        try:
+            board_move = chess.Move.from_uci(item.uci)
+        except ValueError:
+            return "", []
+        if board_move not in board.legal_moves:
+            return "", []
+        if not board.is_capture(board_move):
+            break
+        moving_piece = board.piece_at(board_move.from_square)
+        captured_square = board_move.to_square
+        if board.is_en_passant(board_move):
+            captured_square += -8 if board.turn == chess.WHITE else 8
+        captured_piece = board.piece_at(captured_square)
+        if moving_piece is None or captured_piece is None:
+            return "", []
+        value = _PIECE_VALUES.get(captured_piece.piece_type)
+        if value is None:
+            return "", []
+        balance_for_mover += value if moving_piece.color == mover_color else -value
+
+        actor_side = "white" if moving_piece.color == chess.WHITE else "black"
+        victim_side = "white" if captured_piece.color == chess.WHITE else "black"
+        actor = _piece_text(chess.piece_name(moving_piece.piece_type), actor_side)
+        victim = _piece_text(chess.piece_name(captured_piece.piece_type), victim_side)
+        if index and previous_target == board_move.to_square:
+            descriptions.append(f"{actor}随即以{item.san}回吃这枚{victim}")
+        else:
+            connector = "先" if index == 0 else "再"
+            descriptions.append(f"{actor}{connector}以{item.san}吃掉{victim}")
+        refs.append(item.id)
+        capture_events.append((item, board_move, moving_piece, captured_piece))
+        previous_target = board_move.to_square
+        board.push(board_move)
+
+    if not descriptions:
+        return "", []
+    if balance_for_mover == 0 and len(descriptions) >= 2:
+        statement = (
+            f"{move.played_move.san}的问题不是直接丢子，而是允许对手用强制交换改变局面："
+            f"{'；'.join(descriptions)}。这串交换结束后双方没有净得子力；"
+            "评价下降来自交换后的局面，不能只看第一步吃子就下结论。"
+        )
+        return statement, list(dict.fromkeys(refs))
+    if balance_for_mover > 0:
+        return "", []
+
+    opponent_side = _opposite(move.side)
+    initial_gain = abs(balance_for_mover)
+    initial_gain_text = "一兵" if initial_gain == 1 else f"约{initial_gain}分子力"
+    full_balance, full_refs = _route_capture_balance(move)
+    refs.extend(full_refs)
+    if full_balance is None:
+        return "", []
+    if full_balance >= 0:
+        statement = (
+            f"{move.played_move.san}后，验证变化中，{descriptions[0]}；"
+            "不过算完整条路线，这次吃子并没有形成可保留的物质收益。"
+            "因此这步的缺点在交换后的局面，而不能简单说成直接丢兵或丢子。"
+        )
+        return statement, list(dict.fromkeys(refs))
+
+    final_gain = abs(full_balance)
+    final_gain_text = "一兵" if final_gain == 1 else f"约{final_gain}分子力"
+    retained = (
+        "直到验证路线结束，这项收益也没有被追回。"
+        if final_gain == initial_gain
+        else f"算完整条验证路线，{_side_text(opponent_side)}仍保留{final_gain_text}的吃子收益。"
+    )
+    clearance = _verified_line_clearance_mechanism(capture_events)
+    if len(descriptions) == 1:
+        statement = (
+            f"{move.played_move.san}的问题在于对手可以立即兑现子力收益："
+            f"{descriptions[0]}。{_side_text(opponent_side)}净得{initial_gain_text}。{retained}"
+        )
+    else:
+        statement = (
+            f"{move.played_move.san}的问题可以由紧接着的强制交换具体说明："
+            f"{'；'.join(descriptions)}。{clearance}这串连续吃子结束后，"
+            f"{_side_text(opponent_side)}净得{initial_gain_text}。{retained}"
+        )
+    return statement, list(dict.fromkeys(refs))
+
+
+def _verified_favorable_route_consequence(move: MoveReview) -> tuple[str, list[str]]:
+    """State only a favorable forcing exchange that starts with the played move."""
+    line = move.actual_move_line
+    if line is None:
+        return "", []
+    board = chess.Board(move.before_fen)
+    mover_color = chess.WHITE if move.side == "white" else chess.BLACK
+    route: list[MoveFacts | VariationMove] = [move.played_move, *line.moves]
+    balance = 0
+    descriptions: list[str] = []
+    refs = [line.id]
+
+    for index, item in enumerate(route):
+        try:
+            board_move = chess.Move.from_uci(item.uci)
+        except ValueError:
+            return "", []
+        if board_move not in board.legal_moves:
+            return "", []
+        if not board.is_capture(board_move):
+            if index == 0:
+                return "", []
+            break
+        captured_square = board_move.to_square
+        if board.is_en_passant(board_move):
+            captured_square += -8 if board.turn == chess.WHITE else 8
+        moving_piece = board.piece_at(board_move.from_square)
+        captured_piece = board.piece_at(captured_square)
+        if moving_piece is None or captured_piece is None:
+            return "", []
+        value = _PIECE_VALUES.get(captured_piece.piece_type)
+        if value is None:
+            return "", []
+        balance += value if moving_piece.color == mover_color else -value
+        actor_side = "white" if moving_piece.color == chess.WHITE else "black"
+        victim_side = "white" if captured_piece.color == chess.WHITE else "black"
+        actor = _piece_text(chess.piece_name(moving_piece.piece_type), actor_side)
+        victim = _piece_text(chess.piece_name(captured_piece.piece_type), victim_side)
+        connector = "先" if not descriptions else "随后"
+        descriptions.append(f"{actor}{connector}以{item.san}吃掉{victim}")
+        if item.id:
+            refs.append(item.id)
+        board.push(board_move)
+
+    if board.is_checkmate():
+        return (
+            f"{move.played_move.san}的关键价值在于攻势能够强制延续；"
+            "对手按验证路线应对后，局面最终形成将杀。",
+            list(dict.fromkeys(refs)),
+        )
+    if balance <= 0 or not descriptions:
+        return "", []
+    gain_text = "一兵" if balance == 1 else f"约{balance}分子力"
+    return (
+        f"{move.played_move.san}的价值体现在紧接着的强制交换中："
+        f"{'；'.join(descriptions)}。这串交换结束后，{_side_text(move.side)}净得{gain_text}。",
+        list(dict.fromkeys(refs)),
+    )
+
+
+def _verified_line_clearance_mechanism(
+    events: Sequence[tuple[VariationMove, chess.Move, chess.Piece, chess.Piece]],
+) -> str:
+    """Explain a pawn vacating a file for a later same-side rook capture."""
+    if len(events) < 3:
+        return ""
+    first_item, first_move, first_piece, _ = events[0]
+    if first_piece.piece_type != chess.PAWN:
+        return ""
+    vacated_file = chess.square_file(first_move.from_square)
+    if chess.square_file(first_move.to_square) == vacated_file:
+        return ""
+
+    for later_item, later_move, later_piece, later_captured in events[2:]:
+        if later_piece.color != first_piece.color or later_piece.piece_type != chess.ROOK:
+            continue
+        if not (
+            chess.square_file(later_move.from_square)
+            == chess.square_file(later_move.to_square)
+            == vacated_file
+        ):
+            continue
+        ranks = {
+            chess.square_rank(later_move.from_square),
+            chess.square_rank(later_move.to_square),
+        }
+        vacated_rank = chess.square_rank(first_move.from_square)
+        if not min(ranks) < vacated_rank < max(ranks):
+            continue
+        side = "white" if later_piece.color == chess.WHITE else "black"
+        victim_side = "white" if later_captured.color == chess.WHITE else "black"
+        file_name = chess.FILE_NAMES[vacated_file]
+        return (
+            f"这里的机制是，{first_item.san}让{_piece_text('pawn', side)}离开{file_name}线，"
+            f"清出了{_piece_text('rook', side)}从{chess.square_name(later_move.from_square)}"
+            f"通往{chess.square_name(later_move.to_square)}的线路；"
+            f"因此它随后能以{later_item.san}侵入并吃掉"
+            f"{_piece_text(chess.piece_name(later_captured.piece_type), victim_side)}。"
+        )
+    return ""
+
+
+def _route_capture_balance(move: MoveReview) -> tuple[int | None, list[str]]:
+    """Return capture-only material change for the played side over the full PV."""
+    line = move.actual_move_line
+    if line is None:
+        return None, []
+    board = chess.Board(move.after_fen)
+    mover_color = chess.WHITE if move.side == "white" else chess.BLACK
+    balance = 0
+    refs: list[str] = []
+    for item in line.moves:
+        try:
+            board_move = chess.Move.from_uci(item.uci)
+        except ValueError:
+            return None, []
+        if board_move not in board.legal_moves:
+            return None, []
+        if board.is_capture(board_move):
+            captured_square = board_move.to_square
+            if board.is_en_passant(board_move):
+                captured_square += -8 if board.turn == chess.WHITE else 8
+            captured_piece = board.piece_at(captured_square)
+            moving_piece = board.piece_at(board_move.from_square)
+            if captured_piece is None or moving_piece is None:
+                return None, []
+            value = _PIECE_VALUES.get(captured_piece.piece_type)
+            if value is None:
+                return None, []
+            balance += value if moving_piece.color == mover_color else -value
+            refs.append(item.id)
+        board.push(board_move)
+    return balance, refs
 
 
 def _pin_then_capture_claim(move: MoveReview) -> tuple[str, list[str]] | None:
