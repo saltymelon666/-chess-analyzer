@@ -272,22 +272,33 @@ def _quiet_reply_pressure_review():
 
 def _multi_ply_reply_maneuver_review():
     move = professional_review().model_copy(deep=True)
-    before = chess.Board("2b4k/8/3b4/2p1P3/8/2N5/8/R6K b - - 0 1")
-    played_move = chess.Move.from_uci("d6e5")
+    before = chess.Board("r1b3kr/6b1/q2N4/2pPB3/8/8/1P6/2B2RK1 b - - 0 1")
+    played_move = chess.Move.from_uci("g7e5")
     san = before.san(played_move)
     after = before.copy(stack=False)
     after.push(played_move)
-    best_line = _line_from_uci(before, ["d6e5", "c3e4"])
+    best_line = _line_from_uci(before, ["a6d6", "g1g2"])
     best_line.id = "line:best"
     actual_line = _line_from_uci(
         after,
-        ["c3e4", "c8f5", "a1e1", "e5g7", "e4c5"],
+        [
+            "d6e4",
+            "c8f5",
+            "f1e1",
+            "e5g7",
+            "e4c5",
+            "a6c4",
+            "c1e3",
+            "a8d8",
+            "d5d6",
+            "g7b2",
+        ],
     )
     actual_line.id = "line:actual"
     move.side = "black"
     move.san = san
     move.uci = played_move.uci()
-    move.from_square = "d6"
+    move.from_square = "g7"
     move.to_square = "e5"
     move.before_fen = before.fen()
     move.after_fen = after.fen()
@@ -299,17 +310,18 @@ def _multi_ply_reply_maneuver_review():
         id="move:played:1",
         san=san,
         uci=played_move.uci(),
-        from_square="d6",
+        from_square="g7",
         to_square="e5",
         piece="bishop",
         capture=True,
-        captured_piece="white_pawn",
+        captured_piece="white_bishop",
         check=False,
         checkmate=False,
         castling=False,
     )
-    move.best_move_uci = "d6c5"
-    move.best_move_san = "Bxc5"
+    move.best_move = best_line.first_move.model_copy(deep=True)
+    move.best_move_uci = "a6d6"
+    move.best_move_san = "Qxd6"
     move.centipawn_loss = 95
     move.quality_key = "mistake"
     move.quality_symbol = "?"
@@ -480,7 +492,7 @@ def test_quiet_reply_explains_same_piece_multi_ply_capture() -> None:
     cause = next(item for item in package.claims if item.kind == "position_cause")
     paragraph = compose_verified_core_paragraph(package)
 
-    assert "Ne4把白马从c3转到e4" in cause.statement
+    assert "Ne4把白马从d6转到e4" in cause.statement
     assert "瞄住c5的黑兵" in cause.statement
     assert "经过Bf5、Re1、Bg7后，还是这枚马以Nxc5吃掉该子" in cause.statement
     assert "Ne4不是单纯调子，而是在为Nxc5改善落点" in cause.statement
@@ -504,7 +516,7 @@ def test_quiet_reply_rejects_capture_by_another_same_type_piece() -> None:
     move.after_fen = after.fen()
     move.actual_move_line = _line_from_uci(
         after,
-        ["c3e4", "c8f5", "a1e1", "e5g7", "d3c5"],
+        ["d6e4", "c8f5", "f1e1", "e5g7", "d3c5"],
     )
     move.actual_move_line.id = "line:actual"
 
@@ -517,7 +529,7 @@ def test_quiet_reply_rejects_when_tracked_piece_is_captured_first() -> None:
     after = chess.Board(move.after_fen)
     after.set_piece_at(chess.F5, chess.Piece(chess.BISHOP, chess.BLACK))
     move.after_fen = after.fen()
-    move.actual_move_line = _line_from_uci(after, ["c3e4", "f5e4"])
+    move.actual_move_line = _line_from_uci(after, ["d6e4", "f5e4"])
     move.actual_move_line.id = "line:actual"
 
     package = build_narrative_claim_package(move)
@@ -529,7 +541,7 @@ def test_quiet_reply_rejects_when_original_target_moves_before_capture() -> None
     after = chess.Board(move.after_fen)
     move.actual_move_line = _line_from_uci(
         after,
-        ["c3e4", "c5c4", "a1e1", "c4c3", "e4c5"],
+        ["d6e4", "c5c4", "f1e1", "c4c3", "e4c5"],
     )
     move.actual_move_line.id = "line:actual"
 
