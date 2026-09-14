@@ -87,7 +87,7 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .book_case_transfer import BookCaseTransferPackage
-PROFESSIONAL_PROMPT_VERSION = "professional-v46-reply-pressure-causality"
+PROFESSIONAL_PROMPT_VERSION = "professional-v47-multi-ply-reply-causality"
 PROFESSIONAL_TOKEN_LIMITS = {"simple": 1500, "normal": 2600, "complex": 3400}
 STRATEGY_TAGS = [
     "king_attack",
