@@ -11,7 +11,7 @@ from .strategic_plans import StrategicPlanPackage
 from .threat_analysis import ThreatPackage
 
 
-NARRATIVE_CLAIM_VERSION = "1.5"
+NARRATIVE_CLAIM_VERSION = "1.6"
 LEGACY_NARRATIVE_MARKERS = (
     "先看全局：",
     "实战把选择摆上棋盘：",
@@ -58,12 +58,13 @@ class VerifiedNarrativeClaim(BaseModel):
 class NarrativeClaimPackage(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
-    version: Literal["1.5"] = NARRATIVE_CLAIM_VERSION
+    version: Literal["1.6"] = NARRATIVE_CLAIM_VERSION
     claims: list[VerifiedNarrativeClaim] = Field(default_factory=list)
     recommended_claim_refs: list[str] = Field(alias="recommendedClaimRefs", default_factory=list)
     boundary: str = (
         "核心正文只能重述这些命题。只有程序在同一条合法Stockfish路线中确认牵制持续到"
-        "对应棋子被吃，才允许把两者写成战术链；其他同时出现的事件不能自动写成因果关系。"
+        "对应棋子被吃，或确认非吃子应手新增攻击重要子力且该子随后沿路线移开，才允许把"
+        "前后事件写成战术链；其他同时出现的事件不能自动写成因果关系。"
         "没有独立命题支持时，禁止使用造成、使得、支撑、限制、削弱、打开、迫使等因果表述。"
         "正文直接解释局面，不显示分析步骤、校验过程、固定标题或教学检查清单。"
     )
@@ -306,6 +307,23 @@ def build_narrative_claim_package(
             recommend=True,
         )
 
+    reply_pressure = (
+        None
+        if tactical_cause is not None
+        else _non_capture_reply_pressure_claim(move)
+    )
+    if reply_pressure is not None:
+        statement, evidence_refs = reply_pressure
+        add(
+            "position:reply-pressure",
+            "position_cause",
+            "candidate_route",
+            statement,
+            evidence_refs,
+            "python-chess+stockfish",
+            recommend=True,
+        )
+
     if move.actual_move_line and move.actual_move_line.moves:
         reply = move.actual_move_line.moves[0]
         reply_detail = _move_event_detail(reply, captured_side=move.side)
@@ -328,7 +346,7 @@ def build_narrative_claim_package(
             )
         else:
             reply_statement = ""
-        if reply_statement and tactical_cause is None:
+        if reply_statement and tactical_cause is None and reply_pressure is None:
             add(
                 "reply",
                 "opponent_resource",
@@ -340,7 +358,7 @@ def build_narrative_claim_package(
             )
 
         consequence_statement, consequence_refs = _verified_forcing_consequence(move)
-        if consequence_statement and tactical_cause is None:
+        if consequence_statement and tactical_cause is None and reply_pressure is None:
             add(
                 "forcing-consequence",
                 "verified_consequence",
@@ -1035,6 +1053,108 @@ def _pin_then_capture_claim(move: MoveReview) -> tuple[str, list[str]] | None:
                 active_pins.pop(square, None)
 
     return None
+
+
+def _non_capture_reply_pressure_claim(
+    move: MoveReview,
+) -> tuple[str, list[str]] | None:
+    """Explain a quiet reply only when the PV immediately verifies its pressure.
+
+    A non-capture such as a knight jump can be the real punishment even though
+    no material changes hands on that ply.  We only promote it to a causal
+    claim when python-chess proves a new attack on a non-pawn piece and the
+    very next move in the verified Stockfish line moves that attacked piece.
+    """
+    line = move.actual_move_line
+    inferior = bool(
+        line
+        and line.verified
+        and len(line.moves) >= 2
+        and move.best_move_uci
+        and move.played_move.uci != move.best_move_uci
+        and move.centipawn_loss is not None
+        and move.centipawn_loss >= 50
+    )
+    if not inferior or line is None:
+        return None
+
+    reply_item, response_item = line.moves[:2]
+    if reply_item.capture:
+        return None
+    try:
+        board = chess.Board(move.after_fen)
+        reply = chess.Move.from_uci(reply_item.uci)
+        response = chess.Move.from_uci(response_item.uci)
+    except ValueError:
+        return None
+    if reply not in board.legal_moves:
+        return None
+
+    replying_piece = board.piece_at(reply.from_square)
+    if replying_piece is None:
+        return None
+    attacks_before = set(board.attacks(reply.from_square))
+    board.push(reply)
+    if response not in board.legal_moves:
+        return None
+
+    attacks_after = set(board.attacks(reply.to_square))
+    newly_attacked: list[tuple[int, chess.Square, chess.Piece]] = []
+    for square in attacks_after - attacks_before:
+        target = board.piece_at(square)
+        if (
+            target is None
+            or target.color == replying_piece.color
+            or target.piece_type in {chess.KING, chess.PAWN}
+        ):
+            continue
+        newly_attacked.append((_PIECE_VALUES[target.piece_type], square, target))
+    newly_attacked.sort(key=lambda item: (-item[0], item[1]))
+    if not newly_attacked:
+        return None
+
+    answered = next(
+        (
+            (value, square, target)
+            for value, square, target in newly_attacked
+            if response.from_square == square
+        ),
+        None,
+    )
+    if answered is None:
+        return None
+
+    _, target_square, target_piece = answered
+    reply_side = "white" if replying_piece.color == chess.WHITE else "black"
+    target_side = "white" if target_piece.color == chess.WHITE else "black"
+    reply_piece_text = _piece_text(chess.piece_name(replying_piece.piece_type), reply_side)
+    target_piece_text = _piece_text(chess.piece_name(target_piece.piece_type), target_side)
+    target_label = f"{chess.square_name(target_square)}的{target_piece_text}"
+    other_targets = [
+        f"{chess.square_name(square)}的{_piece_text(chess.piece_name(target.piece_type), target_side)}"
+        for _, square, target in newly_attacked
+        if square != target_square
+    ][:1]
+    targets_text = "和".join([target_label, *other_targets])
+
+    if board.is_capture(response) and response.to_square == reply.to_square:
+        response_text = (
+            f"{_side_text(target_side)}随后以{response_item.san}吃掉这枚"
+            f"{_piece_name(chess.piece_name(replying_piece.piece_type))}，直接处理这次攻击"
+        )
+    else:
+        response_text = (
+            f"{_side_text(target_side)}随后以{response_item.san}把"
+            f"{target_piece_text}移出这枚{_piece_name(chess.piece_name(replying_piece.piece_type))}的攻击范围"
+        )
+    statement = (
+        f"{move.played_move.san}的问题在于给了对手一个带攻击的主动节奏："
+        f"{reply_item.san}让{reply_piece_text}从{reply_item.from_square}来到"
+        f"{reply_item.to_square}，新增攻击{targets_text}。{response_text}；"
+        f"因此{_side_text(reply_side)}在调动{reply_piece_text}的同时，"
+        f"让{_side_text(target_side)}先回应对重要子力的攻击。"
+    )
+    return statement, [line.id, reply_item.id, response_item.id]
 
 
 def _evaluation_advantage_side(move: MoveReview) -> str | None:

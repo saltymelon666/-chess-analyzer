@@ -214,6 +214,62 @@ def _closed_center_flank_choice_review():
     return move
 
 
+def _quiet_reply_pressure_review():
+    move = professional_review().model_copy(deep=True)
+    before = chess.Board("7k/6b1/3q4/4P3/8/2N5/8/7K b - - 0 1")
+    played_move = chess.Move.from_uci("g7e5")
+    san = before.san(played_move)
+    after = before.copy(stack=False)
+    after.push(played_move)
+    best_line = _line_from_uci(before, ["d6d8", "c3e4"])
+    best_line.id = "line:best"
+    actual_line = _line_from_uci(after, ["c3e4", "d6e7"])
+    actual_line.id = "line:actual"
+    move.side = "black"
+    move.san = san
+    move.uci = played_move.uci()
+    move.from_square = "g7"
+    move.to_square = "e5"
+    move.before_fen = before.fen()
+    move.after_fen = after.fen()
+    move.before.centipawn = -2
+    move.before.evaluation = "-0.02"
+    move.after.centipawn = 93
+    move.after.evaluation = "+0.93"
+    move.played_move = MoveFacts(
+        id="move:played:1",
+        san=san,
+        uci=played_move.uci(),
+        from_square="g7",
+        to_square="e5",
+        piece="bishop",
+        capture=True,
+        captured_piece="white_pawn",
+        check=False,
+        checkmate=False,
+        castling=False,
+    )
+    move.best_move = best_line.first_move.model_copy(deep=True)
+    move.best_move_uci = best_line.first_move.uci
+    move.best_move_san = best_line.first_move.san
+    move.centipawn_loss = 95
+    move.quality_key = "mistake"
+    move.quality_symbol = "?"
+    move.quality_label = "错误"
+    move.candidate_lines = [best_line]
+    move.actual_move_line = actual_line
+    move.allowed_squares = [chess.square_name(square) for square in chess.SQUARES]
+    move.allowed_moves = [
+        san,
+        played_move.uci(),
+        *[item.san for item in best_line.moves],
+        *[item.uci for item in best_line.moves],
+        *[item.san for item in actual_line.moves],
+        *[item.uci for item in actual_line.moves],
+    ]
+    return move
+
+
 def test_verified_claims_do_not_turn_unrelated_route_squares_into_causality() -> None:
     move = _h4_review()
     package = build_narrative_claim_package(move)
@@ -326,6 +382,40 @@ def test_inferior_move_path_names_reply_without_inventing_a_single_cause() -> No
     assert "验证路线" not in reply.statement
     assert "不能倒推" not in reply.statement
     assert paragraph.index(selected[0].statement) < paragraph.index(reply.statement)
+
+
+def test_quiet_reply_explains_verified_attack_and_answering_tempo() -> None:
+    move = _quiet_reply_pressure_review()
+    package = build_narrative_claim_package(move)
+    cause = next(item for item in package.claims if item.kind == "position_cause")
+    paragraph = compose_verified_core_paragraph(package)
+
+    assert "Bxe5的问题在于给了对手一个带攻击的主动节奏" in cause.statement
+    assert "Ne4让白马从c3来到e4" in cause.statement
+    assert "新增攻击d6的黑后" in cause.statement
+    assert "黑方随后以Qe7把黑后移出这枚马的攻击范围" in cause.statement
+    assert "白方在调动白马的同时，让黑方先回应对重要子力的攻击" in cause.statement
+    assert cause.evidence_refs == [
+        "line:actual",
+        "line:played:ply:1",
+        "line:played:ply:2",
+    ]
+    assert cause.statement in paragraph
+    assert "首选回应" not in paragraph
+
+
+def test_quiet_reply_does_not_claim_tempo_without_an_immediate_answer() -> None:
+    move = _quiet_reply_pressure_review()
+    after = chess.Board(move.after_fen)
+    move.actual_move_line = _line_from_uci(after, ["c3e4", "h8g8"])
+    move.actual_move_line.id = "line:actual"
+
+    package = build_narrative_claim_package(move)
+    paragraph = compose_verified_core_paragraph(package)
+
+    assert all(item.kind != "position_cause" for item in package.claims)
+    assert "带攻击的主动节奏" not in paragraph
+    assert "首选回应是Ne4" in paragraph
 
 
 def test_inferior_move_explains_verified_multi_ply_material_consequence() -> None:
