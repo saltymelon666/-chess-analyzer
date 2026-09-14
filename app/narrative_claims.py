@@ -11,7 +11,7 @@ from .strategic_plans import StrategicPlanPackage
 from .threat_analysis import ThreatPackage
 
 
-NARRATIVE_CLAIM_VERSION = "1.4"
+NARRATIVE_CLAIM_VERSION = "1.5"
 LEGACY_NARRATIVE_MARKERS = (
     "先看全局：",
     "实战把选择摆上棋盘：",
@@ -26,6 +26,7 @@ NarrativeClaimKind = Literal[
     "move_effect",
     "evaluation_comparison",
     "opponent_resource",
+    "verified_choice",
     "verified_consequence",
     "verified_plan",
 ]
@@ -57,7 +58,7 @@ class VerifiedNarrativeClaim(BaseModel):
 class NarrativeClaimPackage(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
-    version: Literal["1.4"] = NARRATIVE_CLAIM_VERSION
+    version: Literal["1.5"] = NARRATIVE_CLAIM_VERSION
     claims: list[VerifiedNarrativeClaim] = Field(default_factory=list)
     recommended_claim_refs: list[str] = Field(alias="recommendedClaimRefs", default_factory=list)
     boundary: str = (
@@ -250,20 +251,25 @@ def build_narrative_claim_package(
             recommend=not controlled,
         )
 
+    strategic_choice, strategic_choice_refs = _verified_strategic_choice(move)
     if move.best_move_uci:
+        score_transition = _score_transition_statement(move)
         if move.played_move.uci == move.best_move_uci:
             comparison = (
-                f"引擎的首选与实战一致：{move.played_move.san}并非退而求其次，"
+                f"{score_transition}引擎的首选与实战一致：{move.played_move.san}并非退而求其次，"
                 "它就是当前第一选择。"
             )
         elif move.centipawn_loss is None:
             comparison = ""
         elif move.centipawn_loss < 50:
-            comparison = _small_gap_statement(move)
+            comparison = _small_gap_statement(
+                move,
+                has_strategic_choice=bool(strategic_choice),
+            )
         else:
             comparison = (
-                f"分歧从这里出现：与首选{move.best_move_san or move.best_move_uci}相比，"
-                f"{move.played_move.san}使评价下降约{move.centipawn_loss / 100:.2f}兵。"
+                f"{score_transition}分歧从这里出现："
+                f"引擎首选是{move.best_move_san or move.best_move_uci}。"
             )
         if comparison:
             add(
@@ -275,6 +281,17 @@ def build_narrative_claim_package(
                 "stockfish",
                 recommend=move.played_move.uci != move.best_move_uci,
             )
+
+    if strategic_choice:
+        add(
+            "strategic-choice",
+            "verified_choice",
+            "candidate_route",
+            strategic_choice,
+            strategic_choice_refs,
+            "python-chess+stockfish",
+            recommend=True,
+        )
 
     tactical_cause = _pin_then_capture_claim(move)
     if tactical_cause is not None:
@@ -373,6 +390,7 @@ def compose_verified_core_paragraph(
                 "verified_consequence",
             }
         ],
+        "choice": [item.statement for item in selected if item.kind == "verified_choice"],
         "cause": [item.statement for item in selected if item.kind == "position_cause"],
         "plan": [item.statement for item in selected if item.kind == "verified_plan"],
     }
@@ -381,6 +399,8 @@ def compose_verified_core_paragraph(
         paragraphs.append("".join(groups["position"]))
     if groups["verdict"]:
         paragraphs.append("".join(groups["verdict"]))
+    if groups["choice"]:
+        paragraphs.append("".join(groups["choice"]))
     if groups["cause"]:
         paragraphs.append("".join(groups["cause"]))
     if groups["plan"]:
@@ -415,11 +435,14 @@ def resolve_narrative_claims(
     consequence_claim = next(
         (item for item in package.claims if item.kind == "verified_consequence"), None,
     )
+    strategic_choice_claim = next(
+        (item for item in package.claims if item.kind == "verified_choice"), None,
+    )
     has_non_best_comparison = bool(
         comparison_claim
         and "首选与实战一致" not in comparison_claim.statement
     )
-    if cause_claim is not None or consequence_claim is not None:
+    if cause_claim is not None or consequence_claim is not None or strategic_choice_claim is not None:
         selected = [item for item in selected if item.kind != "opponent_resource"]
     needs_concrete_reply = bool(
         reply_claim and has_non_best_comparison
@@ -429,6 +452,7 @@ def resolve_narrative_claims(
         for item in (
             position_claim,
             comparison_claim,
+            strategic_choice_claim,
             cause_claim,
             reply_claim if needs_concrete_reply and cause_claim is None and consequence_claim is None else None,
             consequence_claim,
@@ -445,12 +469,13 @@ def resolve_narrative_claims(
     order = {
         "position_fact": 0,
         "evaluation_comparison": 1,
-        "position_cause": 2,
-        "opponent_resource": 3,
-        "verified_consequence": 4,
-        "verified_plan": 5,
-        "move_event": 6,
-        "move_effect": 7,
+        "verified_choice": 2,
+        "position_cause": 3,
+        "opponent_resource": 4,
+        "verified_consequence": 5,
+        "verified_plan": 6,
+        "move_event": 7,
+        "move_effect": 8,
     }
     items = sorted(
         unique.values(),
@@ -502,6 +527,165 @@ _PIECE_VALUES = {
     chess.ROOK: 5,
     chess.QUEEN: 9,
 }
+
+
+def _verified_strategic_choice(move: MoveReview) -> tuple[str, list[str]]:
+    """Explain a flank pawn commitment answered by a verified central exchange."""
+    if (
+        move.best_move_uci is None
+        or move.played_move.uci == move.best_move_uci
+        or move.centipawn_loss is None
+        or move.centipawn_loss >= 50
+        or move.actual_move_line is None
+        or len(move.actual_move_line.moves) < 2
+    ):
+        return "", []
+
+    board = chess.Board(move.before_fen)
+    try:
+        played = chess.Move.from_uci(move.played_move.uci)
+    except ValueError:
+        return "", []
+    played_piece = board.piece_at(played.from_square)
+    played_file = chess.square_file(played.from_square)
+    if (
+        played not in board.legal_moves
+        or played_piece is None
+        or played_piece.piece_type != chess.PAWN
+        or board.is_capture(played)
+        or played_file not in {0, 1, 2, 5, 6, 7}
+        or not _has_closed_center(board)
+    ):
+        return "", []
+
+    board.push(played)
+    reply_item, recapture_item = move.actual_move_line.moves[:2]
+    try:
+        reply = chess.Move.from_uci(reply_item.uci)
+        recapture = chess.Move.from_uci(recapture_item.uci)
+    except ValueError:
+        return "", []
+    if reply not in board.legal_moves or not board.is_capture(reply):
+        return "", []
+    reply_piece = board.piece_at(reply.from_square)
+    captured_piece = board.piece_at(reply.to_square)
+    if (
+        reply_piece is None
+        or captured_piece is None
+        or reply_piece.piece_type != chess.PAWN
+        or captured_piece.piece_type != chess.PAWN
+        or captured_piece.color != played_piece.color
+        or chess.square_file(reply.to_square) not in {3, 4}
+    ):
+        return "", []
+    removed_square = chess.square_name(reply.to_square)
+    board.push(reply)
+    if recapture not in board.legal_moves or not board.is_capture(recapture):
+        return "", []
+    recapturing_piece = board.piece_at(recapture.from_square)
+    recaptured_piece = board.piece_at(recapture.to_square)
+    if (
+        recapturing_piece is None
+        or recaptured_piece is None
+        or recapturing_piece.color != played_piece.color
+        or recapturing_piece.piece_type != chess.PAWN
+        or recaptured_piece != reply_piece
+        or recapture.to_square != reply.to_square
+    ):
+        return "", []
+    replacement_square = chess.square_name(recapture.from_square)
+    board.push(recapture)
+
+    wing = "王翼" if played_file >= 5 else "后翼"
+    side = _side_text(move.side)
+    opponent = _side_text(_opposite(move.side))
+    refs = [
+        move.played_move.id or f"move:played:{move.index}",
+        move.actual_move_line.id,
+        reply_item.id,
+        recapture_item.id,
+    ]
+    statement = (
+        f"{move.played_move.san}的棋理价值，是利用封闭中心先在{wing}争取空间；"
+        f"但它没有迫使{opponent}在这一翼应战。{opponent}立即以{reply_item.san}换掉"
+        f"{removed_square}兵，{side}以{recapture_item.san}回吃后，原来的{removed_square}兵已经消失，"
+        f"{replacement_square}兵被带到{removed_square}，中心兵型先发生了转换。"
+    )
+
+    followup_items = [
+        item
+        for item in move.actual_move_line.moves[2:]
+        if item.side == move.side and "pawn" not in item.piece
+    ][:3]
+    if followup_items:
+        statement += (
+            f"随后路线中，{side}还要用{'、'.join(item.san for item in followup_items)}重新组织子力，"
+            f"说明{move.played_move.san}没有立即形成翼侧突破。"
+        )
+        refs.extend(item.id for item in followup_items)
+
+    best_line = next(
+        (line for line in sorted(move.candidate_lines, key=lambda item: item.rank) if line.rank == 1),
+        None,
+    )
+    deferred = None
+    if best_line is not None:
+        deferred = next(
+            (
+                (index, item)
+                for index, item in enumerate(best_line.moves[1:], start=1)
+                if item.uci == move.played_move.uci
+            ),
+            None,
+        )
+    best = move.best_move_san or move.best_move_uci
+    if deferred is not None and best_line is not None:
+        deferred_index, deferred_item = deferred
+        preparations = [
+            item.san
+            for item in best_line.moves[:deferred_index]
+            if item.side == move.side and not item.capture
+        ][:2]
+        if preparations:
+            statement += (
+                f"首选路线并没有放弃{move.played_move.san}，而是先走{'、'.join(preparations)}，"
+                f"之后才推进{deferred_item.san}；所以{best}与实战的真正区别是次序，不是进攻方向。"
+            )
+            refs.extend([best_line.id, deferred_item.id])
+    elif best:
+        original = chess.Board(move.before_fen)
+        try:
+            best_move = chess.Move.from_uci(move.best_move_uci)
+        except ValueError:
+            best_move = None
+        piece = original.piece_at(best_move.from_square) if best_move is not None else None
+        piece_name = _piece_name(chess.piece_name(piece.piece_type)) if piece is not None else "子力"
+        statement += (
+            f"因此，{best}选择先调整{piece_name}并保留{wing}兵型；"
+            f"{move.played_move.san}则先固定兵型，让{opponent}在实战路线中率先转换中心。"
+        )
+        if best_line is not None:
+            refs.append(best_line.id)
+    return statement, list(dict.fromkeys(refs))
+
+
+def _has_closed_center(board: chess.Board) -> bool:
+    """Return true when opposing pawns block each other on both central files."""
+    locked_files = 0
+    for file_index in (3, 4):
+        locked = False
+        for rank in range(1, 7):
+            lower = chess.square(file_index, rank)
+            upper = chess.square(file_index, rank + 1)
+            if (
+                board.piece_at(lower) == chess.Piece(chess.PAWN, chess.WHITE)
+                and board.piece_at(upper) == chess.Piece(chess.PAWN, chess.BLACK)
+            ):
+                locked = True
+                break
+        if locked:
+            locked_files += 1
+    return locked_files == 2
 
 
 def _verified_forcing_consequence(move: MoveReview) -> tuple[str, list[str]]:
@@ -861,10 +1045,16 @@ def _evaluation_advantage_side(move: MoveReview) -> str | None:
     return "white" if move.before.centipawn > 0 else "black"
 
 
-def _small_gap_statement(move: MoveReview) -> str:
+def _small_gap_statement(
+    move: MoveReview,
+    *,
+    has_strategic_choice: bool = False,
+) -> str:
     played = move.played_move.san
     best = move.best_move_san or move.best_move_uci or "首选着"
-    prefix = f"{played}与首选{best}的评价接近；"
+    prefix = f"{_score_transition_statement(move)}与首选{best}的评价接近；"
+    if has_strategic_choice:
+        return prefix + "它不是失误，真正的差别在计划执行次序。"
     centipawn = move.before.centipawn
     if centipawn is None or abs(centipawn) <= 25:
         return prefix + "这步棋没有显著打破原有的平衡。"
@@ -872,6 +1062,19 @@ def _small_gap_statement(move: MoveReview) -> str:
     if advantage_side == move.side:
         return prefix + f"{_side_text(move.side)}原有的优势在落子前已经形成，这步棋没有显著改变优势格局。"
     return prefix + f"{_side_text(move.side)}的困难在落子前已经存在，这步棋既没有制造危机，也没有解除危机。"
+
+
+def _score_transition_statement(move: MoveReview) -> str:
+    """Use the exact engine values already shown by the move-review card."""
+    played = move.played_move.san
+    before = move.before.evaluation
+    after = move.after.evaluation
+    parts = [f"{played}后，Stockfish评价从{before}变为{after}"]
+    if move.centipawn_loss is not None:
+        parts.append(f"评价损失{move.centipawn_loss} cp")
+    if move.quality_label:
+        parts.append(f"走法等级为“{move.quality_label}”")
+    return "，".join(parts) + "；"
 
 
 def _evaluation_posture_statement(move: MoveReview) -> str:

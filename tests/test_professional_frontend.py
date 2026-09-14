@@ -106,12 +106,18 @@ def test_professional_report_only_renders_conclusion_sections() -> None:
         assert "const showMoveAnalysis = Boolean(activeReview);" in page
         assert "if (showMoveAnalysis)" in page
         assert "分析结论" in page
+        assert "const coachPoints = [played.intention || coachVerdict]" in page
         assert "问题在哪里</p>" not in page
         assert "导致的结果" not in page
         assert "验证路线" in page
         assert "最终战术结果" not in page
         assert "路线验证到的结果" in page
         assert "played.continuationPhases" in page
+
+
+def test_move_conclusion_prefers_verified_core_over_generic_verdict() -> None:
+    for page in _pages():
+        assert "const coachPoints = [played.intention || coachVerdict]" in page
 
 
 def test_verified_core_commentary_is_visible_in_the_professional_panel() -> None:
