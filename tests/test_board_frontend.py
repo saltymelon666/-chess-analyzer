@@ -99,6 +99,17 @@ def test_public_beta_is_guest_accessible_and_tracks_core_events() -> None:
         assert "IP限制" not in page
 
 
+def test_game_review_retries_transient_gateway_and_queue_failures() -> None:
+    for page in _pages():
+        assert "const maxAttempts = 12;" in page
+        assert "new Set([429, 502, 503, 504])" in page
+        assert "retryableStatuses.has(response.status)" in page
+        assert 'requestError.name === "AbortError"' in page
+        assert "分析服务器正在恢复或排队" in page
+        assert "分析服务连接中断" in page
+        assert "}, 1260000);" in page
+
+
 def test_frontend_images_use_webp_and_chess_parser_is_lazy_loaded() -> None:
     for page in _pages():
         assert 'src="chess.js"' not in page
@@ -174,7 +185,7 @@ def test_game_review_waits_and_retries_when_backend_is_busy() -> None:
         assert 'fetchWithTimeout(apiUrl("/api/game-review")' in page
         assert "1260000" in page
         assert 'response.headers.get("Retry-After")' in page
-        assert "分析服务器繁忙" in page
+        assert "分析服务器正在恢复或排队" in page
         assert "正在进行深度 20 高精度分析" in page
         assert "长棋谱可能需要 3—20 分钟" in page
         assert "整盘分析等待超时" in page
