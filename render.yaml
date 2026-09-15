@@ -2,7 +2,7 @@ services:
   - type: web
     name: ai-chess-review-api
     runtime: docker
-    plan: free
+    plan: starter
     dockerfilePath: ./Dockerfile
     healthCheckPath: /api/health
     autoDeploy: true
@@ -22,15 +22,15 @@ services:
       - key: STOCKFISH_THREADS
         value: "1"
       - key: STOCKFISH_HASH
-        value: "64"
+        value: "256"
       - key: STOCKFISH_MULTIPV
         value: "3"
       - key: STOCKFISH_TIMEOUT_SECONDS
-        value: "45"
+        value: "90"
       - key: GAME_ANALYSIS_DEPTH
-        value: "10"
+        value: "20"
       - key: GAME_ANALYSIS_TIMEOUT_SECONDS
-        value: "240"
+        value: "1200"
       - key: GAME_ANALYSIS_MAX_PLIES
         value: "200"
       - key: DEEPSEEK_TIMEOUT_SECONDS
