@@ -723,6 +723,7 @@ let moveExplanationCache = new Map();
 let explanationRequestToken = 0;
 let professionalAnalysisCache = new Map();
 let professionalRequestToken = 0;
+const professionalAnalysisPending = new Map();
 let backendReconnectTimer = null;
 
 const IS_LOCAL_FRONTEND = ["localhost", "127.0.0.1"].includes(window.location.hostname);
@@ -1230,7 +1231,7 @@ async function analyzeGame() {
   button.disabled = true;
   button.textContent = "正在评价整盘棋...";
   document.getElementById("loading").style.display = "block";
-  const stages = ["正在整理棋谱……", "正在寻找关键局面……", "整盘分析可能需要 1—3 分钟，请保持页面打开……"];
+  const stages = ["正在整理棋谱……", "正在寻找关键局面……", "正在进行深度 20 高精度分析，长棋谱可能需要 3—20 分钟，请保持页面打开……"];
   let stage = 0;
   document.getElementById("loadingText").textContent = stages[0];
   clearInterval(loadingStageTimer);
@@ -1512,51 +1513,100 @@ function professionalSide(title, items, formatter) {
   return list ? `<div class="professional-side"><strong>${title}</strong>${list}</div>` : "";
 }
 
+async function requestProfessionalAnalysis(analysisId, moveIndex) {
+  const response = await fetchWithTimeout(apiUrl("/api/professional-analysis"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ analysis_id: analysisId, move_index: moveIndex })
+  }, 180000);
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error("结论服务暂时不可用，请重试。");
+    error.expired = response.status === 404;
+    throw error;
+  }
+  if (!payload.analysis) throw new Error("结论暂时没有生成，请重试。");
+  return payload;
+}
+
+function renderVerifiedProfessionalFallback(review) {
+  const side = review.side === "white" ? "白方" : "黑方";
+  const score = `${review.before?.evaluation || "—"} → ${review.after?.evaluation || "—"}`;
+  const loss = review.centipawn_loss == null ? "" : `，评价损失 ${review.centipawn_loss} cp`;
+  const best = review.best_move_san
+    ? (review.best_move_uci === review.uci ? `实战着就是引擎首选 ${review.best_move_san}` : `引擎首选是 ${review.best_move_san}`)
+    : "引擎没有返回完整首选着";
+  const route = Array.isArray(review.opponent_variation) && review.opponent_variation.length
+    ? `<p><span class="professional-label">实战后的核验路线：</span>${escapeHtml(review.opponent_variation.slice(0, 10).join(" → "))}</p>`
+    : "";
+  document.getElementById("professionalAnalysisContent").innerHTML = `<section class="professional-section move-quality-section"><h4>实战着分析 · ${escapeHtml(review.san)} ${escapeHtml(review.quality_symbol || "")}</h4><p>${escapeHtml(`轮到${side}落子时，实战走了 ${review.san}。Stockfish 评价为 ${score}${loss}，走法等级为“${review.quality_label}”；${best}。`)}</p>${route}</section>`;
+}
+
 async function loadProfessionalAnalysis(review) {
+  // Every selection invalidates older renders, including a cached selection.
+  const token = ++professionalRequestToken;
+  const analysisId = gameReview.analysis_id;
+  const openingRevision = review.openingContext?.revisionId || gameReview?.openingSummary?.revisionId || "base";
+  const key = `${analysisId}:${review.index}:${openingRevision}`;
   const panel = document.getElementById("professionalAnalysisPanel");
   const status = document.getElementById("professionalAnalysisStatus");
   const content = document.getElementById("professionalAnalysisContent");
-  const cached = professionalAnalysisCache.get(review.index);
-  if (cached) {
+  const summary = document.getElementById("researcherSummaryLine");
+  panel.hidden = false;
+  if (summary) {
+    summary.textContent = "";
+    summary.hidden = true;
+  }
+  const cached = professionalAnalysisCache.get(key);
+  if (cached?._openingContextVersion === OPENING_CONTEXT_UI_VERSION) {
     renderProfessionalAnalysis(cached);
     status.textContent = cached.cached ? "已读取结论" : "结论已生成";
     return;
   }
 
-  const token = ++professionalRequestToken;
-  panel.hidden = false;
   status.textContent = "正在生成结论";
   document.getElementById("professionalComplexity").textContent = "分析中";
   content.innerHTML = `<div class="professional-loading">正在生成结论……</div>`;
+  // Scrubbing across the move slider should only request the settled position.
+  await new Promise(resolve => setTimeout(resolve, 250));
+  if (token !== professionalRequestToken) return;
   try {
-    const response = await fetch(apiUrl("/api/professional-analysis"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ analysis_id: gameReview.analysis_id, move_index: review.index })
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload.detail || `专业分析服务错误 (${response.status})`);
-    if (!payload.analysis) throw new Error(payload.warning || "专业分析暂时不可用");
-    professionalAnalysisCache.set(review.index, payload);
+    let pending = professionalAnalysisPending.get(key);
+    if (!pending) {
+      pending = requestProfessionalAnalysis(analysisId, review.index).then(payload => {
+        payload._openingContextVersion = OPENING_CONTEXT_UI_VERSION;
+        if (gameReview?.analysis_id === analysisId) professionalAnalysisCache.set(key, payload);
+        return payload;
+      }).finally(() => professionalAnalysisPending.delete(key));
+      professionalAnalysisPending.set(key, pending);
+    }
+    const payload = await pending;
     if (token !== professionalRequestToken) return;
     renderProfessionalAnalysis(payload);
     status.textContent = payload.cached ? "已读取结论" : "结论已生成";
   } catch (error) {
     if (token !== professionalRequestToken) return;
-    panel.hidden = false;
-    content.innerHTML = `<p class="professional-summary">结论暂时没有生成，请稍后重试。</p>`;
-    status.textContent = "可以稍后重试";
+    renderVerifiedProfessionalFallback(review);
+    const buttonText = error.expired ? "重新评价整盘棋" : "重新生成详细解释";
+    content.insertAdjacentHTML("beforeend", `<button type="button" class="secondary-btn" id="professionalRetryBtn">${buttonText}</button>`);
+    document.getElementById("professionalRetryBtn").onclick = () => {
+      if (token !== professionalRequestToken) return;
+      if (error.expired) analyzeGame();
+      else loadProfessionalAnalysis(review);
+    };
+    document.getElementById("professionalComplexity").textContent = "引擎核验";
+    status.textContent = error.expired ? "详细解释已过期，当前显示引擎核验结论" : "详细解释未完成，当前显示引擎核验结论";
   }
 }
 
 function renderProfessionalAnalysis(payload) {
   const analysis = payload.analysis || {};
-  const opening = payload.openingContext || null;
+  const activeReview = currentStep > 0 ? gameReview?.moves?.[currentStep - 1] : null;
+  const opening = payload.openingContext || activeReview?.openingContext || gameReview?.openingSummary || null;
   const position = analysis.positionAssessment || {};
   const plans = analysis.plans || {};
   const lines = analysis.candidateLines || [];
   const played = analysis.playedMoveAnalysis || {};
-  const activeReview = currentStep > 0 ? gameReview?.moves?.[currentStep - 1] : null;
   const showMoveAnalysis = Boolean(activeReview);
   const complexityNames = { simple: "简单局面", normal: "普通局面", complex: "复杂局面" };
   const tagNames = {
