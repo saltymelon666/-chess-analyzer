@@ -200,10 +200,10 @@ def test_batch_analysis_rechecks_unstable_low_depth_choice(monkeypatch) -> None:
     after.push_uci("g1f3")
     responses = {
         (id(before), 10): _engine_result(-15, "stable", second_cp=-15),
-        (id(before), 16): _engine_result(-10, "stable", second_cp=-12, depth=16),
+        (id(before), 12): _engine_result(-10, "stable", second_cp=-12, depth=12),
         (id(after), 10): _engine_result(-91, "Nxd4", second_cp=-19),
-        (id(after), 16): _engine_result(-17, "Bb7", second_cp=-6, depth=16),
-        (id(after), 20): _engine_result(-5, "Bb7", second_cp=0, depth=20),
+        (id(after), 12): _engine_result(-17, "Bb7", second_cp=-6, depth=12),
+        (id(after), 14): _engine_result(-5, "Bb7", second_cp=0, depth=14),
     }
     calls: list[tuple[int, int]] = []
 
@@ -224,8 +224,45 @@ def test_batch_analysis_rechecks_unstable_low_depth_choice(monkeypatch) -> None:
 
     assert results[1].top_moves[0].move == "Bb7"
     assert results[1].centipawn == -5
-    assert (id(after), 16) in calls
-    assert (id(after), 20) in calls
+    assert (id(after), 12) in calls
+    assert (id(after), 14) in calls
+
+
+def test_production_depth_rechecks_unstable_choice_at_22_and_24(monkeypatch) -> None:
+    service = StockfishService(
+        ROOT / "stockfish.exe",
+        depth=20,
+        threads=1,
+        hash_mb=256,
+        multipv=3,
+        timeout_seconds=1200,
+    )
+    board = chess.Board()
+    responses = {
+        20: _engine_result(-91, "Nxd4", second_cp=-19, depth=20),
+        22: _engine_result(-17, "Bb7", second_cp=-6, depth=22),
+        24: _engine_result(-5, "Bb7", second_cp=0, depth=24),
+    }
+    calls: list[int] = []
+
+    class DummyEngine:
+        def quit(self) -> None:
+            pass
+
+    monkeypatch.setattr(chess.engine.SimpleEngine, "popen_uci", lambda _: DummyEngine())
+    monkeypatch.setattr(service, "_configure_engine", lambda _: None)
+
+    def fake_analyze(_engine, _board: chess.Board, depth: int) -> EngineResult:
+        calls.append(depth)
+        return responses[depth]
+
+    monkeypatch.setattr(service, "_analyze_board", fake_analyze)
+
+    result = service._analyze_many_sync([board], 20)[0]
+
+    assert calls == [20, 22, 24]
+    assert result.depth == 24
+    assert result.top_moves[0].move == "Bb7"
 
 
 def test_batch_analysis_reuses_cached_positions(monkeypatch) -> None:

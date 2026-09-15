@@ -28,6 +28,17 @@ def test_professional_analysis_is_unified_and_expanded_by_default() -> None:
         assert "loadProfessionalAnalysis(review);" in page
 
 
+def test_every_selected_move_has_race_safe_explanation_and_verified_fallback() -> None:
+    for page in _pages():
+        assert "const professionalAnalysisPending = new Map();" in page
+        assert "const token = ++professionalRequestToken;" in page
+        assert "const key = `${analysisId}:${review.index}:${openingRevision}`;" in page
+        assert "await new Promise(resolve => setTimeout(resolve, 250));" in page
+        assert "professionalAnalysisPending.get(key)" in page
+        assert "renderVerifiedProfessionalFallback(review);" in page
+        assert "重新生成详细解释" in page
+
+
 def test_professional_conclusions_are_not_visually_truncated() -> None:
     for page in _pages():
         assert "white-space:normal; overflow:visible; overflow-wrap:anywhere" in page

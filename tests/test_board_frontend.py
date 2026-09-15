@@ -172,10 +172,11 @@ def test_admin_dashboard_is_separate_and_not_linked_from_product() -> None:
 def test_game_review_waits_and_retries_when_backend_is_busy() -> None:
     for page in _pages():
         assert 'fetchWithTimeout(apiUrl("/api/game-review")' in page
-        assert "285000" in page
+        assert "1260000" in page
         assert 'response.headers.get("Retry-After")' in page
         assert "分析服务器繁忙" in page
-        assert "整盘分析可能需要 1—3 分钟" in page
+        assert "正在进行深度 20 高精度分析" in page
+        assert "长棋谱可能需要 3—20 分钟" in page
         assert "整盘分析等待超时" in page
 
 

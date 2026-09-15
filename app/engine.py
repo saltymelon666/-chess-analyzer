@@ -13,8 +13,9 @@ from .models import EngineResult, MoveResult, VariationMove
 
 
 MAX_PV_PLIES = 10
-STABILITY_RECHECK_MIN_DEPTH = 16
-STABILITY_CONFIRM_MIN_DEPTH = 20
+STABILITY_RECHECK_CEILING_DEPTH = 22
+STABILITY_RECHECK_INCREMENT = 2
+STABILITY_CONFIRM_INCREMENT = 4
 STABILITY_GAP_CP = 50
 STABILITY_SWING_CP = 50
 STABILITY_SCORE_CHANGE_CP = 25
@@ -164,7 +165,7 @@ class StockfishService:
             for board, cached in zip(boards, cached_results):
                 self._raise_if_cancelled(cancel_event)
                 results.append(cached or self._analyze_board(engine, board, depth))
-            if depth >= STABILITY_RECHECK_MIN_DEPTH:
+            if depth >= STABILITY_RECHECK_CEILING_DEPTH:
                 self._cache_results(boards, depth, results)
                 return results
 
@@ -172,7 +173,7 @@ class StockfishService:
                 (
                     index
                     for index in range(len(boards))
-                    if results[index].depth < STABILITY_RECHECK_MIN_DEPTH
+                    if results[index].depth < depth + STABILITY_RECHECK_INCREMENT
                     and self._needs_stability_recheck(results, index)
                 ),
                 key=lambda index: self._stability_recheck_priority(results, index),
@@ -185,14 +186,14 @@ class StockfishService:
                 confirmed = self._analyze_board(
                     engine,
                     board,
-                    max(STABILITY_RECHECK_MIN_DEPTH, depth + 4),
+                    depth + STABILITY_RECHECK_INCREMENT,
                 )
                 if self._materially_changed(initial, confirmed):
                     self._raise_if_cancelled(cancel_event)
                     confirmed = self._analyze_board(
                         engine,
                         board,
-                        max(STABILITY_CONFIRM_MIN_DEPTH, depth + 8),
+                        depth + STABILITY_CONFIRM_INCREMENT,
                     )
                 results[index] = confirmed
             self._cache_results(boards, depth, results)
