@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AI 国际象棋分析助手</title>
+  <title>棋盘研究所｜AI 国际象棋复盘</title>
   <meta name="description" content="粘贴 PGN，由服务端 Stockfish 18 分析局面，并通过 DeepSeek 生成中文解释。">
   <meta name="theme-color" content="#FFF9EF">
   <!-- Frontend deployment revision: 2026-08-21-centered-flat-board -->
@@ -17,6 +17,13 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><text y='56' font-size='56'>♟</text></svg>">
 
   <style>
+    @font-face {
+      font-family:"Smiley Sans";
+      src:url("assets/fonts/SmileySans-Oblique.woff2") format("woff2");
+      font-display:swap;
+      font-style:normal;
+      font-weight:400 900;
+    }
     :root {
       --bg: #FFF9EF; --panel: #FFFFFF; --panel-2: #FDF8F0;
       --line: #E8DED1; --text: #292725; --muted: #6F6A64;
@@ -37,8 +44,51 @@
     }
     .shell { max-width: 1280px; margin: 0 auto; padding: 28px 24px 48px; }
     .topbar { display: flex; justify-content: space-between; align-items: center; gap: 18px; margin-bottom: 28px; }
+    .account-actions { display:flex; align-items:center; gap:10px; margin-left:auto; }
+    .account-label { color:#6F604E; font-size:13px; max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    dialog.account-dialog { width:min(92vw,720px); max-height:calc(100dvh - 24px); overflow:auto; border:1px solid #DECDB5; border-radius:24px; padding:0; color:#3E3428; background:#FFFCF6; box-shadow:0 30px 90px rgba(48,37,24,.28); }
+    dialog.account-dialog::backdrop { background:rgba(42,35,27,.52); backdrop-filter:blur(4px); }
+    .dialog-body { padding:28px; }
+    .dialog-head { display:flex; justify-content:space-between; gap:18px; align-items:start; margin-bottom:20px; }
+    .dialog-head h2 { margin:0 0 6px; font-size:28px; }
+    .dialog-head p { margin:0; color:#756653; }
+    .dialog-close { border:0; background:transparent; font-size:25px; padding:2px 8px; color:#6F604E; }
+    .auth-fields { display:grid; gap:14px; }
+    .auth-fields label { display:grid; gap:6px; font-weight:700; }
+    .auth-fields input { width:100%; border:1px solid #D8C7AF; border-radius:12px; padding:12px 14px; font:inherit; background:white; }
+    .auth-fields input[aria-invalid="true"] { border-color:#C85F5F; }
+    .auth-hint { margin:9px 0 0; color:#6C746F; font-size:13px; line-height:1.55; }
+    .auth-buttons { display:flex; gap:10px; flex-wrap:wrap; margin-top:18px; }
+    .dialog-status { min-height:22px; margin-top:12px; color:#9A3F34; }
+    .pricing-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+    .price-card { position:relative; border:1px solid #DCC8AB; border-radius:18px; padding:22px; background:white; }
+    .price-card.recommended { border:2px solid #2D7A73; background:#F4FBF8; }
+    .price-badge { position:absolute; right:14px; top:14px; border-radius:999px; padding:5px 9px; background:#2D7A73; color:white; font-size:12px; }
+    .price-card h3 { margin:0 0 10px; }
+    .price-main { font-size:30px; font-weight:900; color:#2D7A73; margin:8px 0; }
+    .price-note { color:#756653; min-height:48px; }
+    .payment-method-panel { margin-top:18px; padding-top:18px; border-top:1px solid #E4D7C5; }
+    .payment-method-panel h3 { margin:0 0 4px; font-size:18px; }
+    .payment-plan-summary { margin:0 0 14px; color:#756653; }
+    .payment-methods { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+    .payment-method-btn { display:flex; align-items:center; justify-content:center; gap:9px; min-height:48px; border:1px solid #CDBA9E; border-radius:13px; background:#FFFDF8; color:#2F493F; font:700 15px/1.2 inherit; cursor:pointer; }
+    .payment-method-btn:hover { border-color:#2D7A73; background:#F4FBF8; }
+    .payment-method-btn:disabled { cursor:not-allowed; opacity:.48; background:#F3EFE7; border-color:#DED4C5; }
+    .payment-method-icon { display:grid; place-items:center; width:26px; height:26px; border-radius:8px; color:white; font-size:14px; }
+    .payment-method-icon.wechat { background:#07C160; }
+    .payment-method-icon.alipay { background:#1677FF; }
+    .payment-qr { display:grid; justify-items:center; gap:10px; margin-top:16px; padding:18px; border:1px solid #DCC8AB; border-radius:16px; background:white; }
+    .payment-qr[hidden] { display:none; }
+    .payment-qr img { display:block; width:min(260px,100%); height:auto; image-rendering:auto; }
+    .payment-qr p { margin:0; color:#5E5142; text-align:center; }
+    .manual-payment-form { display:grid; gap:12px; margin-top:14px; }
+    .manual-payment-form[hidden] { display:none; }
+    .manual-payment-form label { display:grid; gap:6px; color:#3E3428; font-weight:700; }
+    .manual-payment-form input { width:100%; border:1px solid #D8C7AF; border-radius:12px; padding:12px 14px; font:inherit; color:#173C36; background:white; }
+    .manual-payment-form input:focus { outline:0; border-color:#F5BF48; box-shadow:0 0 0 4px rgba(245,191,72,.14); }
+    .manual-payment-note { margin:0; padding:10px 12px; border-radius:10px; color:#66543E; background:#F7F2E8; font-size:13px; line-height:1.6; }
     .brand { display:flex; align-items:center; gap:12px; font-weight:900; font-size:18px; }
-    .brand-mark { display:grid; place-items:center; width:44px; height:44px; border-radius:15px; background:var(--accent); font-size:27px; box-shadow:0 7px 16px rgba(244,185,66,.28); }
+    .brand-mark { display:grid; place-items:center; width:44px; height:44px; border-radius:15px; background:var(--accent); font-size:27px; }
     h1 { margin: 0; font-size: clamp(32px, 4.6vw, 58px); line-height:1.14; letter-spacing:-.04em; }
     .subtitle { margin: 14px 0 0; color: var(--muted); font-size: clamp(15px, 1.8vw, 19px); line-height:1.7; }
     .hero { display:grid; grid-template-columns:minmax(0,55fr) minmax(420px,45fr); gap:32px; align-items:start; margin-bottom:32px; }
@@ -230,7 +280,7 @@
     .professional-status { display:block; margin-top:4px; color:var(--muted); font-size:13px; }
     .professional-complexity { flex:0 0 auto; padding:6px 10px; border-radius:999px; background:#FFF0BE; color:#765109; font-size:11px; font-weight:900; }
     .professional-content { display:grid; gap:clamp(22px,2.6vw,28px); min-width:0; overflow:visible; }
-    .researcher-summary-line { margin:0; padding:14px 16px; border:1px solid #E9CB76; border-left:5px solid #E3A925; border-radius:14px; background:linear-gradient(135deg,#FFF2BB,#FFFDF4); color:#654E21; font-size:clamp(17px,1.5vw,20px); line-height:1.65; font-weight:900; box-shadow:0 8px 18px rgba(155,101,0,.08); }
+    .researcher-summary-line { margin:0; padding:14px 16px; border:1px solid #E3C56E; border-radius:14px; background:linear-gradient(135deg,#FFF2BB,#FFFDF4); color:#654E21; font-size:clamp(17px,1.5vw,20px); line-height:1.65; font-weight:900; box-shadow:0 8px 18px rgba(74,67,54,.08); }
     .researcher-summary-line[hidden] { display:none; }
     .professional-content p,.professional-content li,.professional-summary { white-space:normal; overflow:visible; overflow-wrap:anywhere; word-break:break-word; height:auto; max-height:none; text-overflow:clip; -webkit-line-clamp:unset; line-clamp:unset; }
     .professional-summary { margin:0; padding:16px; border-radius:15px; background:#fff; border:1px solid var(--line); font-size:18px; line-height:1.8; }
@@ -248,6 +298,16 @@
     .professional-opening-ideas { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:12px; }
     .professional-opening-ideas p { margin:0; padding:11px 12px; border-radius:11px; background:rgba(255,255,255,.72); font-size:16px; }
     .professional-opening-themes { color:#4D6B61 !important; font-size:16px !important; }
+    .professional-opening-context { display:grid; gap:12px; margin:0 0 18px; padding:0 0 18px; border-bottom:1px dashed #DCCB9F; }
+    .professional-opening-context p { margin:0; }
+    .professional-opening-context p:first-child { margin-top:0; }
+    .professional-opening-value { color:#2D665A; font-weight:900; }
+    .professional-opening-identity { padding:13px 15px; border:1px solid #D7E8E4; border-radius:14px; background:#F3FAF8; }
+    .professional-opening-notes { display:grid; gap:9px; }
+    .professional-opening-note { padding:12px 14px; border-radius:13px; background:#FFFDF8; border:1px solid #E8DED1; }
+    .professional-opening-note .professional-label { display:block; margin-bottom:4px; color:#72551D; }
+    .professional-opening-branch { margin:8px 0 0 !important; text-indent:2em; }
+    .professional-opening-branch:first-of-type { margin-top:0 !important; }
     .professional-plan-section h4 { font-size:clamp(22px,2.2vw,27px); }
     .professional-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
     .professional-grid.professional-grid-single { grid-template-columns:1fr; }
@@ -259,7 +319,7 @@
     .professional-list li:first-child { padding-top:0; border-top:0; }
     .professional-label { color:var(--muted); font-size:17px; font-weight:800; }
     .professional-routes { display:grid; gap:16px; }
-    .professional-route { padding:clamp(16px,2vw,22px); border:1px solid #CFE2DE; border-left:5px solid #78B8AD; border-radius:16px; background:linear-gradient(145deg,#FBFEFD,#F1F9F7); overflow:visible; }
+    .professional-route { padding:clamp(16px,2vw,22px); border:1px solid #AFCFC7; border-radius:16px; background:linear-gradient(145deg,#FBFEFD,#F1F9F7); overflow:visible; }
     .professional-route-head { display:block; margin-bottom:9px; }
     .professional-route-meta { display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px; margin:0 0 10px; padding:10px 12px; border:1px solid rgba(205,226,219,.88); border-radius:12px; background:rgba(255,255,255,.78); color:var(--muted); font-size:17px; font-weight:800; }
     .professional-route-title { white-space:nowrap; font-size:clamp(22px,2.2vw,28px); font-weight:950; }
@@ -323,30 +383,30 @@
     .shell::after { width:360px; height:360px; top:900px; right:-240px; background:rgba(255,195,68,.2); }
     .topbar {
       padding:10px; border:1px solid rgba(232,222,209,.82); border-radius:20px;
-      background:rgba(255,255,255,.88); box-shadow:0 4px 0 rgba(117,87,47,.06),0 18px 42px rgba(91,70,43,.13),inset 0 1px 0 #fff;
+      background:rgba(255,255,255,.88); box-shadow:0 18px 42px rgba(91,70,43,.13),inset 0 1px 0 #fff;
       backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
-      animation:moduleRise .5s cubic-bezier(.2,.75,.25,1) backwards;
+      animation:none;
     }
-    .brand-mark { transform:rotate(-3deg); box-shadow:0 8px 0 rgba(155,101,0,.1),0 14px 22px rgba(244,185,66,.22); }
+    .brand-mark { transform:rotate(-3deg); box-shadow:0 14px 22px rgba(244,185,66,.22); }
     .hero { grid-template-columns:minmax(0,.96fr) minmax(480px,1.04fr); gap:38px; align-items:stretch; margin-bottom:42px; }
     .hero-copy { display:flex; flex-direction:column; animation:moduleRise .62s .08s cubic-bezier(.2,.75,.25,1) backwards; }
     .hero-guide {
       height:auto; min-height:100%; border-color:#B9D9D2;
-      box-shadow:0 8px 0 rgba(57,120,106,.07),0 28px 64px rgba(61,116,105,.2),inset 0 1px 0 rgba(255,255,255,.95);
+      box-shadow:0 28px 64px rgba(61,116,105,.2),inset 0 1px 0 rgba(255,255,255,.95);
       animation:moduleRise .62s .16s cubic-bezier(.2,.75,.25,1) backwards;
     }
     h1 { color:#252A27; text-wrap:balance; text-shadow:0 2px 0 rgba(255,255,255,.7); }
     .eyebrow { border:1px solid #CDE5E0; box-shadow:0 6px 18px rgba(57,120,106,.08); }
     .hero-upload {
       margin-top:auto; border-color:#E4D2BA;
-      box-shadow:0 8px 0 rgba(117,87,47,.055),0 26px 60px rgba(91,70,43,.17),0 2px 0 rgba(255,255,255,.9) inset;
+      box-shadow:0 26px 60px rgba(91,70,43,.17),inset 0 2px 5px rgba(255,255,255,.9);
       animation:cardRise .5s .2s cubic-bezier(.2,.75,.25,1) backwards;
     }
     .upload-zone { background:linear-gradient(145deg,#FFFEFB,#FFF8EA); border-color:#E4CFAE; }
     .workspace { grid-template-columns:minmax(520px,.98fr) minmax(440px,1.02fr); gap:36px; }
     .panel {
       position:relative; border-color:#E4D5C1;
-      box-shadow:0 9px 0 rgba(117,87,47,.055),0 30px 66px rgba(91,70,43,.16),inset 0 1px 0 #fff;
+      box-shadow:0 30px 66px rgba(91,70,43,.16),inset 0 1px 0 #fff;
     }
     .workspace > .panel { animation:moduleRise .6s cubic-bezier(.2,.75,.25,1) backwards; }
     .workspace > .panel:first-child {
@@ -370,29 +430,29 @@
       content:""; position:absolute; inset:0; z-index:6; pointer-events:none; border:1px solid rgba(255,255,255,.36);
       border-radius:10px; box-shadow:inset 0 0 24px rgba(255,244,211,.1);
     }
-    .player { background:rgba(255,255,255,.94); box-shadow:0 5px 0 rgba(91,70,43,.04),0 15px 28px rgba(82,60,34,.12); }
+    .player { background:rgba(255,255,255,.94); box-shadow:0 15px 28px rgba(82,60,34,.12); }
     button {
       min-height:42px; transition:transform 170ms cubic-bezier(.2,.75,.25,1),opacity 170ms ease,box-shadow 170ms ease,filter 170ms ease;
     }
-    .primary-btn { background:linear-gradient(180deg,#FFD365,#F4B942); box-shadow:0 7px 0 rgba(155,101,0,.13),0 12px 24px rgba(244,185,66,.22); }
+    .primary-btn { background:linear-gradient(180deg,#FFD365,#F4B942); box-shadow:0 12px 24px rgba(244,185,66,.22); }
     button:hover { opacity:1; transform:translateY(-3px); filter:saturate(1.04); box-shadow:0 12px 24px rgba(83,67,45,.15); }
-    .primary-btn:hover { box-shadow:0 7px 0 rgba(155,101,0,.13),0 17px 28px rgba(244,185,66,.3); }
+    .primary-btn:hover { box-shadow:0 17px 28px rgba(244,185,66,.3); }
     button:active { transform:translateY(0) scale(.97); transition-duration:70ms; }
     button:focus-visible,summary:focus-visible { outline:3px solid rgba(244,185,66,.42); outline-offset:3px; }
     select,input,textarea { transition:border-color 160ms ease,box-shadow 160ms ease,background 160ms ease; }
     textarea:focus { background:#fff; }
     .pgn-summary { background:#F0F8F6; border-color:#CBE5DF; }
     .timeline { background:#FFFDF8; border-color:#E8DCC8; }
-    .analysis-action .primary-btn:hover { transform:translateY(-1px); box-shadow:0 4px 0 rgba(155,101,0,.11),0 12px 21px rgba(244,185,66,.22); }
+    .analysis-action .primary-btn:hover { transform:translateY(-1px); box-shadow:0 12px 21px rgba(244,185,66,.22); }
     .move-review-card.active,.results.active > *,.timeline.active,.pgn-summary.active { animation:cardRise .44s cubic-bezier(.2,.75,.25,1) backwards; }
     .results.active > *:nth-child(2) { animation-delay:.07s; }
     .results.active > *:nth-child(3) { animation-delay:.14s; }
-    .review-fact { box-shadow:0 5px 0 rgba(91,70,43,.035),0 14px 28px rgba(91,70,43,.1); }
+    .review-fact { box-shadow:0 14px 28px rgba(91,70,43,.1); }
     .review-fact:nth-child(1) { background:#F1F9F7; border-color:#CBE3DC; }
     .review-fact:nth-child(2) { background:#FFF8E7; border-color:#E9D8AA; }
     .review-best { background:linear-gradient(135deg,#E8F6F3,#F4FBF9); }
     .review-explanation { background:linear-gradient(145deg,#FFF9E8,#FFFDF7); box-shadow:inset 0 1px 0 #fff; }
-    .professional-section { box-shadow:0 4px 0 rgba(91,70,43,.035),0 16px 34px rgba(91,70,43,.11); animation:cardRise .44s cubic-bezier(.2,.75,.25,1) backwards; }
+    .professional-section { box-shadow:0 16px 34px rgba(91,70,43,.11); animation:cardRise .44s cubic-bezier(.2,.75,.25,1) backwards; }
     .professional-position-section { background:#FFFDF8; border-color:#E6D4AE; }
     .professional-commentary-section { background:linear-gradient(145deg,#FFF7D9,#FFFDF5); border-color:#E8C86E; }
     .professional-core-narrative { font-size:clamp(18px,1.6vw,21px) !important; line-height:1.85 !important; }
@@ -402,9 +462,9 @@
     .professional-section.danger { background:#FFF3F3; border-color:#F0CDCD; }
     .professional-side:first-child { background:#F1F8FC; }
     .professional-side:last-child { background:#F1F9F5; }
-    .metric { border-color:#CADFD4; box-shadow:0 6px 0 rgba(72,111,93,.045),0 20px 40px rgba(72,111,93,.14); }
+    .metric { border-color:#CADFD4; box-shadow:0 20px 40px rgba(72,111,93,.14); }
     .move-card,.professional-route,.professional-opening,.review-best,.pgn-summary,.timeline {
-      box-shadow:0 5px 0 rgba(91,70,43,.035),0 16px 34px rgba(91,70,43,.11),inset 0 1px 0 rgba(255,255,255,.9);
+      box-shadow:0 16px 34px rgba(91,70,43,.11),inset 0 1px 0 rgba(255,255,255,.9);
     }
     .research-report-host {
       width:min(100%,1040px); margin:30px auto 0; min-width:0;
@@ -441,15 +501,15 @@
     .research-report-host .professional-route-move { font-size:clamp(22px,2vw,26px); }
     .research-report-host .professional-plan-name { font-size:22px; }
     .research-report-host .professional-moves { font-size:20px; }
-    .hero-guide,.hero-upload,.workspace > .panel,.move-review-card,.professional-section,.metric,.move-card,.professional-route,.professional-opening,.review-fact,.review-best,.player,.pgn-summary,.timeline {
+    .hero-guide,.workspace > .panel,.move-review-card,.professional-section,.metric,.move-card,.professional-route,.professional-opening,.review-fact,.review-best,.player,.pgn-summary,.timeline {
       transition:transform .26s cubic-bezier(.2,.75,.25,1),box-shadow .26s ease,border-color .26s ease;
     }
     @media (hover:hover) and (pointer:fine) {
-      .hero-guide:hover,.hero-upload:hover,.workspace > .panel:hover { transform:translateY(-7px); }
+      .hero-guide:hover,.workspace > .panel:hover { transform:translateY(-7px); }
       .move-review-card:hover,.professional-section:hover,.metric:hover,.move-card:hover,.professional-route:hover,.professional-opening:hover,.review-fact:hover,.review-best:hover,.player:hover,.pgn-summary:hover,.timeline:hover { transform:translateY(-4px); }
-      .hero-guide:hover { box-shadow:0 12px 0 rgba(57,120,106,.075),0 38px 78px rgba(61,116,105,.25),inset 0 1px 0 #fff; }
-      .hero-upload:hover,.workspace > .panel:hover { border-color:#D8C3A8; box-shadow:0 12px 0 rgba(117,87,47,.06),0 40px 84px rgba(91,70,43,.21),inset 0 1px 0 #fff; }
-      .professional-section:hover,.metric:hover,.move-card:hover,.professional-route:hover,.professional-opening:hover,.review-fact:hover,.review-best:hover,.player:hover,.pgn-summary:hover,.timeline:hover { box-shadow:0 8px 0 rgba(91,70,43,.04),0 26px 48px rgba(91,70,43,.17),inset 0 1px 0 #fff; }
+      .hero-guide:hover { box-shadow:0 38px 78px rgba(61,116,105,.25),inset 0 1px 0 #fff; }
+      .workspace > .panel:hover { border-color:#D8C3A8; box-shadow:0 40px 84px rgba(91,70,43,.21),inset 0 1px 0 #fff; }
+      .professional-section:hover,.metric:hover,.move-card:hover,.professional-route:hover,.professional-opening:hover,.review-fact:hover,.review-best:hover,.player:hover,.pgn-summary:hover,.timeline:hover { box-shadow:0 26px 48px rgba(91,70,43,.17),inset 0 1px 0 #fff; }
       .research-report-host .professional-section:hover,.research-report-host .professional-route:hover,.research-report-host .professional-side:hover { transform:translateY(-2px); }
     }
     @keyframes moduleRise { from { opacity:0; transform:translateY(18px); } to { opacity:1; transform:translateY(0); } }
@@ -532,24 +592,298 @@
       .move-chip { padding:7px 6px; gap:4px; font-size:12px; }
       .quality-badge { min-width:25px; padding:0 5px; }
       button { padding:10px 14px; } .board-shell { border-width:4px; }
+      .pricing-grid { grid-template-columns:1fr; }
+      .payment-methods { grid-template-columns:1fr; }
+      .account-actions { width:100%; flex-wrap:wrap; }
+      .account-label { order:3; width:100%; max-width:none; }
     }
+
+    /* 2026-09 pre-release review: tool-first analysis workspace */
+    :root {
+      --bg:#F4F0E7; --panel:#FFFCF5; --panel-2:#F7F2E8;
+      --line:#D8D0C2; --text:#173C36; --muted:#6C746F;
+      --accent:#F5BF48; --accent-dark:#6F4A00; --accent-2:#DDEFEA;
+      --success:#2F8B76; --danger:#C85F5F;
+      --radius-lg:18px; --radius-md:14px; --radius-sm:10px;
+      --shadow:0 12px 34px rgba(47,57,50,.08);
+      --board-size:min(38vw,590px);
+    }
+    body {
+      background:#F4F0E7!important;
+      color:var(--text);
+      font-family:"Microsoft YaHei UI","PingFang SC","Noto Sans SC",system-ui,sans-serif;
+    }
+    body::before,.shell::before,.shell::after { display:none!important; }
+    ::selection { background:#F5D57E; color:#173C36; }
+    * { scrollbar-color:#9CBDB4 #E9E3D8; scrollbar-width:thin; }
+    .shell {
+      width:min(100%,1520px); max-width:none; margin:0 auto; padding:18px 20px 42px;
+      display:grid; grid-template-columns:320px minmax(0,1fr); gap:18px; align-items:start;
+    }
+    .topbar {
+      grid-column:1/-1; min-height:68px; margin:0; padding:10px 12px 10px 10px;
+      border:1px solid var(--line); border-radius:16px; background:#FFFCF6;
+      box-shadow:0 8px 24px rgba(47,57,50,.07);
+    }
+    .brand { gap:11px; color:#173C36; font-size:19px; letter-spacing:-.02em; }
+    .brand-mark {
+      width:46px; height:46px; overflow:hidden; border-radius:12px; background:#F7C652;
+      box-shadow:none;
+    }
+    .brand-mark img { width:100%; height:100%; object-fit:cover; object-position:50% 25%; }
+    .brand-copy { display:grid; gap:1px; }
+    .brand-copy small { color:#7A756C; font-size:10px; font-weight:800; letter-spacing:.12em; }
+    .account-actions { gap:7px; }
+    .account-label { max-width:260px; color:#5E655F; }
+    .ghost-btn,.review-nav-link { border:1px solid transparent; border-radius:9px; background:#F1EDE5; }
+    .review-nav-link { color:#27695C; background:#E5F2EE; }
+    .hero {
+      grid-column:1; display:block; position:sticky; top:18px; min-width:0; margin:0;
+      border:0; border-radius:0; background:transparent;
+      box-shadow:none; overflow:visible;
+    }
+    .hero-copy { display:flex; flex-direction:column; gap:14px; min-width:0; padding:0; animation:none; }
+    .hero-intro {
+      min-width:0; padding:22px; border:1px solid var(--line); border-radius:18px;
+      background:#FFFCF6; box-shadow:var(--shadow);
+    }
+    .hero h1 {
+      max-width:10em; font-size:clamp(29px,2.5vw,38px); line-height:1.18; letter-spacing:-.025em;
+      font-family:"Microsoft YaHei UI","PingFang SC","Noto Sans SC",system-ui,sans-serif; font-weight:700;
+    }
+    .hero .subtitle { margin:12px 0 0; color:#65706A; font-size:14px; line-height:1.7; }
+    .eyebrow { display:none; }
+    .mascot-duo {
+      position:relative; height:205px; margin:18px -22px 0; overflow:hidden;
+      background:#1E443D;
+    }
+    .mascot-duo img { width:100%; height:100%; display:block; object-fit:cover; object-position:center 47%; }
+    .hero-upload {
+      order:3; margin:0; padding:0; border:0; border-radius:0;
+      background:transparent; box-shadow:none;
+    }
+    .upload-zone { padding:0; border:0; border-radius:0; background:transparent; }
+    .upload-title { margin-bottom:7px; color:#173C36; font-size:13px; }
+    .upload-title svg { flex:none; width:17px; height:17px; }
+    .hero-upload textarea {
+      min-height:92px; padding:12px; border-color:#CFC6B8; border-radius:10px;
+      background:#F8F4EC; font-family:Consolas,"SFMono-Regular",monospace; font-size:12px;
+    }
+    .hero-actions {
+      width:min(100%,300px); margin:12px 0 0 auto; display:grid;
+      grid-template-columns:minmax(0,1fr) 76px; gap:8px;
+    }
+    .hero-actions button { min-height:40px; border-radius:9px; padding:9px 12px; }
+    .hero-actions .ghost-btn { display:none; }
+    .hero-actions .primary-btn { width:100%; color:#173C36; background:#F5BF48; box-shadow:none; }
+    .hero-actions .secondary-btn { min-width:0; background:#E4EFEA; }
+    .hero-guide { display:none!important; }
+    .workspace {
+      grid-column:2; grid-template-columns:minmax(430px,1.02fr) minmax(370px,.98fr);
+      gap:18px; min-width:0;
+    }
+    .workspace>.panel { border-radius:18px; box-shadow:var(--shadow); }
+    .workspace>.panel:first-child { padding:16px; background:#263F3A; border-color:#263F3A; }
+    .workspace>.panel:first-child .board-head { color:#173C36; font-size:14px; font-weight:700; }
+    .workspace>.panel:first-child .board-head span {
+      color:#173C36; border-color:#D8D0C2; background:#F7F2E8;
+    }
+    .workspace>.panel:first-child .game-strip { border-color:#60766F; background:#314B45; }
+    .workspace>.panel:first-child .player { border-color:#657B75; background:#3A544E; }
+    .workspace>.panel:first-child .player span,.workspace>.panel:first-child .game-strip { color:#BFD0CB; }
+    .workspace>.panel:first-child .player strong { color:#FFF9ED; }
+    .workspace>.panel:first-child .game-meta { color:#24483F; background:#E8D292; }
+    .board-shell { border-width:5px; border-radius:10px; box-shadow:0 16px 32px rgba(11,28,24,.28); }
+    .controls { padding:18px; gap:10px; }
+    .analysis-action .primary-btn { border-radius:9px; background:#F5BF48; box-shadow:none; }
+    .service-status { border-radius:10px; }
+    .analysis-empty { margin-top:4px; padding:18px 4px 2px; border-top:1px solid #D8D0C2; }
+    .analysis-empty h2 { margin:0 0 12px; color:#173C36; font-size:18px; letter-spacing:-.02em; }
+    .analysis-empty ol { margin:0; padding:0; list-style:none; counter-reset:analysis-step; }
+    .analysis-empty li { counter-increment:analysis-step; display:grid; grid-template-columns:28px 1fr; gap:10px; padding:11px 0; color:#68716C; font-size:12px; line-height:1.55; }
+    .analysis-empty li+li { border-top:1px solid #E3DDD3; }
+    .analysis-empty li::before { content:counter(analysis-step); display:grid; place-items:center; width:25px; height:25px; border-radius:7px; color:#173C36; background:#F3D882; font-weight:900; }
+    .analysis-empty strong { display:block; margin-bottom:2px; color:#285E54; font-size:13px; }
+    body:has(.pgn-summary.active) .analysis-empty { display:none; }
+    .feedback-panel { grid-column:1/-1; border-radius:18px; }
+    .research-report-host { grid-column:2; }
+    button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible {
+      outline:3px solid rgba(245,191,72,.55); outline-offset:2px;
+    }
+    @media (max-width:1240px) {
+      :root { --board-size:min(52vw,590px); }
+      .shell { grid-template-columns:1fr; }
+      .topbar,.hero,.workspace,.research-report-host,.feedback-panel { grid-column:1; }
+      .hero { position:static; }
+      .hero-copy { display:grid; grid-template-columns:minmax(250px,.68fr) minmax(440px,1.32fr); gap:18px; align-items:stretch; }
+      .hero-intro { grid-column:1; }
+      .mascot-duo { grid-column:1; height:180px; margin:16px -6px -6px; border-radius:12px; }
+      .hero-upload { grid-column:2; grid-row:1; margin:0; padding:0; align-self:center; }
+    }
+    @media (max-width:860px) {
+      :root { --board-size:min(92vw,610px); }
+      .shell { padding:10px; gap:12px; }
+      .topbar { align-items:flex-start; }
+      .hero-copy { display:flex; align-items:stretch; gap:12px; padding:0; }
+      .hero-intro { padding:18px; }
+      .mascot-duo { order:2; width:calc(100% + 36px); height:190px; margin:16px -18px 0; border-radius:0; }
+      .hero-upload { order:3; align-self:stretch; margin:0; padding:0; }
+      .workspace { grid-template-columns:1fr; gap:12px; }
+      .workspace>.panel { padding:14px; }
+      .research-report-host { grid-column:1; }
+    }
+    @media (max-width:560px) {
+      .topbar { min-height:0; padding:9px; }
+      .brand { font-size:16px; }
+      .brand-copy small { display:none; }
+      .account-actions { width:100%; }
+      .account-label { order:3; width:100%; max-width:none; }
+      .hero h1 { font-size:30px; }
+      .mascot-duo { height:170px; }
+      .hero-actions { width:100%; max-width:none; }
+      .feedback-panel { margin-top:12px; }
+    }
+    .landing-page {
+      min-height:100vh; padding:18px 20px 22px; color:#173C36;
+      background:#F4F0E7;
+    }
+    .landing-nav {
+      width:min(100%,1420px); min-height:68px; margin:0 auto; padding:10px 12px 10px 10px;
+      display:flex; align-items:center; justify-content:space-between; gap:18px;
+      border:1px solid #D8D0C2; border-radius:16px; background:#FFFCF6;
+      box-shadow:none;
+    }
+    .landing-nav-actions { display:flex; align-items:center; gap:8px; }
+    .landing-login,.landing-enter,.landing-back {
+      min-height:42px; border-radius:9px; padding:9px 16px;
+    }
+    .landing-login { color:#27695C; background:#E5F2EE; }
+    .landing-enter { color:#173C36; background:#F5BF48; box-shadow:none; }
+    .landing-back { border:1px solid #D4CCC0; color:#53625D; background:#FFFCF6; }
+    .landing-hero {
+      width:min(100%,1420px); min-height:calc(100vh - 110px); margin:18px auto 0;
+      display:grid; grid-template-columns:minmax(420px,.92fr) minmax(500px,1.08fr);
+      overflow:hidden; border:1px solid #D8D0C2; border-radius:18px; background:#FFFCF6;
+      box-shadow:none;
+    }
+    .landing-story {
+      padding:clamp(48px,6vw,92px); display:flex; flex-direction:column; justify-content:center;
+    }
+    .landing-story h1 {
+      max-width:10em; margin:0; font-size:clamp(42px,4.8vw,66px); line-height:1.1;
+      letter-spacing:-.035em; text-wrap:balance;
+      font-family:"Microsoft YaHei UI","PingFang SC","Noto Sans SC",system-ui,sans-serif; font-weight:700;
+    }
+    .landing-story>p {
+      max-width:590px; margin:24px 0 0; color:#5F6C66; font-size:clamp(16px,1.25vw,18px); line-height:1.75;
+    }
+    .landing-cta { display:flex; align-items:center; gap:10px; margin-top:34px; flex-wrap:wrap; }
+    .landing-cta .landing-enter { min-height:52px; padding:13px 25px; font-size:16px; }
+    .landing-note { color:#747970; font-size:12px; }
+    .landing-proof {
+      max-width:590px; margin:38px 0 0; padding:12px 0 0; display:grid; grid-template-columns:1fr;
+      border-top:1px solid #D8D0C2;
+    }
+    .landing-proof div { min-width:0; padding:9px 0; display:grid; grid-template-columns:132px minmax(0,1fr); gap:14px; align-items:baseline; }
+    .landing-proof div+div { border-top:1px solid rgba(216,208,194,.72); }
+    .landing-proof strong { display:block; color:#235E53; font-size:14px; white-space:nowrap; }
+    .landing-proof span { display:block; color:#72766F; font-size:12px; line-height:1.55; }
+    .landing-visual {
+      position:relative; min-height:640px; overflow:hidden; background:#173C36;
+    }
+    .landing-visual img { width:100%; height:100%; display:block; object-fit:cover; object-position:center; }
+    .shell[hidden],.landing-page[hidden] { display:none!important; }
+    .shell .mascot-duo { display:none; }
+    .shell .hero-upload { padding-top:0; }
+    .shell:not([hidden]) { animation:appReveal .42s cubic-bezier(.16,1,.3,1); }
+    .topbar,.hero-copy,.hero-upload,.hero-guide,.workspace>.panel,.move-review-card,.professional-section,.metric,.move-card,.professional-route,.professional-opening,.review-fact,.review-best,.player,.pgn-summary,.timeline { animation:none!important; }
+    .topbar,.hero-intro,.workspace>.panel,.move-review-card,.professional-section,.professional-route,.feedback-panel { box-shadow:0 8px 22px rgba(47,57,50,.055)!important; }
+    button,.primary-btn,.analysis-action .primary-btn { box-shadow:none!important; }
+    @keyframes appReveal { from { opacity:.7; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+    @media(max-width:980px) {
+      .landing-hero { grid-template-columns:1fr; }
+      .landing-story { min-height:580px; }
+      .landing-visual { min-height:520px; }
+    }
+    @media(max-width:560px) {
+      .landing-page { padding:10px; }
+      .landing-nav { width:100%; min-width:0; min-height:60px; padding:8px; display:grid; grid-template-columns:minmax(0,1fr) auto; }
+      .landing-nav .brand { min-width:0; }
+      .landing-nav .brand-copy small { display:none; }
+      .landing-nav-actions .landing-login { display:none; }
+      .landing-nav-actions { display:flex; min-width:0; }
+      .landing-nav-actions .landing-enter { min-height:38px; padding:8px 10px; font-size:12px; white-space:nowrap; }
+      .landing-hero { width:100%; max-width:100%; min-width:0; min-height:0; margin-top:10px; border-radius:17px; }
+      .landing-story { width:100%; max-width:100%; min-width:0; min-height:480px; overflow:hidden; padding:40px 22px; }
+      .landing-story h1 { width:100%; max-width:100%; font-size:36px; line-height:1.16; overflow-wrap:break-word; }
+      .landing-story>p { width:100%; max-width:100%; margin-top:20px; font-size:15px; overflow-wrap:anywhere; }
+      .landing-cta { margin-top:26px; }
+      .landing-cta .landing-enter { width:100%; }
+      .landing-note { width:100%; text-align:center; }
+      .landing-mobile-mascot { display:block!important; position:relative; width:100%; height:190px; margin:30px 0 0; overflow:hidden; border-radius:12px; background:#173C36; }
+      .landing-mobile-mascot img { width:100%; height:100%; display:block; object-fit:cover; object-position:center 42%; }
+      .landing-proof { margin-top:34px; grid-template-columns:1fr; }
+      .landing-proof div { padding:11px 0; grid-template-columns:1fr; gap:3px; }
+      .landing-proof div+div { border-top:1px solid #D8D0C2; }
+      .landing-visual { display:none; }
+      .shell .topbar { display:grid; grid-template-columns:1fr; gap:9px; }
+      .shell .brand { width:100%; min-width:0; }
+      .shell .brand-copy { white-space:nowrap; }
+      .shell .account-actions { display:grid; grid-template-columns:auto auto 1fr; gap:7px; align-items:center; }
+      .shell .account-label { grid-column:1/-1; grid-row:2; margin:0; }
+    }
+    .landing-mobile-mascot { display:none; }
+    @media(prefers-reduced-motion:reduce) { .shell:not([hidden]) { animation:none; } }
   </style>
 </head>
 <body>
-<main class="shell">
+<!--
+THESIS: 先用独立首页讲清 PawnLab 的价值与角色，再让用户主动进入棋盘分析台。
+OWN-WORLD: 暖米白纸面、深墨绿棋盘工作区、黄色行动色，以及 P1 研究员与 P2 侦探的品牌主视觉。
+STORY: 认识产品与双角色搭档 → 开始复盘 → 导入 PGN → 在主界面完成棋盘分析 → 可返回首页。
+FIRST VIEWPORT: 大标题解释“把棋局讲成能用的棋理”，右侧双吉祥物共同研究路线，主按钮进入分析台。
+FORM: 用户在审核反馈中明确钉选 Chessire 式“先介绍首页、再进入主界面”的两段路径；这是 brief-pinned direction，按规则优先于 concept roll，无需 seed。
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+BOUNDARY: 本地审核版，未获用户明确批准不得上线。
+-->
+<section class="landing-page" id="landingPage" aria-labelledby="landingTitle">
+  <nav class="landing-nav" aria-label="首页导航">
+    <div class="brand"><span class="brand-mark"><img src="assets/mascot-pawn-detective-v2.webp" alt=""></span><span class="brand-copy">棋盘研究所<small>PAWNLAB · CHESS REVIEW</small></span></div>
+    <div class="landing-nav-actions"><button class="landing-login" type="button" onclick="enterPawnLab(true)">登录</button><button class="landing-enter" type="button" onclick="enterPawnLab(false)">进入分析台</button></div>
+  </nav>
+  <main class="landing-hero">
+    <div class="landing-story">
+      <h1 id="landingTitle">把棋局，讲成你能用的棋理</h1>
+      <p>Stockfish 找出关键时刻，程序核对真实威胁与走法差异，AI 教练负责把已经确认的事实讲清楚。你看到的不只是“哪步更好”，还有下一次遇到类似局面该先想什么。</p>
+      <div class="landing-cta"><button class="landing-enter" type="button" onclick="enterPawnLab(false)">开始复盘一盘棋</button><span class="landing-note">新账号赠送 1 盘完整分析</span></div>
+      <figure class="landing-mobile-mascot"><img src="assets/mascot-duo-homepage-v1.webp" alt="P1 研究员与 P2 侦探一起研究棋局路线"></figure>
+      <div class="landing-proof" aria-label="产品能力">
+        <div><strong>引擎先确认</strong><span>评分、推荐着与路线来自 Stockfish。</span></div>
+        <div><strong>教练再解释</strong><span>把攻防关系和选择代价说清楚。</span></div>
+        <div><strong>下一盘接着练</strong><span>记住近期问题，避免重复空泛建议。</span></div>
+      </div>
+    </div>
+    <figure class="landing-visual">
+      <img src="assets/mascot-duo-homepage-v1.webp" alt="兵小奇的研究员与侦探搭档一起研究棋局路线">
+    </figure>
+  </main>
+</section>
+<main class="shell" id="appShell" hidden>
   <div class="topbar">
-    <div class="brand"><span class="brand-mark">♟</span><span>棋盘研究所</span></div>
-    <a class="review-nav-link" href="review.html">复习训练<span class="review-nav-count" id="reviewNavCount" hidden>0</span></a>
+    <div class="brand"><span class="brand-mark"><img src="assets/mascot-pawn-detective-v2.webp" alt=""></span><span class="brand-copy">棋盘研究所<small>PAWNLAB · CHESS REVIEW</small></span></div>
+    <div class="account-actions"><button class="landing-back" type="button" onclick="returnToLanding()">返回首页</button><span class="account-label" id="accountLabel">未登录 · 注册赠送1盘完整分析</span><button class="ghost-btn" id="accountBtn" type="button" onclick="openAuthDialog()">注册 / 登录</button><button class="ghost-btn" id="logoutBtn" type="button" onclick="logoutAccount()" hidden>退出</button><a class="review-nav-link" href="review.html">复习训练<span class="review-nav-count" id="reviewNavCount" hidden>0</span></a></div>
   </div>
 
   <section class="hero">
     <div class="hero-copy">
-      <span class="eyebrow">✦ 小小棋手的复盘伙伴</span>
-      <h1>让孩子真正看懂<br>自己的棋局</h1>
-      <p class="subtitle">上传一盘PGN，找出最值得学习的几个时刻。<br>复杂的棋局，我们会讲得简单又清楚。</p>
+      <div class="hero-intro">
+        <h1>看懂这一盘，<br>下好下一盘</h1>
+        <p class="subtitle">导入 PGN，先用引擎锁定关键局面，再把走法差异讲成可以复用的棋理。</p>
+      </div>
+      <figure class="mascot-duo"><img src="assets/mascot-duo-homepage-v1.webp" alt="兵小奇的研究员与侦探搭档一起查看棋局路线"></figure>
       <div class="hero-upload">
         <div class="upload-zone">
-          <label class="upload-title" for="sourceInput"><span>📋</span>把棋谱放到研究桌上</label>
+          <label class="upload-title" for="sourceInput"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5h8M9 3h6a1 1 0 0 1 1 1v2H8V4a1 1 0 0 1 1-1Zm-3 3h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>导入棋谱</label>
           <textarea id="sourceInput" spellcheck="false" placeholder="从 chess.com 或 lichess 复制 PGN，粘贴到这里……&#10;&#10;例如：1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6"></textarea>
         </div>
         <div class="hero-actions">
@@ -615,6 +949,15 @@
 
       <div class="small service-status" id="backendStatus">正在连接分析服务...</div>
 
+      <section class="analysis-empty" aria-label="分析台使用说明">
+        <h2>从一盘棋开始</h2>
+        <ol>
+          <li><span><strong>导入 PGN</strong>系统会合法重放棋谱并建立每一步局面。</span></li>
+          <li><span><strong>评价整盘棋</strong>Stockfish 找出真正改变局势的关键时刻。</span></li>
+          <li><span><strong>看懂走法差异</strong>对照你的走法与最佳着，再读程序事实支持的教练解释。</span></li>
+        </ol>
+      </section>
+
       <div class="loading" id="loading" style="display:none;">
         <div class="loading-inner"><span class="loading-piece">♟</span><div><span id="loadingText">正在整理棋谱……</span><div class="loading-dots"><i></i><i></i><i></i></div></div></div>
       </div>
@@ -674,9 +1017,46 @@
     </form>
   </section>
 </main>
+<dialog class="account-dialog" id="authDialog">
+  <div class="dialog-body">
+    <div class="dialog-head"><div><h2>开始你的连续教练复盘</h2><p>新账号赠送1盘完整分析，体验全部核心功能。</p></div><button class="dialog-close" type="button" onclick="document.getElementById('authDialog').close()" aria-label="关闭">×</button></div>
+    <form id="authForm" onsubmit="submitAuth(event, 'login')">
+      <div class="auth-fields">
+        <label for="authIdentifier">手机号<input id="authIdentifier" type="text" autocomplete="username" maxlength="254" placeholder="请输入手机号" required></label>
+        <label for="authPassword">密码<input id="authPassword" type="password" minlength="8" maxlength="128" autocomplete="current-password" required></label>
+        <label for="authPasswordConfirm">确认密码（注册时填写）<input id="authPasswordConfirm" type="password" minlength="8" maxlength="128" autocomplete="new-password"></label>
+      </div>
+      <p class="auth-hint">密码至少8位。已有邮箱账号仍可在手机号一栏输入原邮箱登录。</p>
+      <div class="auth-buttons"><button class="primary-btn" id="authLoginSubmit" type="submit">登录</button><button class="secondary-btn" id="authRegisterSubmit" type="button" onclick="submitAuth(event, 'register')">注册并领取免费分析</button></div>
+      <p class="dialog-status" id="authStatus" role="status" aria-live="polite"></p>
+    </form>
+  </div>
+</dialog>
+<dialog class="account-dialog" id="paywallDialog">
+  <div class="dialog-body">
+    <div class="dialog-head"><div><h2>继续完整分析</h2><p>你的免费完整分析已使用。月付与年付功能完全一致。</p></div><button class="dialog-close" type="button" onclick="document.getElementById('paywallDialog').close()" aria-label="关闭">×</button></div>
+    <div class="pricing-grid">
+      <article class="price-card"><h3>月会员</h3><div class="price-main">首月 ¥9.9</div><p class="price-note">之后 ¥19.9/月。完整棋局、AI教练、历史记忆与全部关键局面分析。</p><button class="primary-btn" type="button" onclick="createMembershipOrder('monthly')">选择月会员</button></article>
+      <article class="price-card recommended"><span class="price-badge">最划算</span><h3>年会员</h3><div class="price-main">¥168/年</div><p class="price-note">平均 ¥14/月，相比月付一年节省 ¥70.8。不会默认替你选择。</p><button class="primary-btn" type="button" onclick="createMembershipOrder('yearly')">选择年会员</button></article>
+    </div>
+    <section class="payment-method-panel" id="paymentMethodPanel" hidden aria-labelledby="paymentMethodTitle">
+      <h3 id="paymentMethodTitle">选择支付方式</h3>
+      <p class="payment-plan-summary" id="paymentPlanSummary"></p>
+      <div class="payment-methods">
+        <button class="payment-method-btn" id="manualWechatBtn" type="button" onclick="submitSelectedPayment('wechat')"><span class="payment-method-icon wechat">微</span>微信收款码</button>
+        <button class="payment-method-btn" id="manualAlipayBtn" type="button" onclick="submitSelectedPayment('alipay')"><span class="payment-method-icon alipay">支</span>支付宝收款码</button>
+      </div>
+      <div class="payment-qr" id="paymentQr" hidden><img id="paymentQrImage" src="assets/payment/wechat-personal-qr.webp" alt="个人收款二维码"><p id="paymentQrCopy">扫码支付后，请提交下方付款人手机号<br>管理员核对到账后开通当前登录账号的会员</p></div>
+      <form class="manual-payment-form" id="manualPaymentForm" hidden onsubmit="submitManualPayment(event)">
+        <label for="manualPaymentPhone">付款人手机号<input id="manualPaymentPhone" type="tel" inputmode="numeric" autocomplete="tel" maxlength="20" placeholder="请输入付款人手机号" required></label>
+        <p class="manual-payment-note">手机号只用于核对本次付款。请按页面显示金额付款；提交后状态为“等待人工审核”，只有管理员确认真实到账，当前登录账号的会员才会生效。</p>
+        <button class="primary-btn" id="manualPaymentSubmit" type="submit">我已付款，提交审核</button>
+      </form>
+    </section>
+    <p class="dialog-status" id="paymentStatus" role="status"></p>
+  </div>
+</dialog>
 
-<!-- chess.js v0.10.2 (本地版，已添加全局 Chess 变量) -->
-<script src="chess.js"></script>
 <script src="runtime-config.js"></script>
 
 <script>
@@ -697,18 +1077,20 @@ const PIECE_ASSET = {
   k: "assets/chess/pieces-v3/black_king.webp"
 };
 const EXAMPLES = {
-  italian: "1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 4. d3 Be7 5. O-O O-O 6. Re1 d6",
+  italian: "1. e4 e5 2. Nf3 Nc6 3. Bc4 Bc5 4. c3 Nf6 5. d4 exd4 6. cxd4 Bb4+ 7. Nc3 Nxe4 8. O-O Bxc3 9. d5 Bf6 10. Re1 Ne7",
   scholars: "1. e4 e5 2. Qh5 Nc6 3. Bc4 Nf6 4. Qxf7#"
 };
 
-let game = new Chess();
+const INITIAL_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+let game = null;
 let moves = []; // 每步后的 fen
-let initialFen = game.fen();
+let initialFen = INITIAL_FEN;
 let currentStep = 0;
 let totalSteps = 0;
 let pgnHeaders = {};
 let engine = null; // Stockfish WASM instance
 let engineReady = false;
+let engineInitPromise = null;
 let engineQueue = [];
 let engineResolve = null;
 let analyzing = false;
@@ -723,16 +1105,328 @@ let moveExplanationCache = new Map();
 let explanationRequestToken = 0;
 let professionalAnalysisCache = new Map();
 let professionalRequestToken = 0;
+const OPENING_CONTEXT_UI_VERSION = 8;
 const professionalAnalysisPending = new Map();
+const positionVerificationPending = new Map();
 let backendReconnectTimer = null;
 
 const IS_LOCAL_FRONTEND = ["localhost", "127.0.0.1"].includes(window.location.hostname);
 const API_BASE_URL = IS_LOCAL_FRONTEND
   ? "http://127.0.0.1:8000"
   : (window.CHESS_API_BASE_URL || "");
+const AUTH_TOKEN_KEY = "pawnlab_auth_token_v1";
+let currentAccount = null;
+let chessRuntimePromise;
+let selectedMembershipType = null;
+let selectedPaymentProvider = null;
+let manualPaymentConfig = null;
+let paymentPollToken = 0;
+
+async function ensureChessRuntime() {
+  if (!chessRuntimePromise) {
+    chessRuntimePromise = import("./pgn-runtime.js")
+      .then(module => module.loadChessLibrary())
+      .catch(error => {
+        chessRuntimePromise = null;
+        throw error;
+      });
+  }
+  await chessRuntimePromise;
+  if (!game) game = new Chess(initialFen);
+}
 
 function apiUrl(path) {
   return `${API_BASE_URL}${path}`;
+}
+
+function authToken() {
+  try { return localStorage.getItem(AUTH_TOKEN_KEY) || ""; } catch (error) { return ""; }
+}
+
+function authorizedHeaders(headers = {}) {
+  const token = authToken();
+  return token ? { ...headers, Authorization: `Bearer ${token}` } : { ...headers };
+}
+
+function openAuthDialog() {
+  document.getElementById("authStatus").textContent = "";
+  document.getElementById("authDialog").showModal();
+}
+
+function openPaywall() {
+  document.getElementById("paymentStatus").textContent = "";
+  document.getElementById("paymentMethodPanel").hidden = true;
+  document.getElementById("paymentQr").hidden = true;
+  document.getElementById("manualPaymentForm").hidden = true;
+  document.getElementById("manualPaymentSubmit").disabled = false;
+  document.getElementById("manualPaymentSubmit").textContent = "我已付款，提交审核";
+  selectedMembershipType = null;
+  selectedPaymentProvider = null;
+  paymentPollToken += 1;
+  document.getElementById("paywallDialog").showModal();
+  resumePendingManualPayment();
+}
+
+async function resumePendingManualPayment() {
+  if (!authToken()) return;
+  try {
+    const response = await fetchWithTimeout(apiUrl("/api/billing/manual-requests/me"), {
+      cache: "no-store", headers: authorizedHeaders()
+    }, 8000);
+    if (!response.ok) return;
+    const requests = await response.json();
+    const pending = requests.find(item => item.status === "pending");
+    if (!pending) return;
+    selectedMembershipType = pending.membership_type;
+    selectedPaymentProvider = pending.payment_provider;
+    document.getElementById("paymentMethodPanel").hidden = false;
+    document.getElementById("paymentPlanSummary").textContent = `${pending.membership_type === "yearly" ? "年会员" : "月会员"} · ${pending.amount_display}`;
+    document.getElementById("paymentStatus").textContent = `已有 ${pending.amount_display} 的申请正在等待人工审核，请勿重复付款。`;
+    sessionStorage.setItem("pawnlab_pending_order", pending.order_id);
+    pollPaymentOrder(pending.order_id);
+  } catch (error) {
+    // Pending status is optional context; payment options remain available.
+  }
+}
+
+async function submitAuth(event, mode) {
+  event?.preventDefault?.();
+  const form = document.getElementById("authForm");
+  if (!form.reportValidity()) return;
+  const status = document.getElementById("authStatus");
+  const identifierInput = document.getElementById("authIdentifier");
+  const passwordInput = document.getElementById("authPassword");
+  const confirmationInput = document.getElementById("authPasswordConfirm");
+  const loginButton = document.getElementById("authLoginSubmit");
+  const registerButton = document.getElementById("authRegisterSubmit");
+  const rawIdentifier = identifierInput.value.trim();
+  const normalizedPhone = rawIdentifier.replace(/[\s-]/g, "").replace(/^\+?86(?=1[3-9]\d{9}$)/, "");
+  const validPhone = /^1[3-9]\d{9}$/.test(normalizedPhone);
+  const legacyEmail = /^[^@\s]+@[^@\s]+$/.test(rawIdentifier);
+  identifierInput.setAttribute("aria-invalid", "false");
+  confirmationInput.setAttribute("aria-invalid", "false");
+
+  if (mode === "register" && !validPhone) {
+    identifierInput.setAttribute("aria-invalid", "true");
+    status.textContent = "请输入有效的中国大陆手机号。";
+    identifierInput.focus();
+    return;
+  }
+  if (mode === "login" && !validPhone && !legacyEmail) {
+    identifierInput.setAttribute("aria-invalid", "true");
+    status.textContent = "请输入有效手机号；已有邮箱账号可输入原邮箱登录。";
+    identifierInput.focus();
+    return;
+  }
+  if (mode === "register" && passwordInput.value !== confirmationInput.value) {
+    confirmationInput.setAttribute("aria-invalid", "true");
+    status.textContent = "两次输入的密码不一致，请重新确认。";
+    confirmationInput.focus();
+    return;
+  }
+
+  status.textContent = mode === "register" ? "正在创建账号……" : "正在登录……";
+  loginButton.disabled = true;
+  registerButton.disabled = true;
+  try {
+    const requestBody = mode === "register"
+      ? { phone: normalizedPhone, password: passwordInput.value, password_confirm: confirmationInput.value }
+      : { identifier: validPhone ? normalizedPhone : rawIdentifier, password: passwordInput.value };
+    const response = await fetchWithTimeout(apiUrl(`/api/auth/${mode}`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(requestBody)
+    });
+    const payload = await response.json().catch(() => ({}));
+    const detail = Array.isArray(payload.detail) ? payload.detail[0]?.msg?.replace(/^Value error,\s*/, "") : payload.detail;
+    if (!response.ok) throw new Error(typeof detail === "string" ? detail : "账号操作失败，请稍后重试");
+    localStorage.setItem(AUTH_TOKEN_KEY, payload.token);
+    currentAccount = payload.account;
+    renderAccount();
+    form.reset();
+    document.getElementById("authDialog").close();
+  } catch (error) {
+    status.textContent = error.message;
+  } finally {
+    loginButton.disabled = false;
+    registerButton.disabled = false;
+  }
+}
+
+async function loadCurrentAccount() {
+  if (!authToken()) return renderAccount();
+  try {
+    const response = await fetchWithTimeout(apiUrl("/api/auth/me"), {
+      cache: "no-store",
+      headers: authorizedHeaders()
+    });
+    if (!response.ok) throw new Error("登录已过期");
+    currentAccount = await response.json();
+  } catch (error) {
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+    currentAccount = null;
+  }
+  renderAccount();
+}
+
+function renderAccount() {
+  const label = document.getElementById("accountLabel");
+  const button = document.getElementById("accountBtn");
+  const logoutButton = document.getElementById("logoutBtn");
+  if (!currentAccount) {
+    label.textContent = "未登录 · 注册赠送1盘完整分析";
+    button.textContent = "注册 / 登录";
+    button.onclick = openAuthDialog;
+    logoutButton.hidden = true;
+    return;
+  }
+  const member = currentAccount.membership_status === "active";
+  const accountIdentity = currentAccount.phone || currentAccount.email || "当前账号";
+  label.textContent = member
+    ? `${accountIdentity} · ${currentAccount.membership_type === "yearly" ? "年会员" : "月会员"}`
+    : `${accountIdentity} · ${currentAccount.free_analysis_used ? "免费分析已使用" : "剩余1盘免费完整分析"}`;
+  button.textContent = member ? "会员已生效" : "查看会员";
+  button.onclick = member ? () => {} : openPaywall;
+  logoutButton.hidden = false;
+}
+
+async function logoutAccount() {
+  try {
+    await fetchWithTimeout(apiUrl("/api/auth/logout"), {
+      method: "POST",
+      headers: authorizedHeaders()
+    }, 8000);
+  } catch (error) {
+    // Local logout still clears the credential if the service is temporarily unavailable.
+  }
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+  currentAccount = null;
+  gameReview = null;
+  professionalAnalysisCache.clear();
+  renderAccount();
+  updateMoveReviewPanel();
+}
+
+async function createMembershipOrder(membershipType) {
+  selectedMembershipType = membershipType;
+  const panel = document.getElementById("paymentMethodPanel");
+  document.getElementById("paymentPlanSummary").textContent = membershipType === "yearly"
+    ? "年会员 · ¥168/年（平均 ¥14/月）"
+    : `月会员 · ${currentAccount?.first_month_discount_used ? "¥19.9/月" : "首月 ¥9.9，之后 ¥19.9/月"}`;
+  document.getElementById("paymentQr").hidden = true;
+  document.getElementById("manualPaymentForm").hidden = true;
+  document.getElementById("manualPaymentSubmit").disabled = false;
+  document.getElementById("manualPaymentSubmit").textContent = "我已付款，提交审核";
+  document.getElementById("paymentStatus").textContent = "";
+  panel.hidden = false;
+  loadManualPaymentConfig();
+  panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+async function loadManualPaymentConfig() {
+  const status = document.getElementById("paymentStatus");
+  try {
+    const response = await fetchWithTimeout(apiUrl("/api/billing/manual/config"), { cache: "no-store" }, 8000);
+    if (!response.ok) throw new Error("收款方式读取失败");
+    manualPaymentConfig = await response.json();
+    const wechatButton = document.getElementById("manualWechatBtn");
+    const alipayButton = document.getElementById("manualAlipayBtn");
+    wechatButton.disabled = !manualPaymentConfig.wechat_qr_url;
+    alipayButton.disabled = !manualPaymentConfig.alipay_qr_url;
+    if (!manualPaymentConfig.enabled) status.textContent = "个人收款码尚未配置，请稍后再试。";
+  } catch (error) {
+    manualPaymentConfig = null;
+    document.getElementById("manualWechatBtn").disabled = true;
+    document.getElementById("manualAlipayBtn").disabled = true;
+    status.textContent = error.message;
+  }
+}
+
+async function submitSelectedPayment(paymentProvider) {
+  const status = document.getElementById("paymentStatus");
+  if (!selectedMembershipType) {
+    status.textContent = "请先选择月会员或年会员";
+    return;
+  }
+  if (!manualPaymentConfig) await loadManualPaymentConfig();
+  const qrUrl = paymentProvider === "wechat"
+    ? manualPaymentConfig?.wechat_qr_url
+    : manualPaymentConfig?.alipay_qr_url;
+  if (!qrUrl) {
+    status.textContent = "该收款码尚未配置，请稍后再试。";
+    return;
+  }
+  selectedPaymentProvider = paymentProvider;
+  document.getElementById("paymentQrImage").src = new URL(qrUrl, window.location.origin).href;
+  document.getElementById("paymentQrImage").alt = paymentProvider === "wechat" ? "微信个人收款码" : "支付宝个人收款码";
+  document.getElementById("paymentQrCopy").innerHTML = `${paymentProvider === "wechat" ? "请使用微信扫码付款" : "请使用支付宝扫码付款"}<br>付款后提交下方付款人手机号`;
+  document.getElementById("manualPaymentPhone").value = "";
+  document.getElementById("paymentQr").hidden = false;
+  document.getElementById("manualPaymentForm").hidden = false;
+  status.textContent = "请按所选会员方案的金额完成付款。";
+}
+
+async function submitManualPayment(event) {
+  event.preventDefault();
+  const status = document.getElementById("paymentStatus");
+  const button = document.getElementById("manualPaymentSubmit");
+  if (!selectedMembershipType || !selectedPaymentProvider) {
+    status.textContent = "请先选择会员方案和收款方式。";
+    return;
+  }
+  button.disabled = true;
+  status.textContent = "正在提交人工审核申请……";
+  try {
+    const response = await fetchWithTimeout(apiUrl("/api/billing/manual-requests"), {
+      method: "POST",
+      headers: authorizedHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        membership_type: selectedMembershipType,
+        payment_provider: selectedPaymentProvider,
+        phone: document.getElementById("manualPaymentPhone").value.trim()
+      })
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(typeof payload.detail === "string" ? payload.detail : "审核申请提交失败");
+    sessionStorage.setItem("pawnlab_pending_order", payload.order_id);
+    status.textContent = `申请已提交：${payload.amount_display}，等待管理员核对到账。`;
+    button.textContent = "已提交，等待审核";
+    pollPaymentOrder(payload.order_id);
+  } catch (error) {
+    status.textContent = error.message;
+    button.disabled = false;
+  }
+}
+
+async function pollPaymentOrder(orderId) {
+  const token = ++paymentPollToken;
+  const status = document.getElementById("paymentStatus");
+  for (let attempt = 0; attempt < 150 && token === paymentPollToken; attempt += 1) {
+    if (attempt > 0) await new Promise(resolve => setTimeout(resolve, 2000));
+    try {
+      const response = await fetchWithTimeout(apiUrl(`/api/billing/orders/${encodeURIComponent(orderId)}`), {
+        cache: "no-store",
+        headers: authorizedHeaders()
+      }, 8000);
+      if (!response.ok) continue;
+      const order = await response.json();
+      if (order.status === "paid") {
+        sessionStorage.removeItem("pawnlab_pending_order");
+        await loadCurrentAccount();
+        status.textContent = "审核通过，会员已立即生效。";
+        document.getElementById("paymentQr").hidden = true;
+        setTimeout(() => document.getElementById("paywallDialog").close(), 900);
+        return;
+      }
+      if (["failed", "cancelled"].includes(order.status)) {
+        status.textContent = "本次支付未完成，请重新选择支付方式。";
+        return;
+      }
+    } catch (error) {
+      // A transient polling failure does not change the provider payment state.
+    }
+  }
+  if (token === paymentPollToken) status.textContent = "暂未确认支付结果，可稍后刷新账号状态。";
 }
 
 function getVisitorId() {
@@ -807,7 +1501,11 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 12000) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetch(url, { ...options, signal: controller.signal });
+    return await fetch(url, {
+      ...options,
+      headers: authorizedHeaders(options.headers || {}),
+      signal: controller.signal
+    });
   } finally {
     clearTimeout(timeout);
   }
@@ -856,7 +1554,9 @@ let engineOutput = ""; // 累积引擎输出
 let engineResolveCallback = null;
 
 function initEngine() {
-  return new Promise((resolve, reject) => {
+  if (engineReady) return Promise.resolve();
+  if (engineInitPromise) return engineInitPromise;
+  engineInitPromise = new Promise((resolve, reject) => {
     console.log("[SF] Starting Stockfish worker...");
 
     // stockfish.js 可以直接作为 Web Worker 使用
@@ -898,7 +1598,8 @@ function initEngine() {
         analyzing = false;
         if (engineQueue.length > 0) {
           const next = engineQueue.shift();
-          sendToEngine(next.fen, next.resolve);
+          analyzing = true;
+          sendToEngine(next.fen, next.resolve, next.depth);
         }
       }
     };
@@ -914,29 +1615,33 @@ function initEngine() {
     worker.postMessage("setoption name Hash value 64");
     worker.postMessage("setoption name MultiPV value 3");
     worker.postMessage("isready");
+  }).catch(error => {
+    engineInitPromise = null;
+    throw error;
   });
+  return engineInitPromise;
 }
 
-function sendToEngine(fen, resolve) {
+function sendToEngine(fen, resolve, depth = 12) {
   engineOutput = "";
   engineResolveCallback = resolve;
   engine.postMessage("ucinewgame");
   engine.postMessage("position fen " + fen);
-  engine.postMessage("go depth 16");
+  engine.postMessage(`go depth ${depth}`);
 }
 
-function analyzeWithEngine(fen) {
+function analyzeWithEngine(fen, depth = 12) {
   return new Promise((resolve) => {
     if (!engineReady) {
-      engineQueue.push({ fen, resolve });
+      engineQueue.push({ fen, resolve, depth });
       return;
     }
     if (analyzing) {
-      engineQueue.push({ fen, resolve });
+      engineQueue.push({ fen, resolve, depth });
       return;
     }
     analyzing = true;
-    sendToEngine(fen, resolve);
+    sendToEngine(fen, resolve, depth);
   });
 }
 
@@ -945,6 +1650,7 @@ function parseEngineOutput(output, startFen) {
   const result = { top_moves: [], depth: 0, nodes: 0, time_ms: 0 };
   let currentDepth = 0;
   const pvMap = {};
+  const scoreDirection = startFen.split(" ")[1] === "b" ? -1 : 1;
 
   for (const line of lines) {
     if (line.startsWith("info")) {
@@ -965,8 +1671,8 @@ function parseEngineOutput(output, startFen) {
       if (pvMatch && scoreMatch) {
         const pvUcis = pvMatch[1].trim().split(/\s+/);
         const sanSeq = uciSequenceToSan(pvUcis, startFen);
-        const mateIn = scoreMatch[1] === "mate" ? parseInt(scoreMatch[2]) : null;
-        const centipawn = scoreMatch[1] === "cp" ? parseInt(scoreMatch[2]) : null;
+        const mateIn = scoreMatch[1] === "mate" ? parseInt(scoreMatch[2]) * scoreDirection : null;
+        const centipawn = scoreMatch[1] === "cp" ? parseInt(scoreMatch[2]) * scoreDirection : null;
 
         pvMap[mpv] = {
           move: pvUcis[0] || "",
@@ -981,17 +1687,12 @@ function parseEngineOutput(output, startFen) {
     }
   }
 
-  // 排序 multipv：mate 优先，然后按 cp 从高到低
-  result.top_moves = Object.values(pvMap).sort((a, b) => {
-    if (a.mate_in != null && b.mate_in != null) {
-      const aVal = a.mate_in > 0 ? 9999 - a.mate_in : -9999 + a.mate_in;
-      const bVal = b.mate_in > 0 ? 9999 - b.mate_in : -9999 + b.mate_in;
-      return bVal - aVal;
-    }
-    if (a.mate_in != null) return -1;
-    if (b.mate_in != null) return 1;
-    return (b.centipawn || 0) - (a.centipawn || 0);
-  });
+  // UCI MultiPV 已按当前行棋方排好名次。转换成白方视角后不能再按
+  // 分数重排，否则黑方局面会把最差候选误当成第一选择。
+  result.top_moves = Object.keys(pvMap)
+    .map(Number)
+    .sort((a, b) => a - b)
+    .map(rank => pvMap[rank]);
 
   // 评估文本（严格按 Stockfish cp 值）
   if (result.top_moves.length > 0) {
@@ -1090,12 +1791,13 @@ function formatGameLength(entries) {
   return `${entries.length} 着 · ${roundLabel}`;
 }
 
-function importPgn() {
+async function importPgn() {
   const raw = document.getElementById("sourceInput").value.trim();
   if (!raw) return showError("请先粘贴 PGN");
   clearError();
 
   try {
+    await ensureChessRuntime();
     parsePgn(raw);
   } catch (e) {
     showError("无法解析 PGN：" + e.message);
@@ -1194,9 +1896,9 @@ function rebuildGameAtStep(step) {
 
 function clearAll() {
   document.getElementById("sourceInput").value = "";
-  game = new Chess();
-  initialFen = game.fen();
-  moves = [game.fen()];
+  game = globalThis.Chess ? new Chess() : null;
+  initialFen = game ? game.fen() : INITIAL_FEN;
+  moves = [initialFen];
   pgnMoves = [];
   currentStep = 0;
   totalSteps = 0;
@@ -1223,9 +1925,128 @@ function loadExample(name) {
 }
 
 // ========== 分析 ==========
+function localEvaluationSnapshot(result) {
+  const best = result?.top_moves?.[0] || {};
+  const centipawn = Number.isFinite(best.centipawn) ? best.centipawn : null;
+  const mateIn = Number.isFinite(best.mate_in) ? best.mate_in : null;
+  return {
+    evaluation: result?.evaluation || "—",
+    perspective: "white",
+    centipawn,
+    evaluation_pawns: centipawn == null ? null : centipawn / 100,
+    mate_in: mateIn
+  };
+}
+
+function localMoveQuality(before, after, side, playedUci, bestUci, move) {
+  const direction = side === "white" ? 1 : -1;
+  const beforeCp = before.centipawn == null ? null : before.centipawn * direction;
+  const afterCp = after.centipawn == null ? null : after.centipawn * direction;
+  const loss = beforeCp == null || afterCp == null ? null : Math.max(0, beforeCp - afterCp);
+  let key = "routine";
+  if (before.mate_in != null || after.mate_in != null) {
+    key = playedUci === bestUci ? "best" : "mistake";
+  } else if (playedUci === bestUci || (loss != null && loss <= 15)) key = "best";
+  else if (loss != null && loss <= 40) key = "good";
+  else if (loss != null && loss <= 90) key = "inaccuracy";
+  else if (loss != null && loss <= 200) key = "mistake";
+  else if (loss != null) key = "blunder";
+  if (move.fullMoveNumber <= 8 && key === "best") key = "routine";
+  const meta = {
+    best: ["!", "最佳着"], good: ["✓", "好棋"], inaccuracy: ["?!", "不精确"],
+    mistake: ["?", "错误"], blunder: ["??", "败着"], routine: ["—", "常规着"]
+  }[key];
+  return { key, symbol: meta[0], label: meta[1], loss };
+}
+
+function localCandidateLines(result, fen) {
+  return (result?.top_moves || []).map((line, index) => ({
+    id: `local:${index + 1}`,
+    rank: index + 1,
+    depth: line.depth || result.depth || 0,
+    evaluation: line.centipawn,
+    mate: line.mate_in,
+    firstMove: { san: line.san, uci: line.move },
+    pv: [line.san, ...(line.pv || [])].filter(Boolean).map((san, plyIndex) => ({ san, plyIndex })),
+    resultingFen: fen,
+    verified: false
+  }));
+}
+
+function buildLocalGameReview(analysisId, results) {
+  const reviews = pgnMoves.map((move, index) => {
+    const beforeResult = results[index];
+    const afterResult = results[index + 1];
+    const before = localEvaluationSnapshot(beforeResult);
+    const after = localEvaluationSnapshot(afterResult);
+    const replay = new Chess(moves[index]);
+    const applied = replay.move(move.san);
+    const playedUci = applied ? `${applied.from}${applied.to}${applied.promotion || ""}` : "";
+    const best = beforeResult?.top_moves?.[0] || {};
+    const quality = localMoveQuality(before, after, move.side, playedUci, best.move, move);
+    return {
+      index: index + 1,
+      move_number: move.fullMoveNumber,
+      notation: `${move.fullMoveNumber}${move.side === "white" ? "." : "..."}${move.san}`,
+      side: move.side,
+      san: move.san,
+      uci: playedUci,
+      before_fen: moves[index],
+      after_fen: moves[index + 1],
+      before,
+      after,
+      best_move_uci: best.move || null,
+      best_move_san: best.san || null,
+      best_pv: [best.san, ...(best.pv || [])].filter(Boolean),
+      centipawn_loss: quality.loss,
+      quality_key: quality.key,
+      quality_symbol: quality.symbol,
+      quality_label: quality.label,
+      mate_involved: before.mate_in != null || after.mate_in != null,
+      complexity: "normal",
+      candidate_lines: localCandidateLines(beforeResult, moves[index]),
+      actual_move_line: localCandidateLines(afterResult, moves[index + 1])[0] || null,
+      _authoritative: false
+    };
+  });
+  return {
+    analysis_id: analysisId,
+    depth: Math.min(...results.map(result => result.depth || 0)),
+    move_count: reviews.length,
+    moves: reviews,
+    analysis_mode: "browser_scan_server_verify"
+  };
+}
+
+async function scanGameInBrowser() {
+  await initEngine();
+  const results = [];
+  for (let index = 0; index < moves.length; index += 1) {
+    document.getElementById("loadingText").textContent = `本机引擎正在扫描 ${index + 1}/${moves.length} 个局面……`;
+    let timeoutId;
+    const output = await Promise.race([
+      analyzeWithEngine(moves[index], 12),
+      new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error("本机引擎单局面扫描超时")), 45000);
+      })
+    ]).finally(() => clearTimeout(timeoutId));
+    results.push(parseEngineOutput(output, moves[index]));
+    await new Promise(resolve => setTimeout(resolve, 0));
+  }
+  return results;
+}
+
 async function analyzeGame() {
   const pgn = document.getElementById("sourceInput").value.trim();
   if (!pgn || !totalSteps) return showError("请先导入一盘 PGN 棋谱");
+  if (!authToken()) {
+    openAuthDialog();
+    return;
+  }
+  if (currentAccount?.free_analysis_used && currentAccount?.membership_status !== "active") {
+    openPaywall();
+    return;
+  }
   clearError();
   const button = document.getElementById("gameAnalyzeBtn");
   button.disabled = true;
@@ -1241,38 +2062,62 @@ async function analyzeGame() {
   }, 3500);
 
   try {
+    clearInterval(loadingStageTimer);
+    loadingStageTimer = null;
+    let localResults = null;
     let response;
     let payload;
-    const maxAttempts = 12;
-    const retryableStatuses = new Set([429, 502, 503, 504]);
-    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      try {
-        response = await fetchWithTimeout(apiUrl("/api/game-review"), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pgn })
-        }, 1260000);
-        payload = await response.json().catch(() => ({}));
-      } catch (requestError) {
-        if (requestError.name === "AbortError" || attempt === maxAttempts) throw requestError;
-        const retrySeconds = Math.min(30, attempt * 5);
-        stage = stages.length - 1;
-        stages[stage] = `分析服务连接中断，${retrySeconds} 秒后自动重试（${attempt}/${maxAttempts - 1}）……`;
-        document.getElementById("loadingText").textContent = stages[stage];
-        await new Promise(resolve => setTimeout(resolve, retrySeconds * 1000));
-        stages[stage] = "正在重新连接分析服务，请保持页面打开……";
-        continue;
-      }
-      if (!retryableStatuses.has(response.status) || attempt === maxAttempts) break;
-      const retrySeconds = Math.min(30, Math.max(3, Number(response.headers.get("Retry-After")) || attempt * 5));
-      stage = stages.length - 1;
-      stages[stage] = `分析服务器正在恢复或排队，${retrySeconds} 秒后自动重试（${attempt}/${maxAttempts - 1}）……`;
-      document.getElementById("loadingText").textContent = stages[stage];
-      await new Promise(resolve => setTimeout(resolve, retrySeconds * 1000));
-      stages[stage] = "已重新进入分析队列，请保持页面打开……";
+    try {
+      localResults = await scanGameInBrowser();
+    } catch (localError) {
+      localResults = null;
     }
-    if (!response.ok) throw new Error(payload.detail || `整盘分析服务错误 (${response.status})`);
-    gameReview = payload;
+    if (localResults) {
+      document.getElementById("loadingText").textContent = "正在建立后台复核任务……";
+      response = await fetchWithTimeout(apiUrl("/api/game-review/start-local"), {
+        method: "POST",
+        headers: authorizedHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ pgn })
+      }, 30000);
+      payload = await response.json().catch(() => ({}));
+    } else {
+      document.getElementById("loadingText").textContent = "本机引擎不可用，正在切换后台完整分析……";
+      const maxAttempts = 12;
+      const retryableStatuses = new Set([429, 502, 503, 504]);
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        try {
+          response = await fetchWithTimeout(apiUrl("/api/game-review"), {
+            method: "POST",
+            headers: authorizedHeaders({ "Content-Type": "application/json" }),
+            body: JSON.stringify({ pgn })
+          }, 1260000);
+          payload = await response.json().catch(() => ({}));
+        } catch (requestError) {
+          if (requestError.name === "AbortError" || attempt === maxAttempts) throw requestError;
+          const retrySeconds = Math.min(30, attempt * 5);
+          document.getElementById("loadingText").textContent = `分析服务连接中断，${retrySeconds} 秒后自动重试（${attempt}/${maxAttempts - 1}）……`;
+          await new Promise(resolve => setTimeout(resolve, retrySeconds * 1000));
+          continue;
+        }
+        if (!retryableStatuses.has(response.status) || attempt === maxAttempts) break;
+        const retrySeconds = Math.min(30, Math.max(3, Number(response.headers.get("Retry-After")) || attempt * 5));
+        document.getElementById("loadingText").textContent = `分析服务器正在恢复或排队，${retrySeconds} 秒后自动重试（${attempt}/${maxAttempts - 1}）……`;
+        await new Promise(resolve => setTimeout(resolve, retrySeconds * 1000));
+      }
+    }
+    if (response.status === 402) {
+      openPaywall();
+      throw new Error(payload.detail?.message || "免费分析已使用，请选择会员方案");
+    }
+    if (response.status === 401) {
+      localStorage.removeItem(AUTH_TOKEN_KEY);
+      currentAccount = null;
+      renderAccount();
+      openAuthDialog();
+    }
+    const detail = typeof payload.detail === "string" ? payload.detail : payload.detail?.message;
+    if (!response.ok) throw new Error(detail || `整盘分析服务错误 (${response.status})`);
+    gameReview = localResults ? buildLocalGameReview(payload.analysis_id, localResults) : payload;
     payload.moves?.forEach((review, index) => {
       if (!pgnMoves[index]) return;
       pgnMoves[index].fullMoveNumber = review.move_number;
@@ -1285,7 +2130,10 @@ async function analyzeGame() {
     renderMovePreview();
     renderBoard();
     updateMoveReviewPanel();
-    document.getElementById("backendStatus").textContent = `逐步评价完成 · 共 ${payload.move_count} 步 · 深度 ${payload.depth}`;
+    document.getElementById("backendStatus").textContent = localResults
+      ? `本机扫描完成 · 共 ${payload.move_count} 步 · 点开任一步由后台确认`
+      : `后台完整评价完成 · 共 ${payload.move_count} 步 · 深度 ${payload.depth}`;
+    await loadCurrentAccount();
   } catch (e) {
     const reason = e.name === "AbortError" ? "整盘分析等待超时，请稍后重试" : e.message;
     showError("逐步评价失败：" + reason);
@@ -1295,6 +2143,37 @@ async function analyzeGame() {
     document.getElementById("loading").style.display = "none";
     button.disabled = false;
     button.textContent = "重新评价整盘棋";
+  }
+}
+
+async function verifySelectedMove(review) {
+  const key = `${gameReview.analysis_id}:${review.index}`;
+  let pending = positionVerificationPending.get(key);
+  if (!pending) {
+    pending = fetchWithTimeout(apiUrl("/api/game-review/position"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ analysis_id: gameReview.analysis_id, move_index: review.index })
+    }, 180000).then(async response => {
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const detail = typeof payload.detail === "string" ? payload.detail : "后台确认失败";
+        throw new Error(detail);
+      }
+      const verified = { ...payload.review, _authoritative: true };
+      gameReview.moves[review.index - 1] = verified;
+      return verified;
+    }).finally(() => positionVerificationPending.delete(key));
+    positionVerificationPending.set(key, pending);
+  }
+  try {
+    await pending;
+    renderMovePreview();
+    if (currentStep === review.index) updateMoveReviewPanel();
+  } catch (error) {
+    if (currentStep === review.index) {
+      document.getElementById("professionalAnalysisContent").innerHTML = `<p class="professional-status">后台暂时没有确认成功：${escapeHtml(error.message)}。本机扫描结果仅供定位，点击其他棋步不受影响。</p>`;
+    }
   }
 }
 
@@ -1311,7 +2190,10 @@ function updateMoveReviewPanel() {
   card.classList.add("active");
   const sideLabel = review.side === "white" ? "白方" : "黑方";
   const complexityLabel = { simple: "简单局面", normal: "普通局面", complex: "复杂局面" }[review.complexity] || "普通局面";
-  document.getElementById("moveReviewContext").textContent = `第 ${review.move_number} 回合 · ${sideLabel} · ${complexityLabel}`;
+  const verificationLabel = gameReview?.analysis_mode === "browser_scan_server_verify"
+    ? (review._authoritative ? " · 后台已确认" : " · 本机初筛")
+    : "";
+  document.getElementById("moveReviewContext").textContent = `第 ${review.move_number} 回合 · ${sideLabel} · ${complexityLabel}${verificationLabel}`;
   document.getElementById("moveReviewTitle").textContent = `${review.san} ${review.quality_symbol} ${review.quality_label}`;
   const badge = document.getElementById("moveReviewBadge");
   badge.className = `quality-badge quality-${review.quality_key}`;
@@ -1324,7 +2206,17 @@ function updateMoveReviewPanel() {
   document.getElementById("moveReviewBest").textContent = !review.best_move_san
     ? "Stockfish 未返回完整走法"
     : sameMove ? `${review.best_move_san}（实战就是第一选择）` : review.best_move_san;
-  updateReviewSaveControl(review);
+  if (review._authoritative) updateReviewSaveControl(review);
+  renderProfessionalAnalysis({
+    openingContext: review.openingContext || gameReview?.openingSummary || null,
+    analysis: {},
+    _openingOnly: true
+  });
+  if (!review._authoritative && gameReview?.analysis_mode === "browser_scan_server_verify") {
+    document.getElementById("professionalAnalysisContent").innerHTML = `<p class="professional-status">本机扫描已定位到这一步，后台 Stockfish 正在用正式深度确认评价、最佳着和路线……</p>`;
+    verifySelectedMove(review);
+    return;
+  }
   loadProfessionalAnalysis(review);
 }
 
@@ -1516,7 +2408,7 @@ function professionalSide(title, items, formatter) {
 async function requestProfessionalAnalysis(analysisId, moveIndex) {
   const response = await fetchWithTimeout(apiUrl("/api/professional-analysis"), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authorizedHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ analysis_id: analysisId, move_index: moveIndex })
   }, 180000);
   const payload = await response.json().catch(() => ({}));
@@ -1582,6 +2474,8 @@ async function loadProfessionalAnalysis(review) {
     }
     const payload = await pending;
     if (token !== professionalRequestToken) return;
+    payload._openingContextVersion = OPENING_CONTEXT_UI_VERSION;
+    if (gameReview?.analysis_id === analysisId) professionalAnalysisCache.set(key, payload);
     renderProfessionalAnalysis(payload);
     status.textContent = payload.cached ? "已读取结论" : "结论已生成";
   } catch (error) {
@@ -1617,6 +2511,11 @@ function renderProfessionalAnalysis(payload) {
     pawn_break: "兵突破", transition_to_endgame: "转入残局"
   };
   const parts = [];
+  const programmedComparison = activeReview?.playedBestComparison;
+  if (programmedComparison?.played && programmedComparison?.best) {
+    const effectText = item => (item.verifiedEffects || []).map(escapeHtml).join("；");
+    parts.push(`<section class="professional-section"><h4>你的走法 vs 更好的走法</h4><div class="professional-grid"><div class="professional-side"><strong>你的走法：${escapeHtml(programmedComparison.played.move)}</strong><p>${effectText(programmedComparison.played)}</p></div><div class="professional-side"><strong>更好的走法：${escapeHtml(programmedComparison.best.move)}</strong><p>${effectText(programmedComparison.best)}</p></div></div><div class="professional-route"><span class="professional-label">真正的区别</span><p>${escapeHtml(programmedComparison.mainDifference || "")}</p></div></section>`);
+  }
   const coachVerdict = completeProfessionalSentence(played.evaluationReason);
   const coachPoints = [played.intention || coachVerdict]
     .map(completeProfessionalSentence)
@@ -1630,10 +2529,43 @@ function renderProfessionalAnalysis(payload) {
   const summaryLine = document.getElementById("researcherSummaryLine");
   summaryLine.textContent = positionParagraphs[0] || "";
   summaryLine.hidden = !positionParagraphs[0];
-  const openingThemes = Array.isArray(opening?.tacticalThemes) ? opening.tacticalThemes.filter(Boolean) : [];
-  const openingCard = opening?.displayName ? `<div class="professional-opening"><div class="professional-opening-kicker">📚 当前开局</div><strong class="professional-opening-name">${escapeHtml(opening.displayName)}</strong><p class="professional-opening-source">${escapeHtml(opening.eco || "")} · ${escapeHtml(opening.name || "")}</p><p>${escapeHtml(opening.description || "")}</p><div class="professional-opening-ideas"><p><span class="professional-label">白方常见思路：</span>${escapeHtml(opening.whitePlan || "")}</p><p><span class="professional-label">黑方常见思路：</span>${escapeHtml(opening.blackPlan || "")}</p></div>${openingThemes.length ? `<p class="professional-opening-themes"><span class="professional-label">常见战术主题：</span>${openingThemes.map(escapeHtml).join("、")}</p>` : ""}</div>` : "";
-  if (openingCard || positionParagraphs.length) {
-    parts.push(`<section class="professional-section professional-position-section"><h4>双方子力与局面</h4>${openingCard}${positionParagraphs.map(item => `<p>${escapeHtml(item)}</p>`).join("")}</section>`);
+  const openingBranch = opening?.variationNameZh || "";
+  const normalizeOpeningChessTerms = value => String(value || "")
+    .replace(/主教/g, "象").replace(/骑士/g, "马")
+    .replace(/城堡权利/g, "易位权")
+    .replace(/城堡王侧|城堡王翼|王侧城堡|王翼城堡/g, "王翼易位")
+    .replace(/城堡后侧|城堡后翼|后侧城堡|后翼城堡/g, "后翼易位")
+    .replace(/长城堡/g, "长易位").replace(/短城堡/g, "短易位")
+    .replace(/相反城堡|对面城堡/g, "异向易位")
+    .replace(/城堡国王/g, "已易位的王");
+  const normalizeOpeningText = value => normalizeOpeningChessTerms(value).replace(/\r\n?/g, "\n")
+    .replace(/\bWhite\b/gi, "白方").replace(/\bBlack\b/gi, "黑方")
+    .replace(/怀特/g, "白方").replace(/布莱克/g, "黑方")
+    .replace(/白棋|白牌|白色方/g, "白方").replace(/黑棋|黑牌|黑色方/g, "黑方")
+    .replace(/[ \t]+([，。！？；：,.!?;:])/g, "$1").trim();
+  const openingTextLooksNatural = value => {
+    const rejected = ["意大利足球", "电子棋子", "电子兵", "黑人", "白人", "女王的印第安人", "加泰罗尼亚公开赛", "加泰罗尼亚语", "柏林号", "后防线", "白方的小子", "用剑", "双足象", "七国集团", "开放理论", "播放 e5", "播放 c5", "播放 d5", "英语开场", "马节奏", "该脚"];
+    return Boolean(value) && !rejected.some(marker => value.includes(marker));
+  };
+  const openingParagraphs = value => {
+    const normalized = normalizeOpeningText(value);
+    if (!normalized) return [];
+    return normalized.split(/\n\s*\n+/).map(item => item.trim()).filter(Boolean);
+  };
+  const renderOpeningParagraphs = value => openingParagraphs(value)
+    .map(text => `<p class="professional-opening-branch">${escapeHtml(text)}</p>`).join("");
+  const normalizedOpeningDescription = normalizeOpeningText(opening?.description);
+  const openingDescription = openingTextLooksNatural(normalizedOpeningDescription) ? normalizedOpeningDescription : "";
+  const openingWhitePlan = normalizeOpeningText(opening?.whitePlan);
+  const openingBlackPlan = normalizeOpeningText(opening?.blackPlan);
+  const openingNotes = [
+    openingDescription ? ["开局说明", openingDescription] : null,
+    openingWhitePlan ? ["白方思路", openingWhitePlan] : null,
+    openingBlackPlan ? ["黑方思路", openingBlackPlan] : null
+  ].filter(Boolean).map(([label, text]) => `<div class="professional-opening-note"><span class="professional-label">${label}</span>${renderOpeningParagraphs(text)}</div>`).join("");
+  const openingContext = opening?.displayName ? `<div class="professional-opening-context"><div class="professional-opening-identity"><p><span class="professional-label">开局名称：</span><span class="professional-opening-value">${escapeHtml(opening.familyNameZh || opening.displayName)}</span>${opening.eco ? `（${escapeHtml(opening.eco)}）` : ""}</p>${openingBranch ? `<p><span class="professional-label">所处分支：</span>${escapeHtml(openingBranch)}</p>` : ""}</div>${openingNotes ? `<div class="professional-opening-notes">${openingNotes}</div>` : ""}</div>` : "";
+  if (openingContext || positionParagraphs.length) {
+    parts.push(`<section class="professional-section professional-position-section"><h4>双方子力与局面</h4>${openingContext}${positionParagraphs.map(item => `<p>${escapeHtml(item)}</p>`).join("")}</section>`);
   }
 
   const coreNarrative = completeProfessionalSentence(played.intention);
@@ -1822,7 +2754,7 @@ function renderMoveGuides(board) {
 function renderBoard() {
   const board = document.getElementById("visualBoard");
   board.innerHTML = "";
-  const fen = game.fen();
+  const fen = game ? game.fen() : initialFen;
   const { pieces, turn } = parseFen(fen);
   document.getElementById("turnLabel").textContent = turn === "b" ? "黑方走棋" : "白方走棋";
   document.getElementById("positionLabel").textContent = `${pieces.length} 枚棋子 · 白方在下`;
@@ -1848,8 +2780,25 @@ function showError(msg) {
   box.style.display = "block";
 }
 
+function enterPawnLab(openLogin = false) {
+  document.getElementById("landingPage").hidden = true;
+  document.getElementById("appShell").hidden = false;
+  window.scrollTo({ top: 0, behavior: "smooth" });
+  if (openLogin) window.setTimeout(() => openAuthDialog(), 80);
+}
+
+function returnToLanding() {
+  document.getElementById("appShell").hidden = true;
+  document.getElementById("landingPage").hidden = false;
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
 // ========== 初始化 ==========
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
+  const pageParameters = new URLSearchParams(window.location.search);
+  if (pageParameters.get("view") === "app" || pageParameters.get("payment") === "return") enterPawnLab(false);
+  const guidePiece = document.querySelector(".guide-piece");
+  if (guidePiece) guidePiece.src = "assets/mascot-pawn-detective-v2.webp";
   const workspace = document.querySelector(".workspace");
   const reviewCard = document.getElementById("moveReviewCard");
   if (workspace && reviewCard) {
@@ -1862,6 +2811,15 @@ document.addEventListener("DOMContentLoaded", () => {
   reviewPositions = loadReviewPositions();
   updateReviewNav();
   renderBoard();
+  await loadCurrentAccount();
+  if (pageParameters.get("payment") === "return") {
+    openPaywall();
+    const pendingOrder = sessionStorage.getItem("pawnlab_pending_order") || pageParameters.get("order_id");
+    if (pendingOrder) {
+      document.getElementById("paymentStatus").textContent = "正在确认支付结果……";
+      pollPaymentOrder(pendingOrder);
+    }
+  }
   connectAnalysisService();
   document.getElementById("feedbackForm").addEventListener("submit", submitFeedback);
 

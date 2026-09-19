@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>付款审核 · 棋盘研究所</title>
+  <style>
+    :root { --ink:#173C36; --paper:#F4F0E7; --panel:#FFFCF5; --soft:#F7F2E8; --line:#D8D0C2; --muted:#6C746F; --yellow:#F5BF48; --mint:#DDEFEA; --success:#2F8B76; --danger:#B95555; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; color:var(--ink); background:var(--paper); font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif; }
+    button,input,select,textarea { font:inherit; }
+    button { cursor:pointer; }
+    .shell { width:min(1160px,calc(100% - 32px)); margin:0 auto; padding:24px 0 48px; }
+    .topbar { display:flex; align-items:center; justify-content:space-between; gap:18px; padding:16px 20px; border:1px solid var(--line); border-radius:18px; background:var(--panel); }
+    .brand strong { display:block; font-size:19px; }
+    .brand span { color:var(--muted); font-size:12px; letter-spacing:.08em; }
+    .back-link { color:var(--ink); text-decoration:none; font-weight:700; }
+    .hero { display:grid; grid-template-columns:minmax(0,1fr) minmax(300px,420px); gap:24px; align-items:end; margin:36px 0 22px; }
+    h1 { margin:0; font-size:clamp(32px,4vw,52px); line-height:1.12; letter-spacing:-.035em; }
+    .hero p { margin:12px 0 0; max-width:620px; color:var(--muted); line-height:1.75; }
+    .key-panel { display:grid; gap:9px; padding:18px; border:1px solid var(--line); border-radius:18px; background:var(--panel); }
+    .key-panel label { font-weight:700; }
+    .key-row { display:grid; grid-template-columns:1fr auto; gap:10px; }
+    input,textarea { width:100%; border:1px solid var(--line); border-radius:10px; padding:11px 12px; color:var(--ink); background:white; }
+    input:focus,textarea:focus { outline:0; border-color:var(--yellow); box-shadow:0 0 0 4px rgba(245,191,72,.14); }
+    .primary { border:0; border-radius:10px; padding:11px 18px; color:var(--ink); background:var(--yellow); font-weight:800; }
+    .secondary { border:1px solid var(--line); border-radius:10px; padding:10px 15px; color:var(--ink); background:var(--panel); font-weight:700; }
+    .danger { border:1px solid #E4B8B8; border-radius:10px; padding:9px 14px; color:var(--danger); background:#FFF7F6; font-weight:700; }
+    .toolbar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin:22px 0 14px; }
+    .filters { display:flex; flex-wrap:wrap; gap:8px; }
+    .filter { border:1px solid var(--line); border-radius:999px; padding:8px 13px; color:var(--muted); background:transparent; font-weight:700; }
+    .filter.active { color:var(--ink); border-color:#9CBEB6; background:var(--mint); }
+    .summary { color:var(--muted); font-size:14px; }
+    .list { display:grid; gap:12px; }
+    .request-card { display:grid; grid-template-columns:minmax(220px,1.25fr) repeat(3,minmax(110px,.55fr)) minmax(230px,1fr); gap:18px; align-items:center; padding:20px; border:1px solid var(--line); border-radius:18px; background:var(--panel); box-shadow:0 8px 22px rgba(47,57,50,.055); }
+    .phone { margin:0 0 5px; font-size:18px; overflow-wrap:anywhere; }
+    .request-id { color:var(--muted); font:12px/1.5 Consolas,monospace; }
+    .datum span { display:block; margin-bottom:4px; color:var(--muted); font-size:12px; }
+    .datum strong { font-size:15px; }
+    .amount { color:var(--success); font-size:22px !important; }
+    .review-actions { display:grid; gap:9px; }
+    .review-actions textarea { min-height:62px; resize:vertical; font-size:13px; }
+    .button-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .status-pill { display:inline-flex; width:max-content; border-radius:999px; padding:6px 10px; font-size:12px; font-weight:800; }
+    .status-pending { color:#755100; background:#FFF0C9; }
+    .status-approved { color:#1E6556; background:#DDEFEA; }
+    .status-rejected { color:#9D4646; background:#FCE3E1; }
+    .empty { padding:52px 24px; border:1px dashed #C9BDAA; border-radius:18px; color:var(--muted); background:rgba(255,252,245,.58); text-align:center; }
+    .page-status { min-height:24px; margin:12px 0; color:var(--danger); }
+    [hidden] { display:none !important; }
+    @media (max-width:900px) {
+      .hero { grid-template-columns:1fr; }
+      .request-card { grid-template-columns:1fr 1fr; }
+      .identity,.review-actions { grid-column:1/-1; }
+    }
+    @media (max-width:560px) {
+      .shell { width:min(100% - 20px,1160px); padding-top:10px; }
+      .topbar { align-items:flex-start; padding:14px; }
+      .brand span { display:none; }
+      .hero { margin-top:26px; }
+      .key-row,.request-card { grid-template-columns:1fr; }
+      .identity,.review-actions { grid-column:auto; }
+      .request-card { gap:13px; padding:16px; }
+      .button-row { grid-template-columns:1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand"><strong>棋盘研究所</strong><span>PAWNLAB · PAYMENT REVIEW</span></div>
+      <a class="back-link" href="index.html?view=app">返回分析台</a>
+    </header>
+
+    <section class="hero">
+      <div><h1>付款审核</h1><p>手机号用于核对付款人。只在确认真实到账、金额与套餐一致后通过；通过后会立即开通该申请所绑定的登录账号，拒绝不会开通。</p></div>
+      <form class="key-panel" id="adminKeyForm">
+        <label for="adminKey">后台审核密钥</label>
+        <div class="key-row"><input id="adminKey" type="password" autocomplete="current-password" required><button class="primary" type="submit">进入审核台</button></div>
+      </form>
+    </section>
+
+    <section id="reviewWorkspace" hidden>
+      <div class="toolbar">
+        <div class="filters" aria-label="审核状态">
+          <button class="filter active" data-status="pending" type="button">待审核</button>
+          <button class="filter" data-status="approved" type="button">已通过</button>
+          <button class="filter" data-status="rejected" type="button">已拒绝</button>
+          <button class="filter" data-status="" type="button">全部</button>
+        </div>
+        <button class="secondary" type="button" onclick="loadRequests()">刷新</button>
+      </div>
+      <div class="summary" id="reviewSummary"></div>
+      <p class="page-status" id="pageStatus" role="status"></p>
+      <div class="list" id="requestList"></div>
+    </section>
+  </main>
+  <script src="runtime-config.js"></script>
+  <script>
+    const API_BASE_URL = ["localhost","127.0.0.1"].includes(location.hostname)
+      ? "http://127.0.0.1:8000"
+      : (window.CHESS_API_BASE_URL || "");
+    let activeStatus = "pending";
+    const keyInput = document.getElementById("adminKey");
+    keyInput.value = sessionStorage.getItem("pawnlab_payment_admin_key") || "";
+
+    const escapeHtml = value => String(value ?? "").replace(/[&<>'"]/g, character => ({
+      "&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"
+    })[character]);
+    const providerName = value => value === "wechat" ? "微信" : "支付宝";
+    const planName = value => value === "yearly" ? "年会员" : "月会员";
+    const statusName = value => ({ pending:"待审核", approved:"已通过", rejected:"已拒绝" })[value] || value;
+    const formatTime = value => value ? new Intl.DateTimeFormat("zh-CN", { dateStyle:"medium", timeStyle:"short" }).format(new Date(value)) : "—";
+
+    document.getElementById("adminKeyForm").addEventListener("submit", event => {
+      event.preventDefault();
+      sessionStorage.setItem("pawnlab_payment_admin_key", keyInput.value);
+      document.getElementById("reviewWorkspace").hidden = false;
+      loadRequests();
+    });
+    document.querySelectorAll(".filter").forEach(button => button.addEventListener("click", () => {
+      document.querySelectorAll(".filter").forEach(item => item.classList.toggle("active", item === button));
+      activeStatus = button.dataset.status;
+      loadRequests();
+    }));
+
+    async function loadRequests() {
+      const status = document.getElementById("pageStatus");
+      status.textContent = "正在读取审核申请……";
+      try {
+        const query = activeStatus ? `?status=${encodeURIComponent(activeStatus)}` : "";
+        const response = await fetch(`${API_BASE_URL}/api/admin/manual-payments${query}`, {
+          cache:"no-store", headers:{ "X-Admin-Key":keyInput.value }
+        });
+        const payload = await response.json().catch(() => []);
+        if (!response.ok) throw new Error(typeof payload.detail === "string" ? payload.detail : "审核列表读取失败");
+        renderRequests(payload);
+        status.textContent = "";
+      } catch (error) {
+        document.getElementById("requestList").innerHTML = "";
+        status.textContent = error.message;
+      }
+    }
+
+    function renderRequests(requests) {
+      document.getElementById("reviewSummary").textContent = `共 ${requests.length} 条${activeStatus ? statusName(activeStatus) : "申请"}`;
+      const list = document.getElementById("requestList");
+      if (!requests.length) {
+        list.innerHTML = `<div class="empty">当前没有${activeStatus ? statusName(activeStatus) : "付款"}申请</div>`;
+        return;
+      }
+      list.innerHTML = requests.map(item => `<article class="request-card">
+        <div class="identity"><h2 class="phone">${escapeHtml(item.phone || "历史申请未留手机号")}</h2><div class="request-id">${escapeHtml(item.request_id)}</div></div>
+        <div class="datum"><span>套餐</span><strong>${planName(item.membership_type)}</strong></div>
+        <div class="datum"><span>应付金额</span><strong class="amount">${escapeHtml(item.amount_display)}</strong></div>
+        <div class="datum"><span>渠道与时间</span><strong>${providerName(item.payment_provider)}</strong><div>${formatTime(item.created_at)}</div></div>
+        ${item.status === "pending" ? `<div class="review-actions"><textarea id="note-${item.request_id}" maxlength="500" placeholder="可填写核对备注，例如到账时间"></textarea><div class="button-row"><button class="primary" type="button" onclick="reviewPayment('${item.request_id}','approve')">确认到账并开通</button><button class="danger" type="button" onclick="reviewPayment('${item.request_id}','reject')">拒绝申请</button></div></div>` : `<div class="review-actions"><span class="status-pill status-${item.status}">${statusName(item.status)}</span><div>${formatTime(item.reviewed_at)}</div><div>${escapeHtml(item.reviewer_note || "无审核备注")}</div></div>`}
+      </article>`).join("");
+    }
+
+    async function reviewPayment(requestId, action) {
+      const verb = action === "approve" ? "确认真实到账并立即开通会员" : "拒绝该付款申请";
+      if (!window.confirm(`${verb}？此操作会记录审核结果。`)) return;
+      const status = document.getElementById("pageStatus");
+      status.textContent = "正在提交审核结果……";
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/admin/manual-payments/${encodeURIComponent(requestId)}/review`, {
+          method:"POST",
+          headers:{ "Content-Type":"application/json", "X-Admin-Key":keyInput.value },
+          body:JSON.stringify({ action, note:document.getElementById(`note-${requestId}`)?.value.trim() || "" })
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(typeof payload.detail === "string" ? payload.detail : "审核提交失败");
+        await loadRequests();
+      } catch (error) { status.textContent = error.message; }
+    }
+
+    if (keyInput.value) {
+      document.getElementById("reviewWorkspace").hidden = false;
+      loadRequests();
+    }
+  </script>
+</body>
+</html>

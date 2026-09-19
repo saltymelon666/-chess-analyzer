@@ -241,11 +241,13 @@ def test_event_and_admin_statistics_endpoints(monkeypatch, tmp_path) -> None:
     statistics = client.get("/api/admin/statistics")
 
     assert event.status_code == 202
+    assert feedback.status_code == 202
     assert event.json() == {"accepted": True}
     assert feedback.status_code == 202
     assert feedback.json() == {"accepted": True}
     assert statistics.status_code == 200
     assert statistics.json()["visitors"] == 1
+    assert statistics.json()["all_time"]["page_views"] == 1
     dashboard = client.get("/api/admin/dashboard")
     assert dashboard.status_code == 200
     payload = dashboard.json()

@@ -74,29 +74,30 @@ def test_board_renders_file_and_rank_coordinates() -> None:
         assert ".board-coordinate {" in page
 
 
-def test_public_beta_is_guest_accessible_and_tracks_core_events() -> None:
+def test_paid_flow_requires_account_and_presents_one_complete_free_analysis() -> None:
     for page in _pages():
-        assert "公测体验版 · 免费使用" in page
-        assert "无需注册" in page
-        assert "Stockfish逐步评价 + DeepSeek中文报告" in page
-        assert "正常体验不限制使用次数" in page
-        assert "不收集姓名、邮箱等个人信息" in page
-        assert 'id="previewNotice"' in page
-        assert 'location.protocol === "file:"' in page
-        assert "文件预览模式 · 请用 http://localhost:8080 打开以连接分析服务" in page
-        assert 'id="pgnFileInput"' in page
-        assert 'localStorage.getItem(VISITOR_STORAGE_KEY)' in page
-        assert 'trackEvent("page_view"' in page
-        assert 'trackEvent("upload_pgn"' in page
-        assert 'trackEvent("analysis_start"' in page
-        assert 'trackEvent("analysis_complete"' in page
-        assert "pgnMoves.length > 200" in page
-        assert 'id="loginForm"' not in page
-        assert 'id="registerForm"' not in page
-        assert 'href="/login"' not in page
-        assert 'href="/register"' not in page
-        assert "token限制" not in page
-        assert "IP限制" not in page
+        assert "注册 / 登录" in page
+        assert "新账号赠送1盘完整分析" in page
+        assert 'id="authForm"' in page
+        assert 'id="paywallDialog"' in page
+        assert "首月 ¥9.9" in page
+        assert "之后 ¥19.9/月" in page
+        assert "¥168/年" in page
+        assert "相比月付一年节省 ¥70.8" in page
+        assert "不会默认替你选择" in page
+        assert "if (!authToken())" in page
+        assert "authorizedHeaders" in page
+        assert 'headers: authorizedHeaders({ "Content-Type": "application/json" })' in page
+        assert "headers: authorizedHeaders()" in page
+        assert "response.status === 402" in page
+        assert "createMembershipOrder('monthly')" in page
+        assert "createMembershipOrder('yearly')" in page
+        assert 'id="authIdentifier"' in page
+        assert 'id="authPasswordConfirm"' in page
+        assert "确认密码（注册时填写）" in page
+        assert "passwordInput.value !== confirmationInput.value" in page
+        assert "password_confirm: confirmationInput.value" in page
+        assert 'id="authEmail"' not in page
 
 
 def test_game_review_retries_transient_gateway_and_queue_failures() -> None:
@@ -191,9 +192,45 @@ def test_game_review_waits_and_retries_when_backend_is_busy() -> None:
         assert "整盘分析等待超时" in page
 
 
+def test_manual_payment_flow_and_review_console_are_published_together() -> None:
+    for page in _pages():
+        assert 'id="manualWechatBtn"' in page
+        assert 'id="manualAlipayBtn"' in page
+        assert 'id="manualPaymentPhone"' in page
+        assert 'type="tel"' in page
+        assert 'inputmode="numeric"' in page
+        assert "我已付款，提交审核" in page
+        assert "/api/billing/manual/config" in page
+        assert "/api/billing/manual-requests" in page
+        assert "管理员核对到账后开通当前登录账号的会员" in page
+        assert "付款人手机号" in page
+
+    admin = (ROOT / "admin-payments.html").read_text(encoding="utf-8")
+    published = (ROOT / "docs" / "admin-payments.html").read_text(encoding="utf-8")
+    assert admin == published
+    assert "付款审核" in admin
+    assert "/api/admin/manual-payments" in admin
+    assert "确认到账并开通" in admin
+    assert "X-Admin-Key" in admin
+    assert "sessionStorage" in admin
+    assert "item.phone" in admin
+
+
 def test_feedback_submits_current_analysis_context() -> None:
     for page in _pages():
         assert "function currentFeedbackAnalysis()" in page
         assert "analysis_id: feedbackAnalysis.analysisId" in page
         assert "analysis_result: feedbackAnalysis.result" in page
         assert 'document.getElementById("professionalAnalysisContent")' in page
+
+
+def test_homepage_introduces_product_before_entering_analysis_workspace() -> None:
+    for page in _pages():
+        assert 'id="landingPage"' in page
+        assert 'id="landingTitle"' in page
+        assert 'id="appShell" hidden' in page
+        assert "mascot-duo-homepage-v1.webp" in page
+        assert "function enterPawnLab(openLogin = false)" in page
+        assert "function returnToLanding()" in page
+        assert 'onclick="enterPawnLab(false)"' in page
+        assert 'onclick="returnToLanding()"' in page

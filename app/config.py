@@ -52,6 +52,26 @@ class Settings:
     admin_statistics_key: str
     deepseek_input_price_per_million: float
     deepseek_output_price_per_million: float
+    billing_enforced: bool
+    payment_callback_secret: str
+    payment_checkout_base_url: str
+    payment_public_origin: str
+    payment_frontend_origin: str
+    wechat_pay_mch_id: str
+    wechat_pay_app_id: str
+    wechat_pay_cert_serial: str
+    wechat_pay_private_key: str
+    wechat_pay_api_v3_key: str
+    wechat_pay_platform_public_key: str
+    wechat_pay_platform_serial: str
+    wechat_pay_gateway: str
+    alipay_app_id: str
+    alipay_private_key: str
+    alipay_public_key: str
+    alipay_seller_id: str
+    alipay_gateway: str
+    manual_wechat_qr_url: str
+    manual_alipay_qr_url: str
 
 
 def load_settings() -> Settings:
@@ -102,5 +122,45 @@ def load_settings() -> Settings:
         ),
         deepseek_output_price_per_million=max(
             0, float(_value("DEEPSEEK_OUTPUT_PRICE_PER_MILLION", defaults, "0"))
+        ),
+        billing_enforced=_value(
+            "BILLING_ENFORCED",
+            defaults,
+            "true" if _value("APP_ENV", defaults, "development").lower() == "production" else "false",
+        ).lower() in {"1", "true", "yes", "on"},
+        payment_callback_secret=_value("PAYMENT_CALLBACK_SECRET", defaults),
+        payment_checkout_base_url=_value("PAYMENT_CHECKOUT_BASE_URL", defaults),
+        payment_public_origin=_value("PAYMENT_PUBLIC_ORIGIN", defaults).rstrip("/"),
+        payment_frontend_origin=_value(
+            "PAYMENT_FRONTEND_ORIGIN",
+            defaults,
+            _value("PAYMENT_PUBLIC_ORIGIN", defaults),
+        ).rstrip("/"),
+        wechat_pay_mch_id=_value("WECHAT_PAY_MCH_ID", defaults),
+        wechat_pay_app_id=_value("WECHAT_PAY_APP_ID", defaults),
+        wechat_pay_cert_serial=_value("WECHAT_PAY_CERT_SERIAL", defaults),
+        wechat_pay_private_key=_value("WECHAT_PAY_PRIVATE_KEY", defaults),
+        wechat_pay_api_v3_key=_value("WECHAT_PAY_API_V3_KEY", defaults),
+        wechat_pay_platform_public_key=_value("WECHAT_PAY_PLATFORM_PUBLIC_KEY", defaults),
+        wechat_pay_platform_serial=_value("WECHAT_PAY_PLATFORM_SERIAL", defaults),
+        wechat_pay_gateway=_value(
+            "WECHAT_PAY_GATEWAY", defaults, "https://api.mch.weixin.qq.com"
+        ).rstrip("/"),
+        alipay_app_id=_value("ALIPAY_APP_ID", defaults),
+        alipay_private_key=_value("ALIPAY_PRIVATE_KEY", defaults),
+        alipay_public_key=_value("ALIPAY_PUBLIC_KEY", defaults),
+        alipay_seller_id=_value("ALIPAY_SELLER_ID", defaults),
+        alipay_gateway=_value(
+            "ALIPAY_GATEWAY", defaults, "https://openapi.alipay.com/gateway.do"
+        ),
+        manual_wechat_qr_url=_value(
+            "MANUAL_WECHAT_QR_URL",
+            defaults,
+            "/assets/payment/wechat-personal-qr.webp",
+        ),
+        manual_alipay_qr_url=_value(
+            "MANUAL_ALIPAY_QR_URL",
+            defaults,
+            "/assets/payment/alipay-personal-qr.webp",
         ),
     )

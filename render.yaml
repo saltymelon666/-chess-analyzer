@@ -2,6 +2,8 @@ services:
   - type: web
     name: ai-chess-review-api
     runtime: docker
+    # Keep the API warm so the first analysis request does not pay the Free-tier
+    # spin-up delay. This is the lowest paid Web Service instance type.
     plan: starter
     dockerfilePath: ./Dockerfile
     healthCheckPath: /api/health
@@ -15,6 +17,42 @@ services:
         value: deepseek-v4-flash
       - key: APP_ENV
         value: production
+      - key: BILLING_ENFORCED
+        value: "true"
+      - key: PAYMENT_CALLBACK_SECRET
+        generateValue: true
+      - key: PAYMENT_CHECKOUT_BASE_URL
+        sync: false
+      - key: PAYMENT_PUBLIC_ORIGIN
+        sync: false
+      - key: PAYMENT_FRONTEND_ORIGIN
+        sync: false
+      - key: WECHAT_PAY_MCH_ID
+        sync: false
+      - key: WECHAT_PAY_APP_ID
+        sync: false
+      - key: WECHAT_PAY_CERT_SERIAL
+        sync: false
+      - key: WECHAT_PAY_PRIVATE_KEY
+        sync: false
+      - key: WECHAT_PAY_API_V3_KEY
+        sync: false
+      - key: WECHAT_PAY_PLATFORM_PUBLIC_KEY
+        sync: false
+      - key: WECHAT_PAY_PLATFORM_SERIAL
+        sync: false
+      - key: ALIPAY_APP_ID
+        sync: false
+      - key: ALIPAY_PRIVATE_KEY
+        sync: false
+      - key: ALIPAY_PUBLIC_KEY
+        sync: false
+      - key: ALIPAY_SELLER_ID
+        sync: false
+      - key: MANUAL_WECHAT_QR_URL
+        value: /assets/payment/wechat-personal-qr.webp
+      - key: MANUAL_ALIPAY_QR_URL
+        value: /assets/payment/alipay-personal-qr.webp
       - key: STOCKFISH_PATH
         value: /usr/local/bin/stockfish
       - key: STOCKFISH_DEPTH

@@ -101,6 +101,25 @@ class GameReviewRequest(BaseModel):
     analysis_id: str | None = Field(default=None, min_length=8, max_length=80)
 
 
+class LocalGameStartResponse(BaseModel):
+    """Server-validated shell for a browser Stockfish scan.
+
+    The browser may use its own engine results for navigation, but no chess
+    fact from that scan is accepted by the professional-analysis path.
+    """
+
+    analysis_id: str
+    move_count: int
+    mode: Literal["browser_scan_server_verify"] = "browser_scan_server_verify"
+
+
+class VerifiedMoveResponse(BaseModel):
+    analysis_id: str
+    move_index: int
+    authoritative: Literal[True] = True
+    review: "MoveReview"
+
+
 class EvaluationSnapshot(BaseModel):
     evaluation: str
     perspective: Literal["white"] = "white"
@@ -195,6 +214,8 @@ class CandidateLine(BaseModel):
 
 
 class MoveReview(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     index: int
     move_number: int
     notation: str
@@ -235,6 +256,9 @@ class MoveReview(BaseModel):
     position_facts: PositionFacts = Field(default_factory=PositionFacts)
     position_facts_after: PositionFacts = Field(default_factory=PositionFacts)
     opening_context: OpeningPresentation | None = Field(alias="openingContext", default=None)
+    played_best_comparison: dict[str, object] | None = Field(
+        alias="playedBestComparison", default=None
+    )
 
 
 class GameReviewResponse(BaseModel):

@@ -72,6 +72,11 @@ async def test_game_review_uses_black_mover_perspective() -> None:
     assert result.moves[1].actual_move_line.first_move.san == "Nf3"
     assert result.moves[1].position_facts.side_to_move == "black"
     assert result.moves[1].position_facts_after.side_to_move == "white"
+    comparison = result.moves[1].played_best_comparison
+    assert comparison is not None
+    assert comparison["played"]["move"] == "e5"
+    assert comparison["best"]["move"] == "c5"
+    assert comparison["evidenceSource"] == "python-chess + Stockfish PV"
 
 
 @pytest.mark.asyncio

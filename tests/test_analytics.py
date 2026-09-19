@@ -169,6 +169,35 @@ def test_all_time_history_and_feedback_summary_include_older_records(
     assert feedback.suggestion_count == 1
 
 
+def test_commercial_funnel_events_are_reported(tmp_path: Path) -> None:
+    store = AnalyticsStore(tmp_path / "analytics.sqlite3")
+    user_id = "usr_commercial_1234"
+    for event in (
+        "signup",
+        "free_analysis_start",
+        "free_analysis_complete",
+        "paywall_view",
+        "monthly_purchase",
+        "monthly_purchase",
+        "payment_success",
+        "subscription_renew",
+    ):
+        store.record_event(AnalyticsEventRequest(visitor_id=user_id, event=event))
+    store.start_analysis("analysis_paid_1234", user_id, "1. e4")
+    store.finish_analysis(
+        "analysis_paid_1234", success=True, stockfish_ms=10, total_ms=10, move_count=1
+    )
+
+    statistics = store.daily_statistics()
+    assert statistics.signups == 1
+    assert statistics.free_analysis_completions == 1
+    assert statistics.payment_successes == 1
+    assert statistics.signup_to_free_completion_rate == 1
+    assert statistics.free_to_purchase_rate == 1
+    assert statistics.intro_to_renewal_rate == 1
+    assert statistics.average_analyses_per_paid_user == 1
+
+
 def test_request_protector_rejects_only_after_threshold() -> None:
     protector = RequestProtector()
     assert protector.allow("analysis", "client", per_minute=2, per_day=10).allowed
