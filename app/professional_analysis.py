@@ -87,7 +87,7 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .book_case_transfer import BookCaseTransferPackage
-PROFESSIONAL_PROMPT_VERSION = "professional-v47-multi-ply-reply-causality"
+PROFESSIONAL_PROMPT_VERSION = "professional-v48-continuity-comparison-compression"
 PROFESSIONAL_TOKEN_LIMITS = {"simple": 1500, "normal": 2600, "complex": 3400}
 STRATEGY_TAGS = [
     "king_attack",
@@ -160,6 +160,8 @@ class ProfessionalAnalysisService:
         book_context: "BookCaseTransferPackage | None" = None,
         opening_context: OpeningPresentation | None = None,
         recent_moves: list[MoveReview] | None = None,
+        game_context: dict[str, Any] | None = None,
+        coach_context: dict[str, Any] | None = None,
     ) -> GeneratedProfessionalAnalysis:
         complexity = compute_professional_complexity(move)
         fact_package = build_move_fact_package(move)
@@ -229,6 +231,12 @@ class ProfessionalAnalysisService:
             objective_question=objective["primary_question"],
         )
         payload["decisionContext"] = decision_context.prompt_payload()
+        if move.played_best_comparison:
+            payload["programmedMoveComparison"] = move.played_best_comparison
+        if game_context:
+            payload["compressedGameContext"] = game_context
+        if coach_context and coach_context.get("games"):
+            payload["recentCoachMemory"] = coach_context
         if book_context is None and self.book_knowledge is not None:
             try:
                 priority = payload.get("decisionPriority", {})
@@ -680,6 +688,12 @@ def professional_system_prompt() -> str:
         "不得扩展命题中的因果、目标、计划或时序；后端会按claimRefs将核心正文重建为"
         "没有固定栏目口号的连贯棋书叙述。"
         "confirmedOpening若存在，其名称、ECO和变例由程序确认；不得重新判断、改名或补写其他变例。"
+        "programmedMoveComparison是程序重放实战着和Stockfish首选路线得到的只读差异，"
+        "只能解释其中已确认的作用，不得补造漏吃、漏将、丢子、保护或威胁。"
+        "compressedGameContext与recentCoachMemory只用于连续性和选题；绝不能覆盖当前局面的"
+        "Stockfish、Facts、Threat、Plan或programmedMoveComparison。只有repeatedIssues明确列出的问题"
+        "才能说最近重复出现，只有improvedIssues明确列出时才能说某类问题本盘已有改善；"
+        "没有当前事实支持时，不得把历史问题套到本盘。"
         "开局背景只是常见思路，只有当前事实包另有支持时才能把它表述成当前局面的事实或计划。"
         "PV只是参考变化，不是必然发生。"
         "所有解释必须是完整、自然、可直接展示给用户的中文棋理句子。"
@@ -759,6 +773,7 @@ def professional_user_prompt(payload: dict[str, Any], complexity: str) -> str:
 14. 必须先回答positionInterpretation.objective.primaryQuestion，并围绕priorityTopics组织局面概览、实战着解释和路线比较。deemphasizedTopics不得成为主线。winning_conversion应解释优势方如何兑现；attack_conversion应解释攻势配合和防守资源；endgame_plan不得在没有直接危险时泛谈护王；dynamic_balance应比较活动性与静态因素；move_quality_explanation必须按真实评价差控制批评强度。
 15. bookEvaluationMethod.narrative_path规定正文叙述顺序，bookEvaluationMethod.prose_rules规定语言边界，steps规定证据支持时需要解释的内容：局面评价与本步分差是两个问题；小分差只说明危机不是由本步造成，不能代替对全局优劣原因的解释。对手资源与计划只在已有证据时解释。required不能要求补造事实。短变化只证明已经说清的因果关系，不得代替中文解释。用鲜明判断、具体因果和克制修辞形成棋书文风，不复刻特定作者，不猜测棋手心理，不为戏剧性虚构惩罚或陷阱。
 16. decisionContext.corePainPoint和mustAnswer是本次讲解的最高优先级。先回答痛点，只保留理解痛点所需的信息，再用必要的首选路线、对手直接回应和后果证明；不要先罗列物质、王位置、三条路线或全部评价维度。若实战着与首选着评价损失小于半兵，只说明局面问题早已存在，不得拿小分差冒充全局原因。完成草稿前按bookEvaluationMethod.reader_checks自检；自检过程不得写入正文。trend只表示程序确认的近期决策现象，禁止推断棋手心理、习惯或水平。
+18. programmedMoveComparison存在时，比较解释只能复述其verifiedEffects和mainDifference，不得自行判断漏吃、漏将、丢子、保护、直接威胁或攻防关系。compressedGameContext中的summary只是省略普通着的边界说明，不是棋盘事实。recentCoachMemory只能避免重复建议、指出repeatedIssues中明确重复的问题，或反馈improvedIssues中明确改善的问题，不能改变当前结论。
 {analogous_rule}
 {opening_rule}
 {knowledge_rule}
@@ -774,6 +789,8 @@ def professional_cache_key(
     stockfish_depth: int,
     opening_id: str | None = None,
     recent_moves: list[MoveReview] | None = None,
+    game_context: dict[str, Any] | None = None,
+    coach_context: dict[str, Any] | None = None,
 ) -> str:
     route_summary = [
         {
@@ -803,6 +820,8 @@ def professional_cache_key(
             "narrativeClaimVersion": NARRATIVE_CLAIM_VERSION,
             "decisionHistory": decision_history_signature(recent_moves or []),
             "openingId": opening_id,
+            "gameContext": game_context,
+            "coachContext": coach_context,
         },
         ensure_ascii=False,
         sort_keys=True,

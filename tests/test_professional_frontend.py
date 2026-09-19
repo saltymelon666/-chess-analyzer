@@ -16,6 +16,14 @@ def test_development_and_published_pages_are_synchronized() -> None:
     assert development == published
 
 
+def test_program_verified_played_best_comparison_is_rendered() -> None:
+    for page in _pages():
+        assert "activeReview?.playedBestComparison" in page
+        assert "你的走法 vs 更好的走法" in page
+        assert "真正的区别" in page
+        assert "programmedComparison.mainDifference" in page
+
+
 def test_professional_analysis_is_unified_and_expanded_by_default() -> None:
     for page in _pages():
         assert page.count('id="professionalAnalysisPanel"') == 1
@@ -88,14 +96,9 @@ def test_professional_report_only_renders_conclusion_sections() -> None:
         assert '.replace(/骑士/g, "马")' in page
         assert "const normalizeOpeningChessTerms = value =>" in page
         assert "const openingTextLooksNatural = value =>" in page
-        assert '`${gameReview?.analysis_id || "unknown"}:${review.index}:${openingRevision}`' in page
+        assert '`${analysisId}:${review.index}:${openingRevision}`' in page
         assert "if (cached?._openingContextVersion === OPENING_CONTEXT_UI_VERSION)" in page
         assert "payload._openingContextVersion = OPENING_CONTEXT_UI_VERSION;" in page
-        assert "openingContext: review.openingContext || gameReview?.openingSummary || null" in page
-        assert "_openingOnly: true" in page
-        assert "const reviewOpening = review.openingContext || gameReview?.openingSummary || null;" in page
-        assert "if (!reviewOpening)" in page
-        assert "openingContext: reviewOpening," in page
         assert 'italian: "1. e4 e5 2. Nf3 Nc6 3. Bc4 Bc5 4. c3 Nf6 5. d4 exd4' in page
         assert ".review-explanation[hidden] { display:none; }" in page
         assert "潜在威胁" not in page
@@ -168,6 +171,34 @@ def test_current_position_analysis_card_is_absent_from_both_pages() -> None:
         assert "当前局面分析" not in page
         assert "professional-position-analysis" not in page
         assert "currentParagraphs" not in page
+
+
+def test_legacy_position_analysis_frontend_is_removed_and_move_review_remains() -> None:
+    for page in _pages():
+        assert 'id="analyzeBtn"' not in page
+        assert 'onclick="analyze()"' not in page
+        assert "只分析当前局面" not in page
+        assert 'id="resultSection"' not in page
+        assert "async function evaluateCurrentPosition()" not in page
+        assert 'fetch(apiUrl("/api/review")' not in page
+        assert 'id="moveReviewCard"' in page
+        assert 'fetchWithTimeout(apiUrl("/api/game-review/start-local")' in page
+        assert 'fetchWithTimeout(apiUrl("/api/game-review/position")' in page
+        assert "scanGameInBrowser" in page
+        assert "_authoritative" in page
+        assert 'const scoreDirection = startFen.split(" ")[1] === "b" ? -1 : 1;' in page
+        assert ".sort((a, b) => a - b)" in page
+        assert "本机引擎不可用，正在切换后台完整分析" in page
+        assert "小兵研究员说" in page
+
+
+def test_core_coaching_explanation_is_rendered_as_one_ordered_paragraph() -> None:
+    for page in _pages():
+        assert "const coachPoints = [played.intention || coachVerdict]" in page
+        assert '<p class="professional-label">分析结论</p><p>${coachPoints.map(escapeHtml).join("")}</p>' in page
+        assert 'professional-coach-section"><h4>先说结论' not in page
+        assert "...coachProblems" not in page
+        assert "comparison.whyFirstLineIsBest || comparison.mainDifference" not in page
 
 
 def test_book_reference_stays_in_backend_payload_but_is_not_rendered() -> None:

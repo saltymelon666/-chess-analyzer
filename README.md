@@ -125,6 +125,22 @@ Content-Type: application/json
 - `DEEPSEEK_API_KEY`、`DEEPSEEK_BASE_URL`、`DEEPSEEK_MODEL`
 - `ALLOWED_ORIGINS`：允许访问后端的前端来源
 
+### 微信与支付宝
+
+支付页支持微信支付和支付宝。桌面微信订单显示站内生成的二维码，手机微信订单进入 H5 支付；支付宝根据设备进入电脑网站支付或手机网站支付。渠道回调必须通过平台签名验证，并与数据库订单的商户信息、订单号、人民币金额和成功状态一致后，才会开通会员。
+
+- 公共配置：`PAYMENT_PUBLIC_ORIGIN`（可接收异步通知的 HTTPS 后端地址）、`PAYMENT_FRONTEND_ORIGIN`（支付完成后返回的正式网站地址）
+- 微信：`WECHAT_PAY_MCH_ID`、`WECHAT_PAY_APP_ID`、`WECHAT_PAY_CERT_SERIAL`、`WECHAT_PAY_PRIVATE_KEY`、`WECHAT_PAY_API_V3_KEY`、`WECHAT_PAY_PLATFORM_PUBLIC_KEY`、`WECHAT_PAY_PLATFORM_SERIAL`
+- 支付宝：`ALIPAY_APP_ID`、`ALIPAY_PRIVATE_KEY`、`ALIPAY_PUBLIC_KEY`、`ALIPAY_SELLER_ID`
+
+私钥、API v3 Key 和平台公钥只放在部署环境变量中。商户平台还需要开通对应产品，并将支付域名、回调地址配置为实际生产域名；未完整配置的渠道会返回 503，不会生成假订单入口。生产环境关闭旧的内部 HMAC 测试回调。
+
+### 个人收款码人工审核
+
+商业验证阶段也可以使用个人微信或支付宝收款码。仓库默认使用 `assets/payment/` 下的站内收款码，也可通过 `MANUAL_WECHAT_QR_URL`、`MANUAL_ALIPAY_QR_URL` 覆盖。用户扫码付款并提交付款人手机号；手机号只用于人工核对，申请始终绑定当前登录 `user_id`，提交后不会自动开通会员。管理员在 `admin-payments.html` 使用 `ADMIN_STATISTICS_KEY` 登录，确认真实到账和金额后点击通过，后端才会激活相应月会员或年会员。
+
+个人收款码无法由程序验证真实到账，可能受到支付平台经营收款规则限制，只适合作为人工核对方案。收款码图片不得包含在聊天记录或日志中；正式使用前需确认对应平台允许当前经营场景。
+
 ## 测试
 
 ```powershell

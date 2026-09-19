@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-15T15:20:00.000Z",
+  "title": "Design System: 棋盘研究所",
+  "extensions": {
+    "colorMeta": {
+      "laboratory-green": { "role": "primary", "displayName": "实验室墨绿", "canonical": "#173C36", "tonalRamp": ["#08201C", "#173C36", "#2F5B53", "#527B72", "#7EA39A", "#ACCCC4", "#DDEFEA", "#F3FAF8"] },
+      "action-yellow": { "role": "primary", "displayName": "行动黄", "canonical": "#F5BF48", "tonalRamp": ["#352400", "#6F4A00", "#9C6E10", "#C99525", "#F5BF48", "#FFD87B", "#FFE9B3", "#FFF7E1"] },
+      "warm-paper": { "role": "neutral", "displayName": "暖纸背景", "canonical": "#F4F0E7", "tonalRamp": ["#27241F", "#4D4840", "#756F65", "#9E978B", "#C5BEB3", "#DDD7CD", "#F4F0E7", "#FFFCF5"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "品牌展示", "purpose": "使用稳重中文正体的首页核心价值标题。" },
+      "headline": { "displayName": "任务标题", "purpose": "使用高可读中文正体的分析任务和报告标题。" },
+      "body": { "displayName": "教练正文", "purpose": "产品说明与长篇棋理解释。" },
+      "label": { "displayName": "状态标签", "purpose": "步骤、状态和辅助信息。" }
+    },
+    "shadows": [
+      { "name": "ambient-panel", "value": "0 8px 22px rgba(47,57,50,.055)", "purpose": "分析台主面板与报告容器的低对比环境景深。" },
+      { "name": "raised-workspace", "value": "0 30px 66px rgba(91,70,43,.16)", "purpose": "桌面分析区大型纸面容器。" },
+      { "name": "focus-halo", "value": "0 0 0 4px rgba(245,191,72,.14)", "purpose": "输入控件焦点反馈。" }
+    ],
+    "motion": [
+      { "name": "app-reveal", "value": "420ms cubic-bezier(.16,1,.3,1)", "purpose": "从首页进入分析台时唯一的整体过渡。" },
+      { "name": "state-transition", "value": "160ms ease", "purpose": "输入、边框和小型状态变化。" }
+    ],
+    "breakpoints": [
+      { "name": "stack", "value": "980px" },
+      { "name": "phone", "value": "560px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "开始复盘、导入棋谱等唯一主行动。",
+      "html": "<button class=\"ds-btn-primary\">开始复盘一盘棋</button>",
+      "css": ".ds-btn-primary{min-height:52px;padding:13px 25px;border:0;border-radius:10px;background:#F5BF48;color:#173C36;font:800 16px 'Segoe UI','Microsoft YaHei',sans-serif;transition:transform 170ms cubic-bezier(.2,.75,.25,1),filter 170ms ease}.ds-btn-primary:hover{transform:translateY(-2px);filter:saturate(1.04)}.ds-btn-primary:focus-visible{outline:3px solid rgba(245,191,72,.55);outline-offset:2px}.ds-btn-primary:active{transform:scale(.97)}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "返回、清空和次级操作。",
+      "html": "<button class=\"ds-btn-secondary\">返回首页</button>",
+      "css": ".ds-btn-secondary{min-height:42px;padding:9px 16px;border:1px solid #D4CCC0;border-radius:10px;background:#FFFCF5;color:#53625D;font:700 14px 'Segoe UI','Microsoft YaHei',sans-serif;transition:background 160ms ease,transform 160ms ease}.ds-btn-secondary:hover{background:#F7F2E8;transform:translateY(-1px)}.ds-btn-secondary:focus-visible{outline:3px solid rgba(245,191,72,.55);outline-offset:2px}"
+    },
+    {
+      "name": "PGN Field",
+      "kind": "input",
+      "description": "承载结构化棋谱输入。",
+      "html": "<textarea class=\"ds-pgn\" placeholder=\"从 chess.com 或 lichess 复制 PGN…\"></textarea>",
+      "css": ".ds-pgn{width:100%;min-height:112px;padding:12px;border:1px solid #CFC6B8;border-radius:10px;background:#F8F4EC;color:#173C36;font:12px/1.6 Consolas,'SFMono-Regular',monospace;resize:vertical}.ds-pgn:focus{outline:0;border-color:#F5BF48;box-shadow:0 0 0 4px rgba(245,191,72,.14);background:#FFFCF5}"
+    },
+    {
+      "name": "App Navigation",
+      "kind": "nav",
+      "description": "品牌、账号与主要跨页面操作的暖白导航。",
+      "html": "<nav class=\"ds-nav\"><strong>棋盘研究所</strong><button>进入分析台</button></nav>",
+      "css": ".ds-nav{min-height:68px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:18px;border:1px solid #D8D0C2;border-radius:16px;background:#FFFCF6;color:#173C36;font:900 18px 'Segoe UI','Microsoft YaHei',sans-serif}.ds-nav button{padding:9px 16px;border:0;border-radius:9px;background:#F5BF48;color:#173C36;font-weight:800}.ds-nav button:focus-visible{outline:3px solid rgba(245,191,72,.55);outline-offset:2px}"
+    },
+    {
+      "name": "Research Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "分析摘要、步骤与教练解释的主要纸面容器。",
+      "html": "<section class=\"ds-card\"><h3>真正的区别</h3><p>最佳走法先处理当前威胁，再保留后续计划。</p></section>",
+      "css": ".ds-card{padding:24px;border:1px solid #D8D0C2;border-radius:18px;background:#FFFCF5;color:#173C36;box-shadow:0 8px 22px rgba(47,57,50,.055);font:16px/1.8 'Segoe UI','Microsoft YaHei',sans-serif}.ds-card h3{margin:0 0 8px;font-size:22px}.ds-card p{margin:0;color:#6C746F}"
+    }
+  ],
+  "narrative": {
+    "northStar": "双人棋局研究台",
+    "overview": "界面像一张温暖、可信的棋局研究桌：纯暖米白纸面负责承载内容，深墨绿负责建立专业的棋盘语境，黄色只在行动与关键发现上出现。双角色画面承担品牌识别，但不叠加姓名或角色说明文字。",
+    "keyCharacteristics": ["纯暖米白背景与深墨绿工作区形成稳定主对比。", "双角色画面与真实棋盘共同承担产品识别，不附加角色文字标签。", "黄色集中用于主行动、步骤编号和关键提示。", "标题使用稳重的中文正体，正文保持清楚克制。", "手机端单列重排，棋盘与主行动不产生横向溢出。"],
+    "rules": [
+      { "name": "The Yellow Means Action Rule", "body": "黄色优先留给主行动和真正关键的棋局提示，不用于大面积铺底。", "section": "colors" },
+      { "name": "The Chess Facts Stay Green Rule", "body": "与棋盘事实、引擎状态和已验证信息相关的高权重文字使用墨绿或薄荷色系。", "section": "colors" },
+      { "name": "The Clear Chinese Type Rule", "body": "首页与分析台标题统一使用高可读中文正体；长篇教练解释继续使用高可读正文体。", "section": "typography" },
+      { "name": "The Soft Evidence Rule", "body": "所有实际景深必须带模糊；硬偏移阴影不属于棋盘研究所。", "section": "elevation" }
+    ],
+    "dos": ["Do 让棋盘在分析台始终拥有最高视觉优先级。", "Do 让双角色画面承担品牌识别，不叠加姓名或角色说明文字。", "Do 在手机端按任务顺序单列重排，并检查真实 390px 横向溢出。", "Do 保持首页和分析台在配色、字体、圆角与影调上的连续性。"],
+    "donts": ["Don't 把黄色铺满大面积内容区，或让多个主按钮互相争夺注意力。", "Don't 使用硬偏移阴影、装饰性玻璃拟态或通用科技蓝。", "Don't 在页面背景叠加点阵、渐变、光斑或装饰纹理。", "Don't 用表情符号代替正式图标或 P1/P2 品牌资产。", "Don't 为每张卡片分别播放相同入场动画；页面切换只保留一次整体过渡。"]
+  }
+}

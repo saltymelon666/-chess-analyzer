@@ -118,8 +118,7 @@ async def analyze_pgn(
         )
 
         allowed_facts = [played, *pv_facts, *opponent_pv_facts]
-        reviews.append(
-            MoveReview(
+        review = MoveReview(
                 index=int(facts["index"]),
                 move_number=int(facts["move_number"]),
                 notation=str(facts["notation"]),
@@ -198,7 +197,14 @@ async def analyze_pgn(
                     namespace=f"move-{int(facts['index'])}-after",
                 ),
             )
-        )
+        from .move_comparison import build_played_best_comparison
+
+        comparison = build_played_best_comparison(review)
+        if comparison is not None:
+            review = review.model_copy(
+                update={"played_best_comparison": comparison.model_dump(by_alias=True)}
+            )
+        reviews.append(review)
 
     return GameReviewResponse(
         analysis_id=analysis_id,

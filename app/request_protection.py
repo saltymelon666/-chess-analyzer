@@ -24,8 +24,11 @@ class ProtectionPolicy:
 
 
 PUBLIC_BETA_POLICIES: dict[str, ProtectionPolicy] = {
+    "auth": ProtectionPolicy("auth", "注册登录", 10, 100),
+    "billing": ProtectionPolicy("billing", "支付订单", 12, 100),
     "event": ProtectionPolicy("event", "行为事件", 120, 2_000),
     "game-review": ProtectionPolicy("game-review", "整盘分析", 12, 100),
+    "position-verify": ProtectionPolicy("position-verify", "局面确认", 30, 300),
     "deepseek": ProtectionPolicy("deepseek", "DeepSeek 分析", 30, 300),
     "deepseek-global": ProtectionPolicy(
         "deepseek-global",

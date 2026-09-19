@@ -25,6 +25,16 @@ EventName = Literal[
     "analysis_complete",
     "report_export",
     "feedback",
+    "signup",
+    "free_analysis_start",
+    "free_analysis_complete",
+    "paywall_view",
+    "monthly_purchase",
+    "yearly_purchase",
+    "payment_success",
+    "payment_failed",
+    "subscription_renew",
+    "subscription_cancel",
 ]
 
 
@@ -103,6 +113,21 @@ class StatisticsSummary(BaseModel):
     deepseek_total_tokens: int
     estimated_ai_cost: float | None = None
     upload_to_analysis_rate: float | None = None
+    signups: int = 0
+    free_analysis_starts: int = 0
+    free_analysis_completions: int = 0
+    paywall_views: int = 0
+    monthly_purchases: int = 0
+    yearly_purchases: int = 0
+    payment_successes: int = 0
+    payment_failures: int = 0
+    subscription_renewals: int = 0
+    subscription_cancellations: int = 0
+    signup_to_free_completion_rate: float | None = None
+    free_to_purchase_rate: float | None = None
+    intro_to_renewal_rate: float | None = None
+    monthly_to_yearly_rate: float | None = None
+    average_analyses_per_paid_user: float | None = None
 
 
 class DailyStatistics(StatisticsSummary):
@@ -453,7 +478,17 @@ class AnalyticsStore:
                 SUM(CASE WHEN event_name = 'page_view' THEN 1 ELSE 0 END) AS page_views,
                 SUM(CASE WHEN event_name = 'upload_pgn' THEN 1 ELSE 0 END) AS uploads,
                 SUM(CASE WHEN event_name = 'upload_pgn' AND success = 1 THEN 1 ELSE 0 END) AS upload_successes,
-                SUM(CASE WHEN event_name = 'upload_pgn' AND success = 0 THEN 1 ELSE 0 END) AS upload_failures
+                SUM(CASE WHEN event_name = 'upload_pgn' AND success = 0 THEN 1 ELSE 0 END) AS upload_failures,
+                SUM(CASE WHEN event_name = 'signup' THEN 1 ELSE 0 END) AS signups,
+                SUM(CASE WHEN event_name = 'free_analysis_start' THEN 1 ELSE 0 END) AS free_starts,
+                SUM(CASE WHEN event_name = 'free_analysis_complete' THEN 1 ELSE 0 END) AS free_completions,
+                SUM(CASE WHEN event_name = 'paywall_view' THEN 1 ELSE 0 END) AS paywall_views,
+                SUM(CASE WHEN event_name = 'monthly_purchase' THEN 1 ELSE 0 END) AS monthly_purchases,
+                SUM(CASE WHEN event_name = 'yearly_purchase' THEN 1 ELSE 0 END) AS yearly_purchases,
+                SUM(CASE WHEN event_name = 'payment_success' THEN 1 ELSE 0 END) AS payment_successes,
+                SUM(CASE WHEN event_name = 'payment_failed' THEN 1 ELSE 0 END) AS payment_failures,
+                SUM(CASE WHEN event_name = 'subscription_renew' THEN 1 ELSE 0 END) AS renewals,
+                SUM(CASE WHEN event_name = 'subscription_cancel' THEN 1 ELSE 0 END) AS cancellations
             FROM events{window}
             """,
             parameters,
@@ -480,6 +515,26 @@ class AnalyticsStore:
         failures = int(row["failures"] or 0)
         prompt_tokens = int(row["prompt_tokens"] or 0)
         completion_tokens = int(row["completion_tokens"] or 0)
+        signups = int(events["signups"] or 0)
+        free_completions = int(events["free_completions"] or 0)
+        monthly_purchases = int(events["monthly_purchases"] or 0)
+        yearly_purchases = int(events["yearly_purchases"] or 0)
+        renewals = int(events["renewals"] or 0)
+        intro_monthly_purchases = max(0, monthly_purchases - renewals)
+        paid_window = " AND a.created_at >= ? AND a.created_at < ?" if parameters else ""
+        paid_users_row = self._execute(
+            connection,
+            f"""SELECT COUNT(*) AS paid_analyses,
+                       COUNT(DISTINCT a.visitor_id) AS paid_users
+                FROM analysis_logs a
+                WHERE EXISTS (
+                    SELECT 1 FROM events e
+                    WHERE e.visitor_id=a.visitor_id AND e.event_name='payment_success'
+                ){paid_window}""",
+            parameters,
+        ).fetchone()
+        paid_users = int(paid_users_row["paid_users"] or 0)
+        paid_analyses = int(paid_users_row["paid_analyses"] or 0)
         has_prices = self.input_price_per_million > 0 or self.output_price_per_million > 0
         estimated_cost = None
         if has_prices:
@@ -506,6 +561,21 @@ class AnalyticsStore:
             deepseek_total_tokens=int(row["total_tokens"] or 0),
             estimated_ai_cost=estimated_cost,
             upload_to_analysis_rate=round(analyses / uploads, 4) if uploads else None,
+            signups=signups,
+            free_analysis_starts=int(events["free_starts"] or 0),
+            free_analysis_completions=free_completions,
+            paywall_views=int(events["paywall_views"] or 0),
+            monthly_purchases=monthly_purchases,
+            yearly_purchases=yearly_purchases,
+            payment_successes=int(events["payment_successes"] or 0),
+            payment_failures=int(events["payment_failures"] or 0),
+            subscription_renewals=renewals,
+            subscription_cancellations=int(events["cancellations"] or 0),
+            signup_to_free_completion_rate=round(free_completions / signups, 4) if signups else None,
+            free_to_purchase_rate=round(int(events["payment_successes"] or 0) / free_completions, 4) if free_completions else None,
+            intro_to_renewal_rate=round(renewals / intro_monthly_purchases, 4) if intro_monthly_purchases else None,
+            monthly_to_yearly_rate=round(yearly_purchases / monthly_purchases, 4) if monthly_purchases else None,
+            average_analyses_per_paid_user=round(paid_analyses / paid_users, 2) if paid_users else None,
         )
 
     def all_time_statistics(self) -> StatisticsSummary:
