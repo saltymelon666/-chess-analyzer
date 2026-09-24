@@ -8,6 +8,7 @@
 - 确认页面问题：`initEngine` 收到 `readyok` 时把整个加载进度区设为 `display:none`，后续逐局面扫描虽更新“正在扫描 X/90”，用户却看不到进度。开发页和 GitHub Pages 发布页均移除此隐藏操作，使加载区一直显示到整盘初筛和任务建立结束，再由 `analyzeGame` 的 `finally` 统一关闭。
 - PR #64 对局面复核补充的 `authorizedHeaders` 是重复操作：通用 `fetchWithTimeout` 已自动附加登录凭证。生产对无凭证诊断请求返回401属于正常鉴权，不能作为用户实际请求失败的证据；后续修复已撤回该重复改动及其断言。后台权限机制保持原样。
 - 本次修复位于隔离工作树 `codex/fix-scan-progress`。完整回归 `422 passed, 1 warning`；开发/发布页面 SHA-256 一致、内联 JavaScript 语法通过、`git diff --check` 通过。用户实际浏览器是否还有设备性能或后端问题，需在新版页面用同一 PGN 再次确认；本机初筛完成不等于 DeepSeek 棋理质量已经验收。
+- PR #65 已合并为 `55e01e8`，GitHub Pages 部署成功；对 `https://pawnlab.cn/index.html` 实时读取确认新版不再在引擎 `readyok` 时隐藏进度，并仍含逐局面计数。使用隔离生产测试账号和用户提供的完整 PGN，`/api/game-review/start-local` 1.6秒创建89步任务，第45步后台 Stockfish 复核45.1秒返回 `authoritative=true` 和最佳着，DeepSeek专业分析13.5秒返回完整内容且无警告；后端健康检查200。测试账号无付款申请，随机密码与会话令牌只在诊断进程内使用，未写入仓库。该结果验证了相同棋谱的生产接口链路，不等于用户自己的浏览器与账号已复现成功。
 
 ## 58. 2026-09-21 会员与连续教练 v1 正式上线
 
