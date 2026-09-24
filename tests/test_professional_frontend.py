@@ -166,6 +166,18 @@ def test_browser_scan_progress_stays_visible_after_engine_ready() -> None:
         assert "本机引擎正在扫描 ${index + 1}/${moves.length} 个局面" in page
 
 
+def test_local_preview_uses_configured_api_origin() -> None:
+    for page in _pages():
+        assert 'const API_BASE_URL = window.CHESS_API_BASE_URL || (IS_LOCAL_FRONTEND ? "http://127.0.0.1:8000" : "");' in page
+
+
+def test_browser_scan_does_not_auto_verify_imported_last_move() -> None:
+    for page in _pages():
+        assert 'updateMoveReviewPanel({ deferVerification: Boolean(localResults) });' in page
+        assert 'document.getElementById("professionalAnalysisStatus").textContent = "选择棋步后生成";' in page
+        assert '整盘初筛已完成。点击棋谱中的任一步，后台会确认这一局面并生成讲解。' in page
+
+
 def test_key_pieces_feature_is_absent_from_both_pages() -> None:
     for page in _pages():
         assert "关键棋子" not in page
