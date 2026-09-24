@@ -166,6 +166,17 @@ def test_browser_scan_progress_stays_visible_after_engine_ready() -> None:
         assert "本机引擎正在扫描 ${index + 1}/${moves.length} 个局面" in page
 
 
+def test_browser_scan_restarts_failed_worker_without_losing_progress() -> None:
+    for page in _pages():
+        scan = page.split("async function scanGameInBrowser()", 1)[1].split("async function analyzeGame()", 1)[0]
+        assert "function resetLocalEngine()" in page
+        assert "engineRejectCallback?.(error)" in page
+        assert "for (let attempt = 0; attempt < 2; attempt += 1)" in scan
+        assert "resetLocalEngine();" in scan
+        assert "results.push(result);" in scan
+        assert "本机扫描中断（${localScanError}）" in page
+
+
 def test_local_preview_uses_configured_api_origin() -> None:
     for page in _pages():
         assert 'const API_BASE_URL = window.CHESS_API_BASE_URL || (IS_LOCAL_FRONTEND ? "http://127.0.0.1:8000" : "");' in page
@@ -207,7 +218,7 @@ def test_legacy_position_analysis_frontend_is_removed_and_move_review_remains() 
         assert "_authoritative" in page
         assert 'const scoreDirection = startFen.split(" ")[1] === "b" ? -1 : 1;' in page
         assert ".sort((a, b) => a - b)" in page
-        assert "本机引擎不可用，正在切换后台完整分析" in page
+        assert "本机扫描中断（${localScanError}），正在切换后台完整分析" in page
         assert "小兵研究员说" in page
 
 
