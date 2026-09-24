@@ -2152,7 +2152,7 @@ async function verifySelectedMove(review) {
   if (!pending) {
     pending = fetchWithTimeout(apiUrl("/api/game-review/position"), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authorizedHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ analysis_id: gameReview.analysis_id, move_index: review.index })
     }, 180000).then(async response => {
       const payload = await response.json().catch(() => ({}));
