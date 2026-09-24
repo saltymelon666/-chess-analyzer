@@ -1111,9 +1111,7 @@ const positionVerificationPending = new Map();
 let backendReconnectTimer = null;
 
 const IS_LOCAL_FRONTEND = ["localhost", "127.0.0.1"].includes(window.location.hostname);
-const API_BASE_URL = IS_LOCAL_FRONTEND
-  ? "http://127.0.0.1:8000"
-  : (window.CHESS_API_BASE_URL || "");
+const API_BASE_URL = window.CHESS_API_BASE_URL || (IS_LOCAL_FRONTEND ? "http://127.0.0.1:8000" : "");
 const AUTH_TOKEN_KEY = "pawnlab_auth_token_v1";
 let currentAccount = null;
 let chessRuntimePromise;
@@ -2128,7 +2126,7 @@ async function analyzeGame() {
     explanationRequestToken += 1;
     renderMovePreview();
     renderBoard();
-    updateMoveReviewPanel();
+    updateMoveReviewPanel({ deferVerification: Boolean(localResults) });
     document.getElementById("backendStatus").textContent = localResults
       ? `本机扫描完成 · 共 ${payload.move_count} 步 · 点开任一步由后台确认`
       : `后台完整评价完成 · 共 ${payload.move_count} 步 · 深度 ${payload.depth}`;
@@ -2176,7 +2174,7 @@ async function verifySelectedMove(review) {
   }
 }
 
-function updateMoveReviewPanel() {
+function updateMoveReviewPanel({ deferVerification = false } = {}) {
   const card = document.getElementById("moveReviewCard");
   const review = currentStep > 0 ? gameReview?.moves?.[currentStep - 1] : null;
   if (!review) {
@@ -2212,6 +2210,12 @@ function updateMoveReviewPanel() {
     _openingOnly: true
   });
   if (!review._authoritative && gameReview?.analysis_mode === "browser_scan_server_verify") {
+    if (deferVerification) {
+      document.getElementById("professionalAnalysisStatus").textContent = "选择棋步后生成";
+      document.getElementById("professionalAnalysisContent").innerHTML = `<p class="professional-status">整盘初筛已完成。点击棋谱中的任一步，后台会确认这一局面并生成讲解。</p>`;
+      return;
+    }
+    document.getElementById("professionalAnalysisStatus").textContent = "正在后台确认";
     document.getElementById("professionalAnalysisContent").innerHTML = `<p class="professional-status">本机扫描已定位到这一步，后台 Stockfish 正在用正式深度确认评价、最佳着和路线……</p>`;
     verifySelectedMove(review);
     return;
