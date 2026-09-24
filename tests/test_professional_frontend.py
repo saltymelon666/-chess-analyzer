@@ -159,11 +159,11 @@ def test_castling_history_sentences_are_removed_from_position_display() -> None:
         assert "].flatMap(professionalPositionSentences)" in page
 
 
-def test_selected_move_verification_sends_login_credentials() -> None:
+def test_browser_scan_progress_stays_visible_after_engine_ready() -> None:
     for page in _pages():
-        request = page.split('fetchWithTimeout(apiUrl("/api/game-review/position")', 1)[1]
-        request = request.split('body: JSON.stringify', 1)[0]
-        assert 'headers: authorizedHeaders({ "Content-Type": "application/json" })' in request
+        initialization = page.split("function initEngine()", 1)[1].split("function sendToEngine", 1)[0]
+        assert 'document.getElementById("loading").style.display = "none"' not in initialization
+        assert "本机引擎正在扫描 ${index + 1}/${moves.length} 个局面" in page
 
 
 def test_key_pieces_feature_is_absent_from_both_pages() -> None:
