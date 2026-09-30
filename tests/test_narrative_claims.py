@@ -14,6 +14,7 @@ from app.professional_analysis import (
     compute_professional_complexity,
 )
 from app.professional_refs import resolve_professional_draft, validate_professional_draft
+from app.strategic_plans import StrategicPlanFact, StrategicPlanPackage
 from app.professional_validation import (
     build_validation_context,
     validate_professional_analysis,
@@ -367,28 +368,168 @@ def test_unknown_claim_selection_falls_back_to_verified_recommendations() -> Non
     assert "下一次遇到" not in paragraph
 
 
-def test_global_posture_and_engine_comparison_are_always_in_the_core_path() -> None:
+def test_global_posture_stays_but_numeric_score_report_is_not_in_core_path() -> None:
     move = professional_review()
     package = build_narrative_claim_package(move)
     selected = resolve_narrative_claims(package)
     position = next(item for item in package.claims if item.kind == "position_fact")
-    comparison = next(
-        item for item in package.claims if item.kind == "evaluation_comparison"
-    )
     paragraph = compose_verified_core_paragraph(package)
 
     assert position.claim_id == "claim:1:position:evaluation"
     assert position.source == "stockfish"
     assert not any(character.isdigit() for character in position.statement)
     assert selected[0].kind == "position_fact"
-    assert comparison in selected
+    assert not any(item.kind == "evaluation_comparison" for item in package.claims)
     assert paragraph.startswith(position.statement)
-    assert paragraph.index(position.statement) < paragraph.index(comparison.statement)
+    assert not any(marker in paragraph for marker in ("后评价", " cp", "定级", "首选是"))
     assert "从e2来到e4" not in paragraph
     assert "直接控制的格子" not in paragraph
     assert not any(marker in paragraph for marker in LEGACY_NARRATIVE_MARKERS)
     assert "检查顺序" not in paragraph
     assert "评价差距不足以支持" not in paragraph
+
+
+def test_best_move_plan_explains_a_verified_choice_without_inventing_a_cause() -> None:
+    move = professional_review().model_copy(deep=True)
+    best_line = move.candidate_lines[1]
+    move.candidate_lines[0].rank = 2
+    best_line.rank = 1
+    move.candidate_lines[0], move.candidate_lines[1] = best_line, move.candidate_lines[0]
+    move.best_move = best_line.first_move.model_copy(deep=True)
+    move.best_move_uci = best_line.first_move.uci
+    move.best_move_san = best_line.first_move.san
+    move.centipawn_loss = 80
+    plans = StrategicPlanPackage(
+        position_id="test-position",
+        plans=[StrategicPlanFact(
+            plan_id="plan:center",
+            side="white",
+            type="prepare_center_break",
+            goal="用d4兵争取中心空间",
+            supporting_moves=["d2d4", "d4"],
+            evidence_route_ids=[best_line.id, "line:3"],
+            structural_evidence=["d4兵的推进路线已验证"],
+            confidence="high",
+        )],
+    )
+
+    package = build_narrative_claim_package(move, plan_package=plans)
+    claim = next(item for item in package.claims if item.claim_id == "claim:1:best-plan:plan:center")
+    paragraph = compose_verified_core_paragraph(package)
+
+    assert claim.evidence_refs == [best_line.id, "line:3"]
+    assert "首选d4对应的路线重视用d4兵争取中心空间" in paragraph
+    assert "e4没有争取中心空间" not in paragraph
+
+    plans.plans[0].confidence = "medium"
+    weaker = build_narrative_claim_package(move, plan_package=plans)
+    assert all("best-plan" not in item.claim_id for item in weaker.claims)
+
+
+def test_small_gap_move_order_tracks_the_original_piece() -> None:
+    move = professional_review().model_copy(deep=True)
+    board = chess.Board()
+    played = chess.Move.from_uci("g1f3")
+    after = board.copy(stack=False)
+    after.push(played)
+    move.san = "Nf3"
+    move.uci = played.uci()
+    move.from_square = "g1"
+    move.to_square = "f3"
+    move.after_fen = after.fen()
+    move.played_move = MoveFacts(
+        id="move:played:1", san="Nf3", uci="g1f3",
+        from_square="g1", to_square="f3", piece="knight",
+        capture=False, check=False, checkmate=False, castling=False,
+    )
+    best_line = _line_from_uci(board, ["b1c3", "e7e5", "g1f3"])
+    best_line.id = "line:best"
+    move.candidate_lines = [best_line]
+    move.best_move = best_line.first_move.model_copy(deep=True)
+    move.best_move_uci = "b1c3"
+    move.best_move_san = "Nc3"
+    move.centipawn_loss = 18
+    move.actual_move_line = None
+
+    package = build_narrative_claim_package(move)
+    paragraph = compose_verified_core_paragraph(package)
+
+    assert "Nf3先调动g1的白马" in paragraph
+    assert "Nc3先调动b1的另一枚白马" in paragraph
+    assert "首选路线稍后也走Nf3" in paragraph
+    assert all(ref for item in package.claims for ref in item.evidence_refs)
+
+    replaced = move.model_copy(deep=True)
+    replaced.candidate_lines[0] = _line_from_uci(
+        board, ["b1c3", "e7e5", "g1h3", "b8c6", "h3g1", "g8f6", "g1f3"]
+    )
+    replaced.candidate_lines[0].id = "line:best"
+    # The same knight returned to g1, but the original first-move timing is gone.
+    assert all(
+        item.claim_id != "claim:1:strategic-choice"
+        for item in build_narrative_claim_package(replaced).claims
+    )
+
+
+def test_core_recommendations_keep_verified_plan_and_immediate_role() -> None:
+    move = professional_review()
+    plans = StrategicPlanPackage(position_id="test-position", plans=[StrategicPlanFact(
+        plan_id="center-e4", side="white", type="prepare_center_break",
+        goal="准备并实施e4方向的中心兵突破",
+        supporting_moves=["e4"], evidence_route_ids=["line:1", "line:2"],
+        structural_evidence=["e2兵沿中心方向合法推进到e4"], confidence="high",
+    )])
+    package = build_narrative_claim_package(move, plan_package=plans)
+    paragraph = compose_verified_core_paragraph(package)
+
+    assert "claim:1:plan:center-e4" in package.recommended_claim_refs
+    assert "claim:1:plan:center-e4" in {
+        item.claim_id for item in resolve_narrative_claims(
+            package, ["claim:1:position:evaluation"]
+        )
+    }
+    claims_by_id = {item.claim_id: item for item in package.claims}
+    assert all(
+        claims_by_id[item].kind not in {"move_event", "move_effect"}
+        for item in package.recommended_claim_refs
+    )
+    assert "e4直接推进e线兵" in paragraph
+
+    plans.plans[0].side = "black"
+    wrong_side = build_narrative_claim_package(move, plan_package=plans)
+    assert all(item.kind != "verified_plan" for item in wrong_side.claims)
+
+
+def test_route_supported_center_conflict_is_a_future_plan_not_current_gain() -> None:
+    move = professional_review()
+    plans = StrategicPlanPackage(position_id="test-position", plans=[
+        StrategicPlanFact(
+            plan_id="white-c4", side="white", type="prepare_center_break",
+            goal="准备并实施c4方向的中心兵突破", supporting_moves=["c4"],
+            evidence_route_ids=["line:1", "line:2"],
+            structural_evidence=["c2兵可合法推进到c4"], confidence="high",
+        ),
+        StrategicPlanFact(
+            plan_id="black-c5", side="black", type="prepare_center_break",
+            goal="准备并实施c5方向的中心兵突破", supporting_moves=["c5"],
+            evidence_route_ids=["line:1", "line:3"],
+            structural_evidence=["c7兵可合法推进到c5"], confidence="high",
+        ),
+    ])
+    package = build_narrative_claim_package(move, plan_package=plans)
+    paragraph = compose_verified_core_paragraph(package)
+
+    assert "白方准备c4，黑方准备c5" in paragraph
+    assert "c线中心兵何时接触" in paragraph
+
+
+def test_pawn_move_role_names_the_attacked_pawn_without_promising_a_win() -> None:
+    package = build_narrative_claim_package(_h4_review())
+    paragraph = compose_verified_core_paragraph(package)
+
+    assert "h4" in paragraph
+    assert "g5的黑兵" in paragraph
+    assert "必然丢失" not in paragraph
 
 
 def test_priority_position_fact_cannot_replace_stockfish_global_posture() -> None:
@@ -416,17 +557,19 @@ def test_small_gap_wording_matches_the_existing_position_posture() -> None:
 
     move.before.centipawn = -424
     losing_text = compose_verified_core_paragraph(build_narrative_claim_package(move))
-    assert "白方的困难在落子前已经存在" in losing_text
+    assert "黑方已取得决定性优势" in losing_text
+    assert "与首选d4的评价接近" not in losing_text
+    assert "落子前已经存在" not in losing_text
 
     move.before.centipawn = 180
     winning_text = compose_verified_core_paragraph(build_narrative_claim_package(move))
-    assert "白方原有的优势在落子前已经形成" in winning_text
-    assert "白方的困难" not in winning_text
+    assert "白方优势明显" in winning_text
+    assert "原有的优势在落子前" not in winning_text
 
     move.before.centipawn = 0
     balanced_text = compose_verified_core_paragraph(build_narrative_claim_package(move))
-    assert "没有显著打破原有的平衡" in balanced_text
-    assert "困难" not in balanced_text
+    assert "双方机会大致相当" in balanced_text
+    assert "没有显著打破原有的平衡" not in balanced_text
 
 
 def test_inferior_move_path_names_reply_without_inventing_a_single_cause() -> None:
@@ -442,8 +585,8 @@ def test_inferior_move_path_names_reply_without_inventing_a_single_cause() -> No
 
     assert "move_event" not in kinds
     assert "move_effect" not in kinds
-    assert kinds.index("position_fact") < kinds.index("evaluation_comparison")
-    assert kinds.index("evaluation_comparison") < kinds.index("opponent_resource")
+    assert "evaluation_comparison" not in kinds
+    assert kinds.index("position_fact") < kinds.index("opponent_resource")
     assert "首选回应" in reply.statement
     assert move.actual_move_line is not None
     assert move.actual_move_line.moves[0].san in reply.statement
@@ -496,7 +639,7 @@ def test_quiet_reply_explains_same_piece_multi_ply_capture() -> None:
     assert "瞄住c5的黑兵" in cause.statement
     assert "经过Bf5、Re1、Bg7后，还是这枚马以Nxc5吃掉该子" in cause.statement
     assert "Ne4不是单纯调子，而是在为Nxc5改善落点" in cause.statement
-    assert "不能把全部95 cp评价变化只归因于这一处" in cause.statement
+    assert "先争到攻击节奏，随后在这条变化里兑现为子力收获" in cause.statement
     assert cause.evidence_refs == [
         "line:actual",
         "line:played:ply:1",
@@ -580,9 +723,6 @@ def test_small_gap_flank_push_explains_plan_timing_and_central_reply() -> None:
     move = _closed_center_flank_choice_review()
     package = build_narrative_claim_package(move)
     choice = next(item for item in package.claims if item.kind == "verified_choice")
-    comparison = next(
-        item for item in package.claims if item.kind == "evaluation_comparison"
-    )
     paragraph = compose_verified_core_paragraph(package)
 
     assert "f4的棋理价值，是利用封闭中心先在王翼争取空间" in choice.statement
@@ -593,11 +733,9 @@ def test_small_gap_flank_push_explains_plan_timing_and_central_reply() -> None:
     assert "首选路线并没有放弃f4" in choice.statement
     assert "先走Qb3" in choice.statement
     assert "与实战的真正区别是次序，不是进攻方向" in choice.statement
-    assert "它不是失误，真正的差别在计划执行次序" in comparison.statement
-    assert "Stockfish评价从+1.24变为+1.05" in comparison.statement
-    assert "评价损失19 cp" in comparison.statement
-    assert "走法等级为“好棋”" in comparison.statement
-    assert paragraph.index(comparison.statement) < paragraph.index(choice.statement)
+    assert not any(item.kind == "evaluation_comparison" for item in package.claims)
+    assert choice.statement in paragraph
+    assert not any(marker in paragraph for marker in ("与首选Qb3的评价接近", "后评价", " cp", "定级"))
     assert "只是选择的侧重点不同" not in paragraph
 
 

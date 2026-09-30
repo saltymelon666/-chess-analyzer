@@ -87,7 +87,7 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .book_case_transfer import BookCaseTransferPackage
-PROFESSIONAL_PROMPT_VERSION = "professional-v48-continuity-comparison-compression"
+PROFESSIONAL_PROMPT_VERSION = "professional-v53-prose-without-score-reports"
 PROFESSIONAL_TOKEN_LIMITS = {"simple": 1500, "normal": 2600, "complex": 3400}
 STRATEGY_TAGS = [
     "king_attack",
@@ -765,7 +765,7 @@ def professional_user_prompt(payload: dict[str, Any], complexity: str) -> str:
 6. positionAssessment只允许输出summary，不得输出material、kingSafety、pieceActivity或pawnStructure；这些动态栏目全部由后端重点选择器按selectedFacts回填。
 7. positionAssessment.summary必须是围绕corePainPoint的完整段落，只说明理解核心问题必需的局面条件。不得为了显得全面而同时罗列子力、王安全、中心和两翼；不能只写“当前局面某方子”之类残句。
 8. plans.white和plans.black必须返回空数组。战略计划只能通过planExplanations按chessFacts.plans中的plan_id解释；没有程序计划时planExplanations返回空数组。禁止创建planId、修改计划类型或增加棋步。
-9. playedMoveAnalysis.claimRefs必须从narrativeClaims.claims中选择1—6项，覆盖走前全局态势和实战选择；存在引擎比较时纳入比较，存在position_cause时必须优先选择它。intention只说明所选命题的组织意图，后端将按这些claimRefs重建页面核心正文。不得在intention增加命题目录之外的因果、计划、目标或时序。最终正文按“局面结论 → 实战选择与代价 → 已验证的具体原因”自然推进，不显示分析流程、校验过程或教学检查清单；从实战落子方角度解释，不能把走完这步后轮到的一方说反。多步后果必须保留命题中已经验证的中间着法。positiveEffects和problems只记录必要补充，不重复评价。
+9. playedMoveAnalysis.claimRefs必须从narrativeClaims.claims中选择1—6项，覆盖走前全局态势和实战选择；存在具体走法比较时纳入棋理解释，存在position_cause时必须优先选择它。intention只说明所选命题的组织意图，后端将按这些claimRefs重建页面核心正文。不得在intention增加命题目录之外的因果、计划、目标或时序。最终正文按“局面结论 → 实战选择与代价 → 已验证的具体原因”自然推进，不显示分析流程、校验过程或教学检查清单。所有解释文字都不要重复前后评分、cp损失、走法定级或“首选是某步”的报数句；这些信息由独立棋步数据展示。可以保留讲清具体原因的走法比较。从实战落子方角度解释，不能把走完这步后轮到的一方说反。多步后果必须保留命题中已经验证的中间着法。positiveEffects和problems只记录必要补充，不重复评价。
 10. 每条candidateLines的directPurpose、continuationExplanation、advantages和risks必须使用完整具体中文；优点和风险要说明对子力、空间、兵形或线路的实际影响，不能只写标签。用棋手复盘时会说的短句直接讲清“为什么”和“接下来怎样”，避免“阶段性、当前交换段、实际结果、符合当前局面需求、继续比较路线、作为路线起点、该项不作评价”等报告腔套话。
 11. 弱点、王安全、子力活动、兵形、全局威胁与路线内部事件由后端重点选择器生成，不要输出这些字段；不要自行拆分PV阶段。strategyTags只能使用：{strategy_tags}。
 12. 草稿解释文字目标为{length}个中文字符；后端会追加结构化事实并回填真实走法。complexity必须是{complexity}。

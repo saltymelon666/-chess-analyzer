@@ -325,6 +325,7 @@ def _king_safety(board: chess.Board) -> list[EvidenceFact]:
 
 def _pawn_structure(board: chess.Board) -> list[EvidenceFact]:
     facts: list[EvidenceFact] = []
+    controls: list[EvidenceFact] = []
     all_pawn_files = {
         color: Counter(chess.square_file(sq) for sq in board.pieces(chess.PAWN, color))
         for color in (chess.WHITE, chess.BLACK)
@@ -339,6 +340,14 @@ def _pawn_structure(board: chess.Board) -> list[EvidenceFact]:
         for sq in pawns:
             file_index = chess.square_file(sq)
             square_name = chess.square_name(sq)
+            controlled = [chess.square_name(target) for target in
+                          board.attacks(sq) & board.pin(color, sq)]
+            if controlled:
+                controls.append(_fact(
+                    "pawn_control", side,
+                    f"{square_name}的{'白' if color else '黑'}兵控制{'、'.join(controlled)}",
+                    [square_name, *controlled],
+                ))
             adjacent_has_pawn = any(by_file.get(adj, 0) for adj in (file_index - 1, file_index + 1) if 0 <= adj < 8)
             if not adjacent_has_pawn:
                 facts.append(_fact("isolated_pawn", side, f"{square_name}兵是孤兵，相邻线路没有本方兵", [square_name]))
@@ -390,7 +399,7 @@ def _pawn_structure(board: chess.Board) -> list[EvidenceFact]:
         elif not white_count or not black_count:
             side = "white" if not white_count else "black"
             facts.append(_fact("half_open_file", side, f"{file_name}线对{'白' if side == 'white' else '黑'}方是半开放线", []))
-    return facts
+    return facts + controls
 
 
 def _route_threats(

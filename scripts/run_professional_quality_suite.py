@@ -165,9 +165,6 @@ def thought_path_summary(
         and item.source == "stockfish"
         and item.scope == "before_move"
     ), None)
-    comparison_claim = next((
-        item for item in selected if item.kind == "evaluation_comparison"
-    ), None)
     available_cause = next((
         item for item in package.claims if item.kind == "position_cause"
     ), None)
@@ -177,18 +174,29 @@ def thought_path_summary(
     ), None)
     indices = {
         "global": core.find(global_posture_claim.statement) if global_posture_claim else -1,
-        "comparison": core.find(comparison_claim.statement) if comparison_claim else -1,
         "cause": core.find(selected_cause.statement) if selected_cause else -1,
         "consequence": core.find(selected_consequence.statement) if selected_consequence else -1,
     }
     global_posture = global_posture_claim is not None and indices["global"] == 0
-    key_choice = (
-        "evaluation_comparison" in kinds
-        and indices["comparison"] > indices["global"] >= 0
+    key_choice = any(
+        item.kind in {"verified_choice", "position_cause", "opponent_resource", "verified_consequence"}
+        and core.find(item.statement) > indices["global"] >= 0
+        for item in selected
     )
     causal_explanation = available_cause is None or (
-        selected_cause is not None and indices["cause"] > indices["comparison"] >= 0
+        selected_cause is not None
+        and indices["global"] < indices["cause"]
     )
+    mechanisms = [
+        core.find(item.statement)
+        for item in selected
+        if item.kind in {
+            "verified_choice", "position_cause", "opponent_resource",
+            "verified_consequence", "verified_plan",
+        }
+    ]
+    score_report_free = not re.search(r"后评价|损失\s*\d+\s*cp|定级|首选是|与首选[^。]*的评价接近", core)
+    mechanisms_rendered = bool(mechanisms) and all(index >= 0 for index in mechanisms)
     legacy_template_free = not any(marker in core for marker in LEGACY_NARRATIVE_MARKERS)
     process_text_free = not any(
         phrase in core
@@ -204,6 +212,8 @@ def thought_path_summary(
         "globalPosture": global_posture,
         "keyChoice": key_choice,
         "causalExplanation": causal_explanation,
+        "scoreReportFree": score_report_free,
+        "mechanismsRendered": mechanisms_rendered,
         "processTextFree": process_text_free,
         "inferiorMove": inferior,
         "punishmentHandled": punishment_handled,
@@ -213,6 +223,8 @@ def thought_path_summary(
             global_posture
             and key_choice
             and causal_explanation
+            and score_report_free
+            and mechanisms_rendered
             and punishment_handled
             and legacy_template_free
             and process_text_free

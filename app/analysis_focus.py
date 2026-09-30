@@ -119,6 +119,9 @@ def select_analysis_focus(move: MoveReview) -> AnalysisFocus:
     global_threats: list[FocusFact] = []
 
     for raw in raw_facts:
+        # Control is supporting evidence, not by itself a threat or weakness.
+        if raw.category == "pawn_control":
+            continue
         if raw.category in WEAKNESS_CATEGORIES:
             counters["rawWeaknesses"] += 1
             scored = _score_weakness(raw, move, board, route_usage)
@@ -169,7 +172,7 @@ def select_analysis_focus(move: MoveReview) -> AnalysisFocus:
             id=item.id,
             scope="current_position",
             category="immediate_checkmate" if item.checkmate else "immediate_check",
-            description=f"{move.side}方当前可以走{item.san}",
+            description=f"{'白方' if move.side == 'white' else '黑方'}当前可以走{item.san}",
             importance_score=score,
             decision_impact="当前即可将军，必须纳入本回合决策。",
             evidence_refs=(item.id,),
@@ -190,7 +193,7 @@ def select_analysis_focus(move: MoveReview) -> AnalysisFocus:
             id=item.id,
             scope="current_position",
             category="immediate_capture",
-            description=f"{move.side}方当前可以走{item.san}",
+            description=f"{'白方' if move.side == 'white' else '黑方'}当前可以走{item.san}",
             importance_score=4 if display else 2,
             decision_impact=(
                 "当前即可吃掉重要棋子，直接影响走法选择。"
