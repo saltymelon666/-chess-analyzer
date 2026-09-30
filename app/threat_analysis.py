@@ -246,6 +246,10 @@ class ThreatAnalyzer:
         candidate = result.top_moves[0]
         if candidate.mate_in is None:
             return None
+        root_side = "white" if board.turn else "black"
+        if not _mate_favors(result.mate_in, root_side) or not _mate_favors(candidate.mate_in, root_side):
+            # A checking move in a forced loss is not the mover's mate threat.
+            return None
         try:
             first = chess.Move.from_uci(candidate.move)
         except ValueError:
@@ -308,7 +312,10 @@ class ThreatAnalyzer:
             route_side = steps[0].side
             mate_for_route_side = _mate_favors(route.mate, route_side)
             mating_step = next((step for step in steps if step.after.is_checkmate()), None)
-            if mate_for_route_side or mating_step is not None:
+            root_delivers_mate = mating_step is not None and mating_step.side == route_side
+            if (mate_for_route_side or (route.mate is None and root_delivers_mate)) and (
+                mating_step is None or root_delivers_mate
+            ):
                 support = steps[0]
                 self._merge_candidate(
                     candidates,

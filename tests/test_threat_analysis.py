@@ -303,6 +303,53 @@ async def test_multiple_checks_trigger_bounded_deeper_mate_probe() -> None:
     assert engine.calls[0][1] == 13
 
 
+@pytest.mark.parametrize("mirror", [False, True])
+@pytest.mark.parametrize("mate", [None, 1, -1])
+def test_opponents_terminal_mate_is_not_a_root_mate_threat(mirror, mate) -> None:
+    board = chess.Board("6k1/pp4pp/4B3/3R4/8/3P2P1/Prn2PKP/8 b - - 2 27")
+    moves = [chess.Move.from_uci(uci) for uci in ("g8h8", "d5d8")]
+    if mirror:
+        board = board.mirror()
+        moves = [chess.Move(chess.square_mirror(m.from_square), chess.square_mirror(m.to_square)) for m in moves]
+        mate = -mate if mate is not None else None
+    package = package_with_routes(board.fen(), [([m.uci() for m in moves], None, mate)])
+    assert package.candidate_routes[0].verified
+    for move in moves:
+        board.push(move)
+    assert board.is_checkmate()
+    assert not any(t.type == "mate_threat" for t in ThreatAnalyzer().detect(package))
+
+
+@pytest.mark.parametrize("mirror", [False, True])
+@pytest.mark.parametrize("mate,expected", [(None, True), (1, True), (-1, False)])
+def test_root_terminal_mate_requires_consistent_winner(mirror, mate, expected) -> None:
+    board = chess.Board("7k/8/6QK/8/8/8/8/8 w - - 0 1")
+    move = chess.Move.from_uci("g6g7")
+    if mirror:
+        board = board.mirror()
+        move = chess.Move(chess.square_mirror(move.from_square), chess.square_mirror(move.to_square))
+        mate = -mate if mate is not None else None
+    package = package_with_routes(board.fen(), [([move.uci()], None, mate)])
+    mates = [t for t in ThreatAnalyzer().detect(package) if t.type == "mate_threat"]
+    assert bool(mates) == expected
+    if mates:
+        assert mates[0].side == ("white" if board.turn else "black")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("result_mate,candidate_mate", [(3, 3), (-3, 3), (3, -3)])
+async def test_deeper_probe_rejects_opponent_mate_or_inconsistent_scores(result_mate, candidate_mate):
+    package = package_with_routes("7k/8/8/8/2q5/8/5PPP/6K1 b - - 0 1", [], evaluation_cp=-900)
+    engine = FakeMateProbeEngine()
+    result = (await engine.analyze_many([], depth=13, timeout_seconds=1))[0]
+    result.mate_in = result_mate
+    result.top_moves[0].mate_in = candidate_mate
+    engine.analyze_many = AsyncMock(return_value=[result])
+    assert await ThreatAnalyzer()._probe_deeper_mate(package, engine) is None
+    engine.analyze_many.assert_awaited_once()
+    assert package.candidate_routes == []
+
+
 def test_no_verified_route_evidence_returns_empty_package() -> None:
     package = package_with_routes(chess.STARTING_FEN, [])
 
