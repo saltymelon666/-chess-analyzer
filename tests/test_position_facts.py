@@ -55,6 +55,23 @@ def test_material_pawns_and_file_structure_are_computed_from_board() -> None:
     assert "h" in result.semi_open_files["black"]
 
 
+def test_pawn_control_facts_include_empty_squares_but_respect_absolute_pins() -> None:
+    for fen in ("4k3/8/8/8/3P4/8/8/4K3 w - - 0 1",
+                "4r1k1/8/8/8/4P3/8/8/4K3 w - - 0 1"):
+        board = chess.Board(fen)
+        result = facts(fen)
+        controls = [item for item in result.pawn_structure if item.category == "pawn_control"]
+        for item in controls:
+            pawn = chess.parse_square(item.squares[0])
+            assert item.id and item.evidence
+            assert set(item.squares[1:]) == {chess.square_name(sq) for sq in
+                board.attacks(pawn) & board.pin(board.color_at(pawn), pawn)}
+        if board.is_pinned(chess.WHITE, chess.E4):
+            assert not controls
+        else:
+            assert set(controls[0].squares) == {"d4", "c5", "e5"}
+
+
 def test_immediate_checks_and_captures_are_legal_moves() -> None:
     fen = "4k3/8/8/8/8/8/4q3/4K3 w - - 0 1"
     board = chess.Board(fen)

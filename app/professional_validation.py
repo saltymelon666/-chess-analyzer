@@ -97,6 +97,7 @@ class ProfessionalValidationContext:
     routine_queen_exchange: bool
     initiative_side: str
     occupied_squares: set[str]
+    forced_mate_side: str | None = None
 
 
 def build_validation_context(
@@ -337,6 +338,8 @@ def build_validation_context(
         ),
         initiative_side=initiative_side,
         occupied_squares=set(pieces),
+        forced_mate_side=("white" if move.before.mate_in > 0 else "black")
+        if move.before.mate_in is not None else None,
     )
 
 
@@ -665,6 +668,15 @@ def validate_professional_analysis(
 
     for path, value in _all_strings_with_paths(payload):
         positive_text = _remove_negated_events(value)
+        # A score forecasting mate is not a terminal move event. Permit only
+        # the exact program-owned forecast in the two controlled fields, with
+        # the winner taken from the signed engine mate score. Free prose and
+        # claims that mate has occurred retain the original event gate.
+        if context.forced_mate_side and path in {
+            "$.positionAssessment.summary", "$.playedMoveAnalysis.intention",
+        }:
+            side = "白方" if context.forced_mate_side == "white" else "黑方"
+            positive_text = re.sub(rf"(?<![^。！？\n]){side}(?:已有|有)强制将杀。", "", positive_text)
         if re.search(r"吃子|吃掉|捕获|拿掉", positive_text) and not context.allows_capture:
             errors.append(f"{path}: 描述了结构化数据中不存在的吃子")
         if re.search(r"将杀|绝杀", positive_text) and not context.allows_checkmate:

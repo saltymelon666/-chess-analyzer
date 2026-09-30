@@ -4,6 +4,7 @@ import sqlite3
 import chess
 
 from app.unified_book_knowledge import (
+    DEFAULT_UNIFIED_BOOK_DATABASE,
     UnifiedBookKnowledgeRepository,
     _board_profile,
     _profile_similarity,
@@ -132,3 +133,19 @@ def test_position_similarity_distinguishes_pawn_advancement_from_shared_files() 
     )
 
     assert _profile_similarity(starting, advanced) < 0.62
+
+
+def test_shipped_book_database_supplies_context_for_a_quality_position() -> None:
+    assert DEFAULT_UNIFIED_BOOK_DATABASE.is_file()
+    repository = UnifiedBookKnowledgeRepository()
+
+    context = repository.analysis_context(
+        "rnbqkbnr/ppp2ppp/4p3/3p4/3P4/5N2/PPP1PPPP/RNBQKB1R w KQkq - 0 3",
+        theme_hints=["piece_activity_and_coordination"],
+        played_move_uci="e2e3",
+        best_move_uci="c2c4",
+    )
+
+    assert context.excerpts
+    assert all(item.source and item.authority_boundary for item in context.excerpts)
+    assert all(item.relation != "exact_current_position" for item in context.excerpts)
