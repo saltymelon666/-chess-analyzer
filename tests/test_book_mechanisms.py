@@ -61,6 +61,34 @@ CASES = [
 ]
 
 
+@pytest.mark.asyncio
+async def test_kf8_with_losing_kh8_candidate_returns_valid_professional_prose():
+    from app.chess_facts import build_move_fact_package
+    from app.professional_analysis import ProfessionalAnalysisService
+    from app.threat_analysis import ThreatAnalyzer
+
+    move = _review("6k1/pp4pp/4B3/3R4/8/3P2P1/Prn2PKP/8 b - - 2 27",
+                   "Kf8", "Rd7 h5 Kf3 a5 d4 Ne1+ Ke3 Ng2+ Ke4 Re2+")
+    losing = _san_line(chess.Board(move.before_fen), "Kh8 Rd8#", "line:2")
+    losing.rank = 2
+    losing.mate_in = 1
+    move.candidate_lines.append(losing)
+    move.allowed_moves.extend(fact.san for fact in losing.moves)
+    move.position_facts = extract_position_facts(
+        move.before_fen, candidate_lines=move.candidate_lines,
+        actual_move_line=move.actual_move_line, tactics=[], namespace="move-1-before")
+    threats = ThreatAnalyzer().classify(build_move_fact_package(move))
+    assert not any(t.type == "mate_threat" and t.side == "black" for t in threats.threats)
+    service = ProfessionalAnalysisService(api_key="", base_url="https://example.invalid",
+                                          model="test", timeout_seconds=1)
+    result = await service.analyze(move, threat_package=threats)
+    assert result.analysis is not None
+    context = build_validation_context(move, compute_professional_complexity(move).level)
+    assert validate_professional_analysis(result.analysis, context) == []
+    core = result.analysis.played_move_analysis.intention
+    assert core and all(term not in core for term in ("后评价", " cp", "定级", "首选是"))
+
+
 @pytest.mark.parametrize("fen,san,actual,best,first,second", CASES)
 def test_book_explanations_include_verified_mechanism_and_continuation(fen, san, actual, best, first, second):
     move = _review(fen, san, actual, best)
