@@ -87,7 +87,7 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .book_case_transfer import BookCaseTransferPackage
-PROFESSIONAL_PROMPT_VERSION = "professional-v54-mate-threat-ownership"
+PROFESSIONAL_PROMPT_VERSION = "professional-v55-concise-verified-prose"
 PROFESSIONAL_TOKEN_LIMITS = {"simple": 1500, "normal": 2600, "complex": 3400}
 STRATEGY_TAGS = [
     "king_attack",
@@ -714,7 +714,17 @@ def professional_system_prompt() -> str:
 
 def professional_user_prompt(payload: dict[str, Any], complexity: str) -> str:
     length = {"simple": "180—300", "normal": "320—500", "complex": "550—800"}[complexity]
-    compact_payload = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    # The selector and positional catalog contain the exact same facts. Keep
+    # the catalog intact and send only its selection IDs, without mutating the
+    # full server-side payload used for validation or diagnostics.
+    prompt_payload = dict(payload)
+    focus = dict(payload.get("focus", {}))
+    facts = payload.get("pos", {}).get("facts", [])
+    selected = focus.get("selectedFacts")
+    if selected and selected == facts:
+        focus["selectedFacts"] = [fact["id"] for fact in selected]
+        prompt_payload["focus"] = focus
+    compact_payload = json.dumps(prompt_payload, ensure_ascii=False, separators=(",", ":"))
     compact_contract = json.dumps(PROFESSIONAL_OUTPUT_CONTRACT, ensure_ascii=False, separators=(",", ":"))
     line_skeleton = json.dumps(
         [
@@ -768,7 +778,7 @@ def professional_user_prompt(payload: dict[str, Any], complexity: str) -> str:
 9. playedMoveAnalysis.claimRefs必须从narrativeClaims.claims中选择1—6项，覆盖走前全局态势和实战选择；存在具体走法比较时纳入棋理解释，存在position_cause时必须优先选择它。intention只说明所选命题的组织意图，后端将按这些claimRefs重建页面核心正文。不得在intention增加命题目录之外的因果、计划、目标或时序。最终正文按“局面结论 → 实战选择与代价 → 已验证的具体原因”自然推进，不显示分析流程、校验过程或教学检查清单。所有解释文字都不要重复前后评分、cp损失、走法定级或“首选是某步”的报数句；这些信息由独立棋步数据展示。可以保留讲清具体原因的走法比较。从实战落子方角度解释，不能把走完这步后轮到的一方说反。多步后果必须保留命题中已经验证的中间着法。positiveEffects和problems只记录必要补充，不重复评价。
 10. 每条candidateLines的directPurpose、continuationExplanation、advantages和risks必须使用完整具体中文；优点和风险要说明对子力、空间、兵形或线路的实际影响，不能只写标签。用棋手复盘时会说的短句直接讲清“为什么”和“接下来怎样”，避免“阶段性、当前交换段、实际结果、符合当前局面需求、继续比较路线、作为路线起点、该项不作评价”等报告腔套话。
 11. 弱点、王安全、子力活动、兵形、全局威胁与路线内部事件由后端重点选择器生成，不要输出这些字段；不要自行拆分PV阶段。strategyTags只能使用：{strategy_tags}。
-12. 草稿解释文字目标为{length}个中文字符；后端会追加结构化事实并回填真实走法。complexity必须是{complexity}。
+12. 草稿解释文字参考{length}个中文字符，不是必须凑足的下限。解释完整即可，不重复命题、评分或走子坐标来补字数；后端会追加结构化事实并回填真实走法。complexity必须是{complexity}。focus.selectedFacts若为ID列表，其完整事实在pos.facts中，只读取一次。
 13. 物质差、王位置、易位、评价方向、走法质量以及实战着是否与首选一致全部由程序填写。自由文本不得重写。interpretationPolicy.initiative.side为unknown时，禁止声称任何一方拥有主动权；不得把Stockfish分数直接解释成主动权。
 14. 必须先回答positionInterpretation.objective.primaryQuestion，并围绕priorityTopics组织局面概览、实战着解释和路线比较。deemphasizedTopics不得成为主线。winning_conversion应解释优势方如何兑现；attack_conversion应解释攻势配合和防守资源；endgame_plan不得在没有直接危险时泛谈护王；dynamic_balance应比较活动性与静态因素；move_quality_explanation必须按真实评价差控制批评强度。
 15. bookEvaluationMethod.narrative_path规定正文叙述顺序，bookEvaluationMethod.prose_rules规定语言边界，steps规定证据支持时需要解释的内容：局面评价与本步分差是两个问题；小分差只说明危机不是由本步造成，不能代替对全局优劣原因的解释。对手资源与计划只在已有证据时解释。required不能要求补造事实。短变化只证明已经说清的因果关系，不得代替中文解释。用鲜明判断、具体因果和克制修辞形成棋书文风，不复刻特定作者，不猜测棋手心理，不为戏剧性虚构惩罚或陷阱。
@@ -2010,14 +2020,12 @@ def _fit_resolved_analysis_length(
     move: MoveReview,
     level: str,
 ) -> ProfessionalAnalysis:
-    """Fit generated prose to the existing band without changing any referenced chess fact."""
+    """Bound prose without padding the program-verified core to a word quota."""
     result = _trim_profile_max(analysis, level)
     verified_core = bool(result.played_move_analysis.claim_refs)
-    minimum = (
-        VERIFIED_NARRATIVE_LENGTH_RANGES[level][0]
-        if verified_core
-        else LENGTH_RANGES[level][0]
-    )
+    if verified_core:
+        return result
+    minimum = LENGTH_RANGES[level][0]
     first_line = move.candidate_lines[0] if move.candidate_lines else None
     first = first_line.first_move if first_line else None
     verified = (
@@ -2030,12 +2038,6 @@ def _fit_resolved_analysis_length(
             f"；引擎先看{first.san}，从{first.from_square}到{first.to_square}"
         )
     verified += "。"
-    if verified_core and _narrative_length(result.model_dump(by_alias=True)) < minimum:
-        if len(result.position_assessment.summary) + len(verified) <= 500:
-            result.position_assessment.summary += verified
-        else:
-            result.comparison.main_difference += verified
-        return _trim_profile_max(result, level)
     while _narrative_length(result.model_dump(by_alias=True)) < minimum:
         if len(result.position_assessment.summary) + len(verified) <= 500:
             result.position_assessment.summary += verified

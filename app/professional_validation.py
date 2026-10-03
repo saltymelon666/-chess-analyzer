@@ -692,7 +692,16 @@ def validate_professional_analysis(
             else LENGTH_RANGES
         )
         minimum, maximum = ranges[context.complexity]
-        if not minimum <= length <= maximum:
+        if analysis.played_move_analysis.claim_refs:
+            # Complexity controls the maximum, not a requirement to repeat facts.
+            # All evidence, route, event and color checks above still apply.
+            core = analysis.played_move_analysis.intention.strip()
+            sentences = [part for part in re.split(r"[。！？]", core) if part.strip()]
+            if len(core) < 40 or len(sentences) < 2 or len(set(analysis.played_move_analysis.claim_refs)) < 2:
+                errors.append("playedMoveAnalysis.intention: 已验证正文必须完整说明局面与实战选择，不能只有标签或空句")
+            if length > maximum:
+                errors.append(f"专业分析正文长度不得超过{maximum}字，实际{length}字")
+        elif not minimum <= length <= maximum:
             errors.append(f"专业分析正文长度应为{minimum}—{maximum}字，实际{length}字")
     return errors
 

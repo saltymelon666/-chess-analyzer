@@ -49,6 +49,7 @@ class StockfishService:
         self.timeout_seconds = timeout_seconds
         self.queue_timeout_seconds = max(0.01, queue_timeout_seconds)
         self._lock = asyncio.Lock()
+        self._cache_lock = threading.Lock()
         self._result_cache: OrderedDict[tuple[str, int], EngineResult] = OrderedDict()
 
     def available(self) -> bool:
@@ -63,6 +64,9 @@ class StockfishService:
         if not self.available():
             raise RuntimeError(f"找不到 Stockfish：{self.executable}")
 
+        cached = self._cached_result(board, self.depth)
+        if cached is not None:
+            return cached
         return await self._run_exclusive(
             lambda: self._analyze_sync(board),
             timeout_seconds=self.timeout_seconds,
@@ -83,6 +87,10 @@ class StockfishService:
                 raise ValueError(f"无效的 FEN：{exc}") from exc
         if not self.available():
             raise RuntimeError(f"找不到 Stockfish：{self.executable}")
+        # Partial batches still use the unchanged exclusive stability path.
+        cached = [self._cached_result(board, depth) for board in boards]
+        if all(result is not None for result in cached):
+            return [result for result in cached if result is not None]
         cancel_event = threading.Event()
         return await self._run_exclusive(
             lambda: self._analyze_many_sync(boards, depth, cancel_event=cancel_event),
@@ -208,18 +216,20 @@ class StockfishService:
 
     def _cached_result(self, board: chess.Board, depth: int) -> EngineResult | None:
         key = (board.fen(), depth)
-        cached = self._result_cache.get(key)
-        if cached is None:
-            return None
-        self._result_cache.move_to_end(key)
-        return cached.model_copy(deep=True)
+        with self._cache_lock:
+            cached = self._result_cache.get(key)
+            if cached is None:
+                return None
+            self._result_cache.move_to_end(key)
+            return cached.model_copy(deep=True)
 
     def _cache_result(self, board: chess.Board, depth: int, result: EngineResult) -> None:
         key = (board.fen(), depth)
-        self._result_cache[key] = result.model_copy(deep=True)
-        self._result_cache.move_to_end(key)
-        while len(self._result_cache) > MAX_ENGINE_CACHE_ENTRIES:
-            self._result_cache.popitem(last=False)
+        with self._cache_lock:
+            self._result_cache[key] = result.model_copy(deep=True)
+            self._result_cache.move_to_end(key)
+            while len(self._result_cache) > MAX_ENGINE_CACHE_ENTRIES:
+                self._result_cache.popitem(last=False)
 
     def _cache_results(
         self,

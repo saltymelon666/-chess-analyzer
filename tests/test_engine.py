@@ -105,6 +105,34 @@ async def test_timed_out_worker_keeps_lock_until_background_thread_finishes() ->
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("batch", [False, True])
+async def test_exact_cache_hit_does_not_wait_for_busy_engine(batch: bool) -> None:
+    service = StockfishService(ROOT / "stockfish.exe", depth=20, threads=1,
+                               hash_mb=16, multipv=3, timeout_seconds=5,
+                               queue_timeout_seconds=0.01)
+    board = chess.Board()
+    expected = _engine_result(35, "e2e4", depth=20)
+    service._cache_result(board, 20, expected)
+    await service._lock.acquire()
+    try:
+        if batch:
+            result = (await service.analyze_many([board.fen()], depth=20, timeout_seconds=5))[0]
+        else:
+            result = await service.analyze(board.fen())
+        assert result == expected
+        assert service._lock.locked()
+        result.centipawn = 999
+        assert service._cached_result(board, 20) == expected
+        with pytest.raises(StockfishBusyError):
+            await service.analyze_many([board.fen()], depth=22, timeout_seconds=5)
+        board.push_uci("e2e4")
+        with pytest.raises(StockfishBusyError):
+            await service.analyze_many([chess.STARTING_FEN, board.fen()], depth=20, timeout_seconds=5)
+    finally:
+        service._lock.release()
+
+
+@pytest.mark.asyncio
 async def test_timeout_signals_batch_worker_to_stop() -> None:
     service = StockfishService(
         ROOT / "stockfish.exe",
