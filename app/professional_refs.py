@@ -188,7 +188,9 @@ def build_reference_payload(move: MoveReview, complexity: str, reasons: list[str
     return _replace_known_refs(_without_empty(payload), aliases_by_source)
 
 
-def parse_professional_draft(content: str) -> tuple[ProfessionalAnalysisDraft | None, list[DraftValidationIssue]]:
+def parse_professional_draft(
+    content: str, *, route_payload: dict[str, Any] | None = None,
+) -> tuple[ProfessionalAnalysisDraft | None, list[DraftValidationIssue]]:
     cleaned = content.strip()
     if cleaned.startswith("```"):
         cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", cleaned, flags=re.IGNORECASE)
@@ -196,6 +198,23 @@ def parse_professional_draft(content: str) -> tuple[ProfessionalAnalysisDraft | 
         payload = json.loads(cleaned)
     except json.JSONDecodeError as exc:
         return None, [DraftValidationIssue("$", "JSON结构错误", str(exc))]
+    if route_payload is not None and isinstance(payload, dict):
+        # Route ownership stays with the verified catalog, not the language
+        # model. Only omitted fields are supplied; wrong/empty supplied values
+        # remain untouched and must fail the existing strict route validator.
+        routes = {line["id"]: [ply["id"] for ply in line.get("plies", [])]
+                  for line in route_payload.get("lines", [])}
+        lines = payload.get("candidateLines")
+        if isinstance(lines, list):
+            for line in lines:
+                if isinstance(line, dict) and isinstance(line.get("lineRef"), str):
+                    if line["lineRef"] in routes:
+                        line.setdefault("plyRefs", list(routes[line["lineRef"]]))
+        played = payload.get("playedMoveAnalysis")
+        if isinstance(played, dict):
+            plies = [ply["id"] for ply in (route_payload.get("actual") or {}).get("plies", [])]
+            played.setdefault("plyRefs", plies)
+            played.setdefault("strongestReplyRef", plies[0] if plies else None)
     # Strategy tags are labels, not chess facts. Drop unknown model-produced labels
     # before schema validation; never coerce them into a different valid label.
     _drop_unknown_strategy_tags(payload)
