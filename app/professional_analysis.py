@@ -87,7 +87,7 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .book_case_transfer import BookCaseTransferPackage
-PROFESSIONAL_PROMPT_VERSION = "professional-v55-concise-verified-prose"
+PROFESSIONAL_PROMPT_VERSION = "professional-v56-program-owned-route-refs"
 PROFESSIONAL_TOKEN_LIMITS = {"simple": 1500, "normal": 2600, "complex": 3400}
 STRATEGY_TAGS = [
     "king_attack",
@@ -289,7 +289,7 @@ class ProfessionalAnalysisService:
                 break
             usage_results.append(result)
             validation_started = time.perf_counter()
-            draft, last_issues = parse_professional_draft(result.content)
+            draft, last_issues = parse_professional_draft(result.content, route_payload=payload)
             normalizations: list[DraftValidationIssue] = []
             if draft is not None:
                 draft, normalizations = normalize_professional_draft_literals(draft, move, context)
@@ -655,7 +655,7 @@ def professional_system_prompt() -> str:
         "你只负责解释后端提供的国际象棋事实引用，不负责重新抄写或计算棋盘。"
         "你的首要任务是围绕当前局面中最影响决策的一个重点，写出初学者能读懂的棋书式讲解。"
         "不要把所有棋盘事实都写进分析，只有focus.selectedFacts允许进入最终结论。"
-        "候选路线必须用lineRef，PV必须用plyRefs，事实必须用evidenceRefs。"
+        "候选路线必须用lineRef，PV顺序与首应手引用由后端填写，事实必须用evidenceRefs。"
         "解释必须以中文为主，并优先直接写事实目录中已有的具体棋子、格子和SAN走法；"
         "只能使用输入中已经出现的格子和SAN，禁止自行编造UCI、吃子、将军、将杀或绝杀。"
         "不能引用输入目录之外的ID，不能把白方与黑方说反。证据不足时返回空数组、null或isRelevant为false。"
@@ -725,15 +725,16 @@ def professional_user_prompt(payload: dict[str, Any], complexity: str) -> str:
         focus["selectedFacts"] = [fact["id"] for fact in selected]
         prompt_payload["focus"] = focus
     compact_payload = json.dumps(prompt_payload, ensure_ascii=False, separators=(",", ":"))
-    compact_contract = json.dumps(PROFESSIONAL_OUTPUT_CONTRACT, ensure_ascii=False, separators=(",", ":"))
+    contract = {
+        **PROFESSIONAL_OUTPUT_CONTRACT,
+        "playedMoveAnalysis": {key: value for key, value in PROFESSIONAL_OUTPUT_CONTRACT["playedMoveAnalysis"].items()
+                               if key not in {"plyRefs", "strongestReplyRef"}},
+        "candidateLines": [{key: value for key, value in line.items() if key != "plyRefs"}
+                           for line in PROFESSIONAL_OUTPUT_CONTRACT["candidateLines"]],
+    }
+    compact_contract = json.dumps(contract, ensure_ascii=False, separators=(",", ":"))
     line_skeleton = json.dumps(
-        [
-            {
-                "lineRef": line["id"],
-                "plyRefs": [item["id"] for item in line.get("plies", [])],
-            }
-            for line in payload.get("lines", [])
-        ],
+        [line["id"] for line in payload.get("lines", [])],
         ensure_ascii=False,
         separators=(",", ":"),
     )
@@ -767,8 +768,8 @@ def professional_user_prompt(payload: dict[str, Any], complexity: str) -> str:
 {compact_payload}
 
 严格规则：
-1. candidateLines必须恰好返回{len(payload.get('lines', []))}项，lineRef按lines顺序逐条引用；每条路线只返回一个plyRefs数组，必须按顺序完整覆盖该路线plies[].id，不能串线。本次不可改动的引用骨架为：{line_skeleton}
-2. playedMoveAnalysis.moveRef必须等于played.ref；strongestReplyRef及唯一的plyRefs数组只能来自并完整覆盖actual.plies。
+1. candidateLines必须恰好返回{len(payload.get('lines', []))}项，lineRef严格依次为：{line_skeleton}。不要输出"plyRefs"，后端按对应路线目录填入完整顺序；解释不得串线。
+2. playedMoveAnalysis.moveRef必须等于played.ref；不要输出strongestReplyRef或plyRefs，后端从actual.plies填入首应手和完整路线。不得更改或补造走法。
 3. evidenceRefs、dangerRef只能引用输入中出现的ID。每组evidenceRefs只选1—4个最相关ID，不要枚举整份事实目录。每个危险、计划和因果结论必须有证据。
 4. 自由文本以中文为主；为说清棋理，可以直接使用输入目录已经出现的具体棋子、格子和SAN走法，但不得写任何UCI，也不得写目录之外的格子或SAN。只有对应ply明确包含时才能写“吃子、将军、将杀、绝杀”。正确示例是明确写出“白马从f3跳到g5”，不要用“该棋子来到该格”回避具体对象。
 5. mainDanger有具体危险时用dangerRef引用一个已有ply；无可靠直接危险时dangerRef写null且level写none。危险一方由后端从ply推导，不要输出sideInDanger。
