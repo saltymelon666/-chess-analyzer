@@ -87,7 +87,7 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .book_case_transfer import BookCaseTransferPackage
-PROFESSIONAL_PROMPT_VERSION = "professional-v56-program-owned-route-refs"
+PROFESSIONAL_PROMPT_VERSION = "professional-v57-verified-mechanism-fast-path"
 PROFESSIONAL_TOKEN_LIMITS = {"simple": 1500, "normal": 2600, "complex": 3400}
 STRATEGY_TAGS = [
     "king_attack",
@@ -223,6 +223,46 @@ class ProfessionalAnalysisService:
             plan_package=strategic_plan_package,
         )
         narrative_claims = NarrativeClaimPackage.model_validate(payload["narrativeClaims"])
+        # A replayed book mechanism already fixes the visible core paragraph:
+        # resolve_narrative_claims() ignores model-selected refs in this case,
+        # and the final surface guard rebuilds the candidate explanations.
+        # Avoid a large model response that cannot change that core.  Keep the
+        # normal DeepSeek path if this independently validated result fails.
+        if _has_book_mechanism_claim(narrative_claims):
+            try:
+                fast = _fit_resolved_analysis_length(
+                    _humanize_user_visible_prose(apply_hard_fact_guard(
+                        build_safe_professional_analysis(
+                            move,
+                            complexity,
+                            threat_package=threat_package,
+                        ),
+                        move,
+                        threat_package=threat_package,
+                        opening_context=opening_context,
+                        narrative_claims=narrative_claims,
+                    )),
+                    move,
+                    complexity.level,
+                )
+                _apply_verified_narrative_surface_guard(fast, move, narrative_claims)
+                _keep_complete_verified_fast_routes(fast, move)
+                fast = _fit_resolved_analysis_length(fast, move, complexity.level)
+                fast_errors = validate_professional_analysis(
+                    fast,
+                    context,
+                    enforce_core_explanation=True,
+                )
+            except Exception:
+                logger.exception("Verified mechanism fast path failed; using DeepSeek")
+            else:
+                if not fast_errors:
+                    return GeneratedProfessionalAnalysis(
+                        analysis=fast,
+                        complexity_reasons=complexity.reasons,
+                        usage=_usage([]),
+                    )
+                logger.warning("Verified mechanism fast path failed validation; using DeepSeek: %s", fast_errors)
         objective = payload["positionInterpretation"]["objective"]
         decision_context = build_decision_context(
             move,
@@ -648,6 +688,24 @@ def _compact_prompt_value(value: Any) -> Any:
     if isinstance(value, list):
         return [_compact_prompt_value(child) for child in value]
     return value
+
+
+def _has_book_mechanism_claim(package: NarrativeClaimPackage) -> bool:
+    return any(claim.claim_id.endswith(":book-mechanism") for claim in package.claims)
+
+
+def _keep_complete_verified_fast_routes(analysis: ProfessionalAnalysis, move: MoveReview) -> None:
+    """Show each already-verified route together instead of splitting it into filler phases."""
+    if move.actual_move_line is not None:
+        analysis.played_move_analysis.continuation_phases = _model_phases(
+            move.actual_move_line.moves, 1,
+        )
+        for phase in analysis.played_move_analysis.continuation_phases:
+            phase.explanation = "按Stockfish验证顺序列出，只说明实战着后的应对。"
+    for rendered, source in zip(analysis.candidate_lines, move.candidate_lines):
+        rendered.continuation_phases = _model_phases(source.moves, 1)
+        for phase in rendered.continuation_phases:
+            phase.explanation = "按Stockfish验证顺序列出，不推断额外因果。"
 
 
 def professional_system_prompt() -> str:

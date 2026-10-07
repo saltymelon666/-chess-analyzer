@@ -46,10 +46,13 @@ def test_prompt_deduplicates_only_identical_facts_without_mutation():
 
 
 @pytest.mark.asyncio
-async def test_short_complete_kf8_draft_is_accepted_once_without_padding():
+async def test_short_complete_kf8_draft_is_accepted_once_without_padding(monkeypatch):
     move = kf8_review()
     cx = compute_professional_complexity(move)
     assert cx.level == "complex"
+    # Exercise the model route's concise-output contract independently of the
+    # verified mechanism fast path, which has its own focused tests.
+    monkeypatch.setattr("app.professional_analysis._has_book_mechanism_claim", lambda _package: False)
     draft = _valid_reference_draft(move)
     draft.complexity = cx.level
     draft.plans.white, draft.plans.black = [], []
