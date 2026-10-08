@@ -2,9 +2,9 @@ services:
   - type: web
     name: ai-chess-review-api
     runtime: docker
-    # Keep the API warm so the first analysis request does not pay the Free-tier
-    # spin-up delay. This is the lowest paid Web Service instance type.
-    plan: starter
+    # Free tier may spin down while idle, so the first analysis request can
+    # incur a cold-start delay.
+    plan: free
     dockerfilePath: ./Dockerfile
     healthCheckPath: /api/health
     autoDeploy: true

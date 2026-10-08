@@ -1,6 +1,12 @@
 # 棋盘研究所项目状态
 
-更新时间：2026-10-07
+更新时间：2026-10-08
+
+## 85. 2026-10-08 Render 后端降为免费版
+
+- 按用户要求，将 `ai-chess-review-api` Web Service 的 Blueprint 规格从 `starter` 改为 `free`；`pawnlab-analytics` 数据库继续保持 `free`，没有修改业务代码、环境变量或数据。
+- 免费实例闲置后会休眠，首次访问可能出现冷启动等待；Stockfish 分析也继续受到免费实例 CPU、内存和运行时限制。
+- 配置解析、专项断言和 `git diff --check` 已通过；完整回归为 `505 passed, 1 warning`，警告仍是既有 Starlette 弃用提示。提交推送后由 Render Blueprint 自动同步；最终是否停止计费仍须以 Render Dashboard 的实例规格与 Billing 页面为准。
 
 ## 84. 2026-10-07 v57 上线准备与授权
 
